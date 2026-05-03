@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Baccarat 3 Boards</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f5f5f5;
+    --bg-input: #fafafa;
+    --bg-inactive: #f0f0f0;
+    --border: #e0e0e0;
+    --border-strong: #c0c0c0;
+    --text: #111111;
+    --text-dim: #555555;
+    --text-faint: #999999;
+    --primary: #1a1a1a;
+    --green: #1f7a3f;
+    --red: #c62828;
+    --accent: #b38500;
+    --blue: #1565c0;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.4;
+    min-height: 100vh;
+  }
+  body { padding-bottom: 80px; }
+
+  .container { max-width: 600px; margin: 0 auto; padding: 20px 16px; }
+
+  header {
+    text-align: center;
+    padding: 8px 0 20px;
+    border-bottom: 2px solid var(--text);
+    margin-bottom: 24px;
+  }
+  .title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+  .subtitle { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+
+  section { margin-bottom: 28px; }
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .section-title-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .section-title-action {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--blue);
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
+    font-family: inherit;
+  }
+  .section-title-action:active { background: var(--bg-soft); }
+
+  .field { margin-bottom: 16px; }
+  label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  input[type="text"], input[type="number"], textarea {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 17px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input:focus, textarea:focus { border-color: var(--primary); background: var(--bg); }
+  textarea {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    min-height: 200px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  .player-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .player-row input { flex: 1; }
+  .icon-btn {
+    width: 44px; height: 44px; flex-shrink: 0;
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text-dim);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 500;
+  }
+  .icon-btn:active { background: var(--bg-soft); border-color: var(--red); color: var(--red); }
+
+  .btn {
+    width: 100%;
+    background: var(--primary);
+    color: white;
+    border: none;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 16px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: opacity 0.15s;
+    margin-top: 8px;
+  }
+  .btn:active { opacity: 0.85; }
+  .btn-secondary {
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text);
+  }
+  .btn-secondary:active { background: var(--bg-soft); }
+  .btn-add {
+    background: var(--bg);
+    border: 1.5px dashed var(--border-strong);
+    color: var(--text-dim);
+  }
+  .btn-validate {
+    background: var(--green);
+    font-size: 17px;
+    margin-top: 12px;
+  }
+  .btn-blue {
+    background: var(--blue);
+    color: white;
+  }
+
+  .dealer-banner {
+    background: var(--text);
+    color: white;
+    padding: 14px 16px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .dealer-banner .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.6);
+    font-weight: 600;
+  }
+  .dealer-banner .name { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .dealer-banner .next { text-align: right; font-size: 12px; color: rgba(255,255,255,0.7); }
+  .dealer-banner .next .next-name { color: white; font-weight: 600; font-size: 14px; }
+
+  .scoreboard {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .score-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+  .score-row:last-child { border-bottom: none; }
+  .score-row.inactive { background: var(--bg-inactive); opacity: 0.65; }
+  .score-row.is-dealer { background: linear-gradient(90deg, rgba(179,133,0,0.08), transparent); }
+
+  .score-name-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .score-name {
+    font-size: 18px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dealer-pill {
+    background: var(--accent);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+  .inactive-pill {
+    background: var(--text-faint);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  .score-value {
+    font-size: 19px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .score-value.positive { color: var(--green); }
+  .score-value.negative { color: var(--red); }
+  .score-value.zero { color: var(--text-faint); }
+
+  .price-info {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+  }
+  .price-info strong { color: var(--text); font-weight: 700; }
+  .price-edit-btn {
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .price-edit-btn:active { background: var(--bg-soft); }
+
+  .manche-card {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 4px 0;
+  }
+  .board-block {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .board-block:last-of-type { border-bottom: none; }
+
+  .board-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .board-label .status { font-size: 12px; font-weight: 500; color: var(--text-faint); }
+  .board-label .status.done { color: var(--green); }
+
+  .sub-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+    margin-top: 12px;
+  }
+  .sub-label:first-child { margin-top: 0; }
+
+  .winner-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .winner-chip {
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text);
+    padding: 14px 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 8px;
+    text-align: center;
+    transition: all 0.1s;
+    min-height: 50px;
+  }
+  .winner-chip:active { background: var(--bg-soft); }
+  .winner-chip.selected {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+  }
+
+  .multi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .multi-chip {
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text-dim);
+    padding: 10px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 8px;
+    text-align: center;
+    transition: all 0.1s;
+    line-height: 1.2;
+  }
+  .multi-chip:active { background: var(--bg-soft); }
+  .multi-chip .multi-x {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .multi-chip.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .multi-chip.selected[data-multi="1"] {
+    background: var(--text-dim);
+    border-color: var(--text-dim);
+  }
+
+  .full-board-alert {
+    background: linear-gradient(135deg, #fff8e1, #fff3c4);
+    border: 1.5px solid var(--accent);
+    color: #5d4400;
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-top: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .full-board-alert .icon { font-size: 18px; }
+
+  .history-item {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .history-header .time { color: var(--text-faint); font-weight: 500; }
+  .history-line {
+    font-size: 14px;
+    color: var(--text);
+    padding: 3px 0;
+    display: flex;
+    justify-content: space-between;
+  }
+  .history-line .winner-name { font-weight: 600; }
+  .history-line .multi-tag { color: var(--accent); font-weight: 700; margin-left: 4px; }
+  .history-line .gain { color: var(--green); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .history-line .full-tag {
+    background: var(--accent);
+    color: white;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: 6px;
+    font-weight: 700;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--text-faint);
+    font-size: 15px;
+  }
+
+  .actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 200;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--bg);
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    max-width: 600px;
+    padding: 20px;
+    max-height: 88vh;
+    overflow-y: auto;
+  }
+  .modal-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .modal-sub {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+  }
+  .modal-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: var(--bg);
+  }
+  .modal-list-item.inactive { background: var(--bg-inactive); opacity: 0.7; }
+  .modal-list-item .order-num {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-faint);
+    width: 24px;
+  }
+  .modal-list-item .name {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .modal-list-item .arrows { display: flex; gap: 4px; }
+  .modal-list-item .small-btn {
+    width: 32px; height: 32px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim);
+  }
+  .modal-list-item .small-btn:active { background: var(--bg-soft); }
+  .modal-list-item .toggle-btn {
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .modal-list-item .toggle-btn.activate { color: var(--green); border-color: var(--green); }
+  .modal-list-item .toggle-btn.deactivate { color: var(--red); border-color: var(--red); }
+
+  .modal-add-row {
+    display: flex; gap: 8px; margin-top: 12px;
+  }
+  .modal-add-row input { flex: 1; }
+  .modal-add-row button {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 0 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(120px);
+    background: var(--primary);
+    color: white;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: transform 0.25s ease;
+    z-index: 300;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.error { background: var(--red); }
+
+  .footer-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 24px 0 16px;
+  }
+
+  .footer-actions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title">Baccarat 3 Boards</div>
+      <div class="subtitle" id="header-subtitle">Compteur de partie</div>
+    </header>
+
+    <section id="setup-section">
+      <div class="section-title">
+        <span>Configuration</span>
+        <button class="section-title-action" id="setup-import-btn">↓ Reprendre une partie</button>
+      </div>
+      <div class="field">
+        <label>Prix de la ligne</label>
+        <input type="number" id="line-price" value="2.5" step="0.5" min="0" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label>Joueurs (dans l'ordre de jeu)</label>
+        <div id="players-list"></div>
+        <button class="btn btn-add" id="add-player-btn">+ Ajouter un joueur</button>
+      </div>
+      <button class="btn" id="start-game-btn">Démarrer la partie</button>
+    </section>
+
+    <section id="dealer-section" style="display:none;">
+      <div class="dealer-banner">
+        <div>
+          <div class="label">Donneur de cette manche</div>
+          <div class="name" id="dealer-name">—</div>
+        </div>
+        <div class="next">
+          Suivant<br>
+          <span class="next-name" id="next-dealer-name">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="game-section" style="display:none;">
+      <div class="section-title">
+        <span>Soldes</span>
+        <div class="section-title-actions">
+          <button class="section-title-action" id="export-btn">↗ Partager</button>
+          <button class="section-title-action" id="manage-players-btn">⚙ Joueurs</button>
+        </div>
+      </div>
+      <div class="scoreboard" id="scoreboard"></div>
+      <div class="price-info" id="price-info"></div>
+    </section>
+
+    <section id="manche-section" style="display:none;">
+      <div class="section-title">Nouvelle manche</div>
+      <div class="manche-card" id="manche-card"></div>
+      <div id="full-board-zone"></div>
+      <button class="btn btn-validate" id="validate-manche-btn">Valider la manche</button>
+      <div class="actions-row">
+        <button class="btn btn-secondary" id="reset-manche-btn">Effacer</button>
+        <button class="btn btn-secondary" id="undo-btn">↶ Annuler dernière</button>
+      </div>
+    </section>
+
+    <section id="history-section" style="display:none;">
+      <div class="section-title">Historique</div>
+      <div id="history-list"></div>
+    </section>
+
+    <section id="footer-actions" style="display:none;">
+      <div class="footer-divider"></div>
+      <button class="btn btn-secondary" id="new-game-btn">Nouvelle partie (réinitialiser)</button>
+    </section>
+  </div>
+
+  <!-- MODAL Gérer joueurs -->
+  <div class="modal-overlay" id="players-modal">
+    <div class="modal">
+      <div class="modal-title">Gérer les joueurs</div>
+      <div class="modal-sub">Réorganiser, désactiver ou ajouter des joueurs en cours de partie. Les soldes des joueurs désactivés sont conservés.</div>
+      <div id="modal-players-list"></div>
+      <div class="modal-add-row">
+        <input type="text" id="modal-new-name" placeholder="Nom du nouveau joueur">
+        <button id="modal-add-btn">Ajouter</button>
+      </div>
+      <button class="btn" style="margin-top:16px" id="modal-close-btn">Terminé</button>
+    </div>
+  </div>
+
+  <!-- MODAL Export -->
+  <div class="modal-overlay" id="export-modal">
+    <div class="modal">
+      <div class="modal-title">Partager les comptes</div>
+      <div class="modal-sub">Copie ce texte pour partager aux joueurs. Il peut aussi être recollé pour reprendre la partie plus tard.</div>
+      <textarea id="export-text" readonly></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-blue" id="export-copy-btn">Copier</button>
+        <button class="btn btn-secondary" id="export-close-btn">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL Import -->
+  <div class="modal-overlay" id="import-modal">
+    <div class="modal">
+      <div class="modal-title">Reprendre une partie</div>
+      <div class="modal-sub">Colle ici le texte de comptes précédemment partagé. Les joueurs, soldes, donneur et prix de la ligne seront restaurés.</div>
+      <textarea id="import-text" placeholder="Colle ici le texte des comptes..."></textarea>
+      <div class="modal-actions">
+        <button class="btn" id="import-confirm-btn">Charger la partie</button>
+        <button class="btn btn-secondary" id="import-close-btn">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL Modifier prix -->
+  <div class="modal-overlay" id="price-modal">
+    <div class="modal">
+      <div class="modal-title">Modifier le prix de la ligne</div>
+      <div class="modal-sub">Le nouveau prix s'appliquera <strong>uniquement aux manches futures</strong>. Les manches déjà jouées gardent leur prix d'origine.</div>
+      <div class="field">
+        <label>Nouveau prix de la ligne (€)</label>
+        <input type="number" id="new-price-input" step="0.5" min="0" inputmode="decimal">
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="price-confirm-btn">Appliquer</button>
+        <button class="btn btn-secondary" id="price-close-btn">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+const STORAGE_KEY = 'baccarat3boards_v4';
+let state = {
+  linePrice: 2.5,
+  players: [],          // [{id, name, active}]  ordre = ordre de jeu
+  scores: {},
+  history: [],          // [{ts, numActive, participantIds, boards, fullBoard, linePrice}]
+  currentManche: [null, null, null],
+  configured: false,
+  dealerIdx: 0,
+};
+
+const MULTI_OPTIONS = [
+  { value: 1,  label: 'Normal',   sub: '×1'  },
+  { value: 8,  label: 'Carré',    sub: '×8'  },
+  { value: 16, label: 'Q. Flush', sub: '×16' },
+  { value: 20, label: 'Royale',   sub: '×20' },
+];
+
+const EXPORT_HEADER = '=== BACCARAT 3 BOARDS ===';
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const loaded = JSON.parse(raw);
+      Object.assign(state, loaded);
+      if (!state.currentManche) state.currentManche = [null, null, null];
+      if (typeof state.dealerIdx !== 'number') state.dealerIdx = 0;
+      state.players.forEach(p => { if (typeof p.active !== 'boolean') p.active = true; });
+      state.history.forEach(h => { if (typeof h.linePrice !== 'number') h.linePrice = state.linePrice; });
+    }
+  } catch(e) {}
+}
+
+function uid() { return Math.random().toString(36).slice(2, 9); }
+function fmtMoney(v) {
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(2)}€`;
+}
+function escapeHTML(s) {
+  return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('error', isError);
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function activePlayers() { return state.players.filter(p => p.active); }
+function getDealer() {
+  const actives = activePlayers();
+  if (actives.length === 0) return null;
+  return actives[state.dealerIdx % actives.length];
+}
+function getNextDealer() {
+  const actives = activePlayers();
+  if (actives.length === 0) return null;
+  return actives[(state.dealerIdx + 1) % actives.length];
+}
+
+// ========== EXPORT / IMPORT FORMAT ==========
+// Format texte:
+// === BACCARAT 3 BOARDS ===
+// Date: 2026-05-03 14:32
+// Prix ligne: 2.50€
+// Manches jouées: 5
+//
+// COMPTES:
+//   Sacha: +12.50€  [donne]
+//   Hugo: -7.50€
+//   Emma: -7.50€
+//   Rub: +2.50€
+//   Lou: 0.00€  [hors-jeu]
+//
+// (Pour reprendre la partie, garder ce texte intact)
+function buildExport() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const dealer = getDealer();
+  const lines = [];
+  lines.push(EXPORT_HEADER);
+  lines.push(`Date: ${dateStr}`);
+  lines.push(`Prix ligne: ${state.linePrice.toFixed(2)}€`);
+  lines.push(`Manches jouées: ${state.history.length}`);
+  lines.push('');
+  lines.push('COMPTES:');
+  state.players.forEach(p => {
+    const score = state.scores[p.id] || 0;
+    const tags = [];
+    if (dealer && p.id === dealer.id) tags.push('donne');
+    if (!p.active) tags.push('hors-jeu');
+    const tagStr = tags.length ? `  [${tags.join(', ')}]` : '';
+    lines.push(`  ${p.name}: ${fmtMoney(score)}${tagStr}`);
+  });
+  lines.push('');
+  lines.push('(Pour reprendre la partie, garder ce texte intact)');
+  return lines.join('\n');
+}
+
+function parseImport(text) {
+  // Parse text format. Returns object {ok, error, data}
+  if (!text || !text.trim()) return { ok: false, error: 'Texte vide' };
+  const lines = text.split(/\r?\n/);
+  if (!lines.some(l => l.includes('BACCARAT 3 BOARDS'))) {
+    return { ok: false, error: 'Format non reconnu (en-tête manquant)' };
+  }
+
+  let linePrice = 2.5;
+  const players = [];
+  const scores = {};
+  let dealerName = null;
+  let inComptes = false;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    const priceMatch = line.match(/^Prix\s+ligne\s*:\s*([\d.,]+)/i);
+    if (priceMatch) {
+      const v = parseFloat(priceMatch[1].replace(',', '.'));
+      if (!isNaN(v) && v > 0) linePrice = v;
+      continue;
+    }
+
+    if (/^COMPTES\s*:/i.test(line)) {
+      inComptes = true;
+      continue;
+    }
+
+    if (inComptes) {
+      // ligne attendue: "Nom: +12.50€  [tags]" ou "Nom: -3.00€"
+      const m = line.match(/^([^:]+?)\s*:\s*([+-]?[\d.,]+)\s*€?\s*(?:\[([^\]]+)\])?\s*$/);
+      if (m) {
+        const name = m[1].trim();
+        const amount = parseFloat(m[2].replace(',', '.'));
+        const tagsStr = (m[3] || '').toLowerCase();
+        const tags = tagsStr.split(',').map(t => t.trim()).filter(Boolean);
+        if (!name || isNaN(amount)) continue;
+        const id = uid();
+        const active = !tags.includes('hors-jeu');
+        players.push({ id, name, active });
+        scores[id] = amount;
+        if (tags.includes('donne')) dealerName = name;
+      } else if (/^\(/.test(line)) {
+        // ligne de commentaire, on stoppe la section comptes
+        inComptes = false;
+      }
+    }
+  }
+
+  if (players.length < 2) {
+    return { ok: false, error: 'Au moins 2 joueurs requis dans les comptes' };
+  }
+
+  // détermine dealerIdx parmi les actifs
+  let dealerIdx = 0;
+  if (dealerName) {
+    const actives = players.filter(p => p.active);
+    const idx = actives.findIndex(p => p.name === dealerName);
+    if (idx >= 0) dealerIdx = idx;
+  }
+
+  // vérification : somme des soldes ≈ 0
+  const total = players.reduce((s, p) => s + (scores[p.id] || 0), 0);
+  if (Math.abs(total) > 0.01) {
+    // on accepte mais avec warning
+    return {
+      ok: true,
+      data: { linePrice, players, scores, dealerIdx },
+      warning: `Somme des soldes = ${total.toFixed(2)}€ (devrait être 0). Importé tel quel.`,
+    };
+  }
+
+  return { ok: true, data: { linePrice, players, scores, dealerIdx } };
+}
+
+// ========== SETUP ==========
+function renderSetup() {
+  const list = document.getElementById('players-list');
+  list.innerHTML = '';
+  state.players.forEach((p, idx) => {
+    const row = document.createElement('div');
+    row.className = 'player-row';
+    row.innerHTML = `
+      <input type="text" placeholder="Joueur ${idx+1}" value="${escapeHTML(p.name)}" data-id="${p.id}">
+      <button class="icon-btn" data-remove="${p.id}" aria-label="Supprimer">×</button>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const id = e.target.dataset.id;
+      const player = state.players.find(p => p.id === id);
+      if (player) { player.name = e.target.value; save(); }
+    });
+  });
+  list.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.players = state.players.filter(p => p.id !== btn.dataset.remove);
+      save();
+      renderSetup();
+    });
+  });
+  document.getElementById('line-price').value = state.linePrice;
+}
+
+// ========== DEALER ==========
+function renderDealer() {
+  const d = getDealer();
+  const n = getNextDealer();
+  document.getElementById('dealer-name').textContent = d ? d.name : '—';
+  document.getElementById('next-dealer-name').textContent = n ? n.name : '—';
+}
+
+// ========== SCOREBOARD ==========
+function renderScoreboard() {
+  const sb = document.getElementById('scoreboard');
+  sb.innerHTML = '';
+  const dealer = getDealer();
+  state.players.forEach(p => {
+    const score = state.scores[p.id] || 0;
+    const cls = score > 0.001 ? 'positive' : (score < -0.001 ? 'negative' : 'zero');
+    const inactiveCls = p.active ? '' : 'inactive';
+    const dealerCls = (p.active && dealer && p.id === dealer.id) ? 'is-dealer' : '';
+    const dealerPill = (p.active && dealer && p.id === dealer.id)
+      ? '<span class="dealer-pill">Donne</span>' : '';
+    const inactivePill = !p.active ? '<span class="inactive-pill">Hors-jeu</span>' : '';
+    const row = document.createElement('div');
+    row.className = `score-row ${inactiveCls} ${dealerCls}`.trim();
+    row.innerHTML = `
+      <div class="score-name-wrap">
+        <span class="score-name">${escapeHTML(p.name)}</span>
+        ${dealerPill}
+        ${inactivePill}
+      </div>
+      <div class="score-value ${cls}">${fmtMoney(score)}</div>
+    `;
+    sb.appendChild(row);
+  });
+  const actives = activePlayers().length;
+  document.getElementById('price-info').innerHTML =
+    `Ligne · <strong>${state.linePrice.toFixed(2)}€</strong> · ${actives} actif${actives>1?'s':''}${state.players.length > actives ? ` (${state.players.length - actives} hors-jeu)` : ''}
+     <button class="price-edit-btn" id="edit-price-btn">Modifier</button>`;
+  // rebrancher l'event sur le bouton (recréé à chaque render)
+  const btn = document.getElementById('edit-price-btn');
+  if (btn) btn.addEventListener('click', openPriceModal);
+}
+
+// ========== MANCHE ==========
+function renderManche() {
+  const card = document.getElementById('manche-card');
+  card.innerHTML = '';
+  const actives = activePlayers();
+
+  for (let i = 0; i < 3; i++) {
+    const block = document.createElement('div');
+    block.className = 'board-block';
+    const current = state.currentManche[i] || { winnerId: null, multi: 1 };
+    const isDone = !!current.winnerId;
+
+    let winnersHTML = '<div class="sub-label">Gagnant</div><div class="winner-grid">';
+    actives.forEach(p => {
+      const sel = current.winnerId === p.id ? 'selected' : '';
+      winnersHTML += `<div class="winner-chip ${sel}" data-board="${i}" data-winner="${p.id}">${escapeHTML(p.name)}</div>`;
+    });
+    winnersHTML += '</div>';
+
+    let multiHTML = '<div class="sub-label">Combinaison</div><div class="multi-grid">';
+    MULTI_OPTIONS.forEach(m => {
+      const sel = current.multi === m.value ? 'selected' : '';
+      multiHTML += `<div class="multi-chip ${sel}" data-board="${i}" data-multi="${m.value}">
+        ${m.label}<span class="multi-x">${m.sub}</span>
+      </div>`;
+    });
+    multiHTML += '</div>';
+
+    block.innerHTML = `
+      <div class="board-label">
+        <span>Board ${i+1}</span>
+        <span class="status ${isDone ? 'done' : ''}">${isDone ? '✓ Choisi' : 'À choisir'}</span>
+      </div>
+      ${winnersHTML}
+      ${multiHTML}
+    `;
+    card.appendChild(block);
+  }
+
+  card.querySelectorAll('.winner-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const b = parseInt(chip.dataset.board);
+      const w = chip.dataset.winner;
+      if (!state.currentManche[b]) state.currentManche[b] = { winnerId: null, multi: 1 };
+      state.currentManche[b].winnerId = state.currentManche[b].winnerId === w ? null : w;
+      save();
+      renderManche();
+      renderFullBoardAlert();
+    });
+  });
+  card.querySelectorAll('.multi-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const b = parseInt(chip.dataset.board);
+      const m = parseInt(chip.dataset.multi);
+      if (!state.currentManche[b]) state.currentManche[b] = { winnerId: null, multi: 1 };
+      state.currentManche[b].multi = m;
+      save();
+      renderManche();
+    });
+  });
+}
+
+function detectFullBoard() {
+  const m = state.currentManche;
+  if (!m[0] || !m[1] || !m[2]) return null;
+  if (!m[0].winnerId || !m[1].winnerId || !m[2].winnerId) return null;
+  if (m[0].winnerId === m[1].winnerId && m[1].winnerId === m[2].winnerId) {
+    return m[0].winnerId;
+  }
+  return null;
+}
+
+function renderFullBoardAlert() {
+  const zone = document.getElementById('full-board-zone');
+  const winnerId = detectFullBoard();
+  if (winnerId) {
+    const player = state.players.find(p => p.id === winnerId);
+    const numActive = activePlayers().length;
+    const bonus = state.linePrice * (numActive - 1);
+    zone.innerHTML = `
+      <div class="full-board-alert">
+        <span class="icon">★</span>
+        <span><strong>FULL BOARD pour ${escapeHTML(player.name)} !</strong> Bonus de ${state.linePrice.toFixed(2)}€ par perdant (+${bonus.toFixed(2)}€).</span>
+      </div>
+    `;
+  } else {
+    zone.innerHTML = '';
+  }
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (state.history.length === 0) {
+    list.innerHTML = '<div class="empty-state">Aucune manche enregistrée pour l\'instant</div>';
+    return;
+  }
+  list.innerHTML = '';
+  state.history.slice(-10).reverse().forEach((m, idx) => {
+    const num = state.history.length - idx;
+    const date = new Date(m.ts);
+    const time = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+    const price = m.linePrice || state.linePrice;
+
+    let lines = '';
+    m.boards.forEach((b, i) => {
+      const player = state.players.find(p => p.id === b.winnerId);
+      const name = player ? player.name : '?';
+      const multiTag = b.multi > 1 ? `<span class="multi-tag">×${b.multi}</span>` : '';
+      const numLosers = (m.numActive || state.players.length) - 1;
+      const gain = price * b.multi * numLosers;
+      lines += `<div class="history-line">
+        <span>B${i+1} · <span class="winner-name">${escapeHTML(name)}</span>${multiTag}</span>
+        <span class="gain">+${gain.toFixed(2)}€</span>
+      </div>`;
+    });
+
+    if (m.fullBoard) {
+      const fbPlayer = state.players.find(p => p.id === m.fullBoard.winnerId);
+      const numLosers = (m.numActive || state.players.length) - 1;
+      const fbGain = price * numLosers;
+      lines += `<div class="history-line">
+        <span><span class="full-tag">FULL</span> <span class="winner-name">${escapeHTML(fbPlayer ? fbPlayer.name : '?')}</span></span>
+        <span class="gain">+${fbGain.toFixed(2)}€</span>
+      </div>`;
+    }
+
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = `
+      <div class="history-header"><span>Manche ${num} · ${price.toFixed(2)}€/ligne</span><span class="time">${time}</span></div>
+      ${lines}
+    `;
+    list.appendChild(item);
+  });
+}
+
+function renderAll() {
+  if (state.configured) {
+    document.getElementById('setup-section').style.display = 'none';
+    document.getElementById('dealer-section').style.display = 'block';
+    document.getElementById('game-section').style.display = 'block';
+    document.getElementById('manche-section').style.display = 'block';
+    document.getElementById('history-section').style.display = 'block';
+    document.getElementById('footer-actions').style.display = 'block';
+    document.getElementById('header-subtitle').textContent = `${activePlayers().length} actifs · ${state.linePrice.toFixed(2)}€/ligne`;
+    renderDealer();
+    renderScoreboard();
+    renderManche();
+    renderFullBoardAlert();
+    renderHistory();
+  } else {
+    document.getElementById('setup-section').style.display = 'block';
+    document.getElementById('dealer-section').style.display = 'none';
+    document.getElementById('game-section').style.display = 'none';
+    document.getElementById('manche-section').style.display = 'none';
+    document.getElementById('history-section').style.display = 'none';
+    document.getElementById('footer-actions').style.display = 'none';
+    document.getElementById('header-subtitle').textContent = 'Compteur de partie';
+    renderSetup();
+  }
+}
+
+function addPlayer() {
+  state.players.push({ id: uid(), name: '', active: true });
+  save();
+  renderSetup();
+}
+
+function startGame() {
+  const price = parseFloat(document.getElementById('line-price').value);
+  if (isNaN(price) || price <= 0) { showToast('Prix invalide', true); return; }
+  const validPlayers = state.players.filter(p => (p.name||'').trim().length > 0);
+  if (validPlayers.length < 2) { showToast('Au moins 2 joueurs requis', true); return; }
+
+  state.players = validPlayers.map(p => ({ id: p.id, name: p.name.trim(), active: true }));
+  state.linePrice = price;
+  state.scores = {};
+  state.players.forEach(p => state.scores[p.id] = 0);
+  state.history = [];
+  state.currentManche = [null, null, null];
+  state.dealerIdx = 0;
+  state.configured = true;
+  save();
+  renderAll();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function validateManche() {
+  for (let i = 0; i < 3; i++) {
+    if (!state.currentManche[i] || !state.currentManche[i].winnerId) {
+      showToast(`Board ${i+1} : choisissez un gagnant`, true);
+      return;
+    }
+  }
+  const actives = activePlayers();
+  const numActive = actives.length;
+  if (numActive < 2) {
+    showToast('Pas assez de joueurs actifs', true);
+    return;
+  }
+
+  const price = state.linePrice;
+
+  state.currentManche.forEach(b => {
+    const payment = price * b.multi;
+    actives.forEach(p => {
+      if (p.id === b.winnerId) {
+        state.scores[p.id] += payment * (numActive - 1);
+      } else {
+        state.scores[p.id] -= payment;
+      }
+    });
+  });
+
+  const fullWinnerId = detectFullBoard();
+  let fullBoardPayload = null;
+  if (fullWinnerId) {
+    const bonus = price;
+    actives.forEach(p => {
+      if (p.id === fullWinnerId) {
+        state.scores[p.id] += bonus * (numActive - 1);
+      } else {
+        state.scores[p.id] -= bonus;
+      }
+    });
+    fullBoardPayload = { winnerId: fullWinnerId };
+  }
+
+  state.history.push({
+    ts: Date.now(),
+    numActive: numActive,
+    participantIds: actives.map(p => p.id),
+    linePrice: price,
+    boards: state.currentManche.map(b => ({ winnerId: b.winnerId, multi: b.multi })),
+    fullBoard: fullBoardPayload,
+  });
+
+  state.currentManche = [null, null, null];
+  state.dealerIdx = (state.dealerIdx + 1) % numActive;
+
+  save();
+  renderAll();
+  if (fullBoardPayload) {
+    const player = state.players.find(p => p.id === fullWinnerId);
+    showToast(`★ Full Board pour ${player.name} !`);
+  } else {
+    showToast('✓ Manche enregistrée');
+  }
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function resetManche() {
+  state.currentManche = [null, null, null];
+  save();
+  renderManche();
+  renderFullBoardAlert();
+}
+
+function undoLast() {
+  if (state.history.length === 0) { showToast('Rien à annuler', true); return; }
+  if (!confirm('Annuler la dernière manche enregistrée ?')) return;
+  const last = state.history.pop();
+  const numActive = last.numActive || state.players.length;
+  const participantIds = last.participantIds || activePlayers().map(p => p.id);
+  const price = last.linePrice || state.linePrice;
+
+  last.boards.forEach(b => {
+    const payment = price * b.multi;
+    participantIds.forEach(pid => {
+      if (pid === b.winnerId) {
+        state.scores[pid] -= payment * (numActive - 1);
+      } else {
+        state.scores[pid] += payment;
+      }
+    });
+  });
+  if (last.fullBoard) {
+    const bonus = price;
+    participantIds.forEach(pid => {
+      if (pid === last.fullBoard.winnerId) {
+        state.scores[pid] -= bonus * (numActive - 1);
+      } else {
+        state.scores[pid] += bonus;
+      }
+    });
+  }
+
+  state.dealerIdx = (state.dealerIdx - 1 + Math.max(numActive, 1)) % Math.max(numActive, 1);
+
+  save();
+  renderAll();
+  showToast('Manche annulée');
+}
+
+function newGame() {
+  if (!confirm('Démarrer une nouvelle partie ?\n\nLes scores et l\'historique actuels seront perdus.')) return;
+  state = {
+    linePrice: 2.5,
+    players: [],
+    scores: {},
+    history: [],
+    currentManche: [null, null, null],
+    configured: false,
+    dealerIdx: 0,
+  };
+  save();
+  renderAll();
+}
+
+// ========== MODAL gestion des joueurs ==========
+function openPlayersModal() {
+  renderPlayersModal();
+  document.getElementById('players-modal').classList.add('show');
+}
+function closePlayersModal() {
+  document.getElementById('players-modal').classList.remove('show');
+}
+function renderPlayersModal() {
+  const list = document.getElementById('modal-players-list');
+  list.innerHTML = '';
+  state.players.forEach((p, idx) => {
+    const item = document.createElement('div');
+    item.className = `modal-list-item ${p.active ? '' : 'inactive'}`;
+    item.innerHTML = `
+      <span class="order-num">${idx+1}</span>
+      <span class="name">${escapeHTML(p.name)}</span>
+      <div class="arrows">
+        <button class="small-btn" data-up="${p.id}" ${idx === 0 ? 'disabled style="opacity:0.3"' : ''}>↑</button>
+        <button class="small-btn" data-down="${p.id}" ${idx === state.players.length - 1 ? 'disabled style="opacity:0.3"' : ''}>↓</button>
+      </div>
+      <button class="toggle-btn ${p.active ? 'deactivate' : 'activate'}" data-toggle="${p.id}">
+        ${p.active ? 'Sortir' : 'Réintégrer'}
+      </button>
+    `;
+    list.appendChild(item);
+  });
+
+  list.querySelectorAll('[data-up]').forEach(btn => {
+    btn.addEventListener('click', () => movePlayer(btn.dataset.up, -1));
+  });
+  list.querySelectorAll('[data-down]').forEach(btn => {
+    btn.addEventListener('click', () => movePlayer(btn.dataset.down, 1));
+  });
+  list.querySelectorAll('[data-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => toggleActive(btn.dataset.toggle));
+  });
+}
+
+function movePlayer(id, direction) {
+  const idx = state.players.findIndex(p => p.id === id);
+  if (idx < 0) return;
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= state.players.length) return;
+  const dealerId = getDealer() ? getDealer().id : null;
+  [state.players[idx], state.players[newIdx]] = [state.players[newIdx], state.players[idx]];
+  if (dealerId) updateDealerIdxToPlayer(dealerId);
+  save();
+  renderPlayersModal();
+  renderAll();
+}
+
+function toggleActive(id) {
+  const p = state.players.find(pl => pl.id === id);
+  if (!p) return;
+  const dealerId = getDealer() ? getDealer().id : null;
+  p.active = !p.active;
+  if (!p.active) {
+    if (!state.scores[p.id]) state.scores[p.id] = state.scores[p.id] || 0;
+    showToast(`${p.name} sort du jeu`);
+  } else {
+    showToast(`${p.name} réintégré`);
+  }
+  if (dealerId === id && !p.active) {
+    const actives = activePlayers();
+    if (actives.length > 0) {
+      state.dealerIdx = state.dealerIdx % actives.length;
+    } else {
+      state.dealerIdx = 0;
+    }
+  } else if (dealerId) {
+    updateDealerIdxToPlayer(dealerId);
+  }
+  save();
+  renderPlayersModal();
+  renderAll();
+}
+
+function updateDealerIdxToPlayer(playerId) {
+  const actives = activePlayers();
+  const idx = actives.findIndex(p => p.id === playerId);
+  if (idx >= 0) state.dealerIdx = idx;
+}
+
+function modalAddPlayer() {
+  const inp = document.getElementById('modal-new-name');
+  const name = (inp.value || '').trim();
+  if (!name) { showToast('Nom vide', true); return; }
+  const newPlayer = { id: uid(), name, active: true };
+  state.players.push(newPlayer);
+  state.scores[newPlayer.id] = 0;
+  inp.value = '';
+  save();
+  renderPlayersModal();
+  renderAll();
+  showToast(`${name} ajouté`);
+}
+
+// ========== MODAL Export ==========
+function openExportModal() {
+  document.getElementById('export-text').value = buildExport();
+  document.getElementById('export-modal').classList.add('show');
+}
+function closeExportModal() {
+  document.getElementById('export-modal').classList.remove('show');
+}
+async function copyExport() {
+  const text = document.getElementById('export-text').value;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.getElementById('export-text');
+      ta.select();
+      document.execCommand('copy');
+    }
+    showToast('✓ Copié dans le presse-papier');
+  } catch (e) {
+    // fallback : sélectionner pour copie manuelle
+    const ta = document.getElementById('export-text');
+    ta.select();
+    showToast('Texte sélectionné, copie manuelle', true);
+  }
+}
+
+// ========== MODAL Import ==========
+function openImportModal() {
+  document.getElementById('import-text').value = '';
+  document.getElementById('import-modal').classList.add('show');
+}
+function closeImportModal() {
+  document.getElementById('import-modal').classList.remove('show');
+}
+function confirmImport() {
+  const text = document.getElementById('import-text').value;
+  const result = parseImport(text);
+  if (!result.ok) {
+    showToast(result.error || 'Erreur de format', true);
+    return;
+  }
+  if (state.configured) {
+    if (!confirm('Cela va remplacer la partie en cours. Continuer ?')) return;
+  }
+  const d = result.data;
+  state = {
+    linePrice: d.linePrice,
+    players: d.players,
+    scores: d.scores,
+    history: [],          // historique non importé (pas conservé dans le format texte)
+    currentManche: [null, null, null],
+    configured: true,
+    dealerIdx: d.dealerIdx,
+  };
+  save();
+  closeImportModal();
+  renderAll();
+  if (result.warning) {
+    showToast(result.warning, true);
+  } else {
+    showToast(`✓ Partie reprise (${d.players.length} joueurs)`);
+  }
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+// ========== MODAL Prix ==========
+function openPriceModal() {
+  document.getElementById('new-price-input').value = state.linePrice;
+  document.getElementById('price-modal').classList.add('show');
+  setTimeout(() => document.getElementById('new-price-input').focus(), 100);
+}
+function closePriceModal() {
+  document.getElementById('price-modal').classList.remove('show');
+}
+function confirmPriceChange() {
+  const v = parseFloat(document.getElementById('new-price-input').value);
+  if (isNaN(v) || v <= 0) { showToast('Prix invalide', true); return; }
+  if (Math.abs(v - state.linePrice) < 0.001) { closePriceModal(); return; }
+  state.linePrice = v;
+  save();
+  closePriceModal();
+  renderAll();
+  showToast(`Nouveau prix : ${v.toFixed(2)}€/ligne`);
+}
+
+// ========== INIT ==========
+load();
+if (state.players.length === 0) {
+  for (let i = 0; i < 4; i++) state.players.push({ id: uid(), name: '', active: true });
+}
+
+document.getElementById('add-player-btn').addEventListener('click', addPlayer);
+document.getElementById('start-game-btn').addEventListener('click', startGame);
+document.getElementById('validate-manche-btn').addEventListener('click', validateManche);
+document.getElementById('reset-manche-btn').addEventListener('click', resetManche);
+document.getElementById('undo-btn').addEventListener('click', undoLast);
+document.getElementById('new-game-btn').addEventListener('click', newGame);
+
+document.getElementById('manage-players-btn').addEventListener('click', openPlayersModal);
+document.getElementById('modal-close-btn').addEventListener('click', closePlayersModal);
+document.getElementById('modal-add-btn').addEventListener('click', modalAddPlayer);
+document.getElementById('modal-new-name').addEventListener('keypress', e => {
+  if (e.key === 'Enter') modalAddPlayer();
+});
+document.getElementById('players-modal').addEventListener('click', e => {
+  if (e.target.id === 'players-modal') closePlayersModal();
+});
+
+document.getElementById('export-btn').addEventListener('click', openExportModal);
+document.getElementById('export-copy-btn').addEventListener('click', copyExport);
+document.getElementById('export-close-btn').addEventListener('click', closeExportModal);
+document.getElementById('export-modal').addEventListener('click', e => {
+  if (e.target.id === 'export-modal') closeExportModal();
+});
+
+document.getElementById('setup-import-btn').addEventListener('click', openImportModal);
+document.getElementById('import-confirm-btn').addEventListener('click', confirmImport);
+document.getElementById('import-close-btn').addEventListener('click', closeImportModal);
+document.getElementById('import-modal').addEventListener('click', e => {
+  if (e.target.id === 'import-modal') closeImportModal();
+});
+
+document.getElementById('price-confirm-btn').addEventListener('click', confirmPriceChange);
+document.getElementById('price-close-btn').addEventListener('click', closePriceModal);
+document.getElementById('price-modal').addEventListener('click', e => {
+  if (e.target.id === 'price-modal') closePriceModal();
+});
+
+document.getElementById('line-price').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  if (!isNaN(v)) { state.linePrice = v; save(); }
+});
+
+renderAll();
+</script>
+</body>
+</html>
