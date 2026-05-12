@@ -811,39 +811,16 @@
   }
   .card.red { color: #c81818; }
   .card.black { color: #111; }
-  /* Dos classique rouge style Bicycle, en pur CSS (pas d'image) */
+  /* Dos Bicycle Rider Back (image locale) avec fallback rouge CSS si l'image ne charge pas */
   .card.back {
     background:
-      /* Reflet doux au centre */
-      radial-gradient(ellipse 55% 70% at 50% 50%, rgba(255,240,200,0.12) 0%, transparent 70%),
-      /* Cross-hatch très subtil pour texture */
-      repeating-linear-gradient(45deg, rgba(0,0,0,0.15) 0 1px, transparent 1px 7px),
-      repeating-linear-gradient(-45deg, rgba(0,0,0,0.15) 0 1px, transparent 1px 7px),
-      /* Rouge profond avec léger dégradé */
+      url('assets/card-back.png') center/cover no-repeat,
       linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
     border-color: #4a0a0e;
     color: transparent;
   }
-  .card.back::before {
-    /* Cadre crème style Bicycle */
-    content: '';
-    position: absolute;
-    inset: 3px;
-    border: 2px solid rgba(248,232,200,0.92);
-    border-radius: 4px;
-    pointer-events: none;
-  }
-  .card.back::after {
-    /* Ornement intérieur (ligne fine + glow) */
-    content: '';
-    position: absolute;
-    inset: 7px;
-    border: 1px solid rgba(248,232,200,0.45);
-    border-radius: 3px;
-    background:
-      radial-gradient(circle at 50% 50%, rgba(248,232,200,0.14) 0%, transparent 35%);
-    pointer-events: none;
-  }
+  .card.back::before,
+  .card.back::after { content: none; display: none; }
   .card.placeholder {
     background: transparent;
     border: 1.5px dashed var(--border-strong);
@@ -858,10 +835,10 @@
     font-weight: 700;
     line-height: 1;
   }
-  .card .card-corner-tl { top: 6px; left: 7px; }
-  .card .card-corner-br { bottom: 6px; right: 7px; transform: rotate(180deg); }
-  .card .card-corner .card-rank { font-size: 17px; letter-spacing: -0.5px; }
-  .card .card-corner .card-suit { font-size: 15px; margin-top: 2px; }
+  .card .card-corner-tl { top: 9px; left: 10px; }
+  .card .card-corner-br { bottom: 9px; right: 10px; transform: rotate(180deg); }
+  .card .card-corner .card-rank { font-size: 15px; letter-spacing: -0.5px; }
+  .card .card-corner .card-suit { font-size: 13px; margin-top: 2px; }
 
   .card .card-center {
     position: absolute;
@@ -920,16 +897,13 @@
     .card.anim-in { animation: none; }
   }
 
-  /* Image overlay (style Bicycle PNG) — couvre le rendu CSS si elle charge */
-  /* IMPORTANT : background transparent pour qu'on voie le rendu CSS du dessous pendant le chargement */
+  /* Image overlay (style Bicycle PNG) — légèrement inset pour donner l'effet "cadre blanc" autour du dessin */
   .card .card-img {
     position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
+    inset: 3px;
     object-fit: cover;
     background: transparent;
-    border-radius: 5px;
+    border-radius: 3px;
     pointer-events: none;
     user-select: none;
     -webkit-user-drag: none;
@@ -1569,13 +1543,14 @@
   @media (min-width: 1200px) {
     .card { width: 80px; height: 112px; border-radius: 6px; }
     .hand-slot { width: 80px; height: 112px; }
-    .card .card-corner-tl { top: 7px; left: 8px; }
-    .card .card-corner-br { bottom: 7px; right: 8px; }
-    .card .card-corner .card-rank { font-size: 20px; }
-    .card .card-corner .card-suit { font-size: 18px; }
-    .card .card-center { font-size: 46px; }
-    .card .card-center.face { font-size: 38px; }
-    .card .card-center.face .face-suit { font-size: 20px; }
+    .card .card-img { inset: 4px; }
+    .card .card-corner-tl { top: 11px; left: 13px; }
+    .card .card-corner-br { bottom: 11px; right: 13px; }
+    .card .card-corner .card-rank { font-size: 17px; }
+    .card .card-corner .card-suit { font-size: 15px; }
+    .card .card-center { font-size: 40px; }
+    .card .card-center.face { font-size: 33px; }
+    .card .card-center.face .face-suit { font-size: 17px; }
     .seat-cards .card { width: 48px; height: 68px; border-radius: 4px; }
     .seat-cards .card .card-corner-tl { top: 4px; left: 5px; }
     .seat-cards .card .card-corner-br { bottom: 4px; right: 5px; }
@@ -1593,13 +1568,14 @@
   @media (min-width: 1600px) {
     .card { width: 92px; height: 130px; border-radius: 7px; }
     .hand-slot { width: 92px; height: 130px; }
-    .card .card-corner-tl { top: 8px; left: 9px; }
-    .card .card-corner-br { bottom: 8px; right: 9px; }
-    .card .card-corner .card-rank { font-size: 23px; }
-    .card .card-corner .card-suit { font-size: 21px; }
-    .card .card-center { font-size: 54px; }
-    .card .card-center.face { font-size: 44px; }
-    .card .card-center.face .face-suit { font-size: 23px; }
+    .card .card-img { inset: 5px; }
+    .card .card-corner-tl { top: 13px; left: 15px; }
+    .card .card-corner-br { bottom: 13px; right: 15px; }
+    .card .card-corner .card-rank { font-size: 20px; }
+    .card .card-corner .card-suit { font-size: 18px; }
+    .card .card-center { font-size: 46px; }
+    .card .card-center.face { font-size: 38px; }
+    .card .card-center.face .face-suit { font-size: 20px; }
     .seat-cards .card { width: 54px; height: 76px; }
     .seat-cards .card .card-corner .card-rank { font-size: 15px; }
     .seat-cards .card .card-corner .card-suit { font-size: 13px; }
@@ -3978,7 +3954,8 @@ function preloadCardImages() {
   if (cardsPreloaded) return;
   cardsPreloaded = true;
   buildDeck().forEach(c => { const img = new Image(); img.src = cardImgURL(c); });
-  const back = new Image(); back.src = cardBackURL();
+  // Dos local Bicycle Rider Back (image fournie par le user)
+  const localBack = new Image(); localBack.src = 'assets/card-back.png';
 }
 
 function renderCardHTML(c, opts) {
