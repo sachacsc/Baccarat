@@ -799,8 +799,9 @@
     background: white;
     border: 1px solid #c8c8c8;
     border-radius: 5px;
-    width: 68px;
-    height: 96px;
+    /* Taille de base = mobile compact pour que 5 cartes tiennent dans la largeur d'un téléphone */
+    width: 52px;
+    height: 74px;
     user-select: none;
     flex-shrink: 0;
     box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
@@ -816,7 +817,7 @@
     background:
       url('assets/card-back.png') center/cover no-repeat,
       linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
-    border-color: #4a0a0e;
+    border-color: rgba(0,0,0,0.12);
     color: transparent;
   }
   .card.back::before,
@@ -835,28 +836,28 @@
     font-weight: 700;
     line-height: 1;
   }
-  .card .card-corner-tl { top: 9px; left: 10px; }
-  .card .card-corner-br { bottom: 9px; right: 10px; transform: rotate(180deg); }
-  .card .card-corner .card-rank { font-size: 15px; letter-spacing: -0.5px; }
-  .card .card-corner .card-suit { font-size: 13px; margin-top: 2px; }
+  .card .card-corner-tl { top: 6px; left: 7px; }
+  .card .card-corner-br { bottom: 6px; right: 7px; transform: rotate(180deg); }
+  .card .card-corner .card-rank { font-size: 12px; letter-spacing: -0.5px; }
+  .card .card-corner .card-suit { font-size: 11px; margin-top: 1px; }
 
   .card .card-center {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 40px;
+    font-size: 28px;
     font-weight: 700;
     text-align: center;
     line-height: 0.9;
   }
   .card .card-center.face {
-    font-size: 32px;
+    font-size: 22px;
     display: flex;
     flex-direction: column;
     align-items: center;
   }
-  .card .card-center.face .face-suit { font-size: 17px; margin-top: 3px; }
+  .card .card-center.face .face-suit { font-size: 12px; margin-top: 2px; }
 
   .card.selectable { cursor: pointer; }
   .card.selectable:active { transform: scale(0.96); }
@@ -905,10 +906,15 @@
     height: 100%;
     object-fit: cover;
     background: transparent;
-    border-radius: 5px;
+    border-radius: inherit;
     pointer-events: none;
     user-select: none;
     -webkit-user-drag: none;
+  }
+  /* Une fois l'image chargée, on masque le rendu CSS pour éviter le "double affichage" */
+  .card.img-loaded .card-corner,
+  .card.img-loaded .card-center {
+    display: none;
   }
 
   /* ===== Boards ===== */
@@ -1243,8 +1249,8 @@
   /* Slots de carte : le placeholder vide se voit pendant le délai avant l'animation flip-in */
   .hand-slot {
     position: relative;
-    width: 68px;
-    height: 96px;
+    width: 52px;
+    height: 74px;
     flex-shrink: 0;
     display: inline-block;
   }
@@ -1541,6 +1547,19 @@
     .game-sidebar { display: none; }
     .mobile-stats-toggle { display: inline-flex; }
   }
+  /* Écrans moyens (tablette portrait, grand téléphone landscape, desktop standard) */
+  @media (min-width: 600px) {
+    .card { width: 68px; height: 96px; }
+    .hand-slot { width: 68px; height: 96px; }
+    .card .card-corner-tl { top: 9px; left: 10px; }
+    .card .card-corner-br { bottom: 9px; right: 10px; }
+    .card .card-corner .card-rank { font-size: 15px; }
+    .card .card-corner .card-suit { font-size: 13px; }
+    .card .card-center { font-size: 36px; }
+    .card .card-center.face { font-size: 28px; }
+    .card .card-center.face .face-suit { font-size: 15px; }
+  }
+
   /* Desktop large : scale les cartes pour profiter de l'espace */
   @media (min-width: 1200px) {
     .card { width: 80px; height: 112px; border-radius: 6px; }
@@ -3983,8 +4002,10 @@ function renderCardHTML(c, opts) {
   const centerHTML = isFace
     ? `<div class="card-center face">${rd}<span class="face-suit">${sd}</span></div>`
     : `<div class="card-center">${sd}</div>`;
-  // CSS fallback en dessous + image Bicycle en overlay (cachée si onerror)
-  return `<div class="card ${color}${sel}${sct}${dis}${anim}"${styleAttr}${dataAttr}><div class="card-corner card-corner-tl"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div>${centerHTML}<div class="card-corner card-corner-br"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div><img class="card-img" src="${cardImgURL(c)}" onerror="this.style.display='none'" alt=""></div>`;
+  // CSS fallback en dessous + image Bicycle en overlay
+  // onload : ajoute 'img-loaded' au parent → masque le CSS rendering (évite l'effet "doublé")
+  // onerror : cache l'img + ajoute 'img-failed' → laisse le CSS fallback visible
+  return `<div class="card ${color}${sel}${sct}${dis}${anim}"${styleAttr}${dataAttr}><div class="card-corner card-corner-tl"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div>${centerHTML}<div class="card-corner card-corner-br"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div><img class="card-img" src="${cardImgURL(c)}" onload="this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'; this.parentNode.classList.add('img-failed')" alt=""></div>`;
 }
 
 // ===== Game state =====
