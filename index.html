@@ -812,11 +812,10 @@
   }
   .card.red { color: #c81818; }
   .card.black { color: #111; }
-  /* Dos Bicycle Rider Back (image locale) avec fallback rouge CSS si l'image ne charge pas */
+  /* Dos Bicycle Rider Back : image rendue via <img class="card-img"> (même structure que les faces).
+     Fallback rouge CSS visible derrière si l'image ne charge pas. */
   .card.back {
-    background:
-      url('assets/card-back.png') center/cover no-repeat,
-      linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
+    background: linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
     border-color: rgba(0,0,0,0.12);
     color: transparent;
   }
@@ -898,15 +897,16 @@
     .card.anim-in { animation: none; }
   }
 
-  /* Image overlay (style Bicycle PNG) — fill complet pour aligner avec le rendu du dos */
+  /* Image overlay (faces Bicycle PNG ET dos local).
+     Ratio fixe + scale-to-fit (object-fit:contain) + padding (inset) :
+     l'image conserve son aspect d'origine, n'est jamais croppée, et le cadre blanc de
+     la .card est visible autour. Faces et dos partagent exactement la même structure. */
   .card .card-img {
     position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    inset: 3px;
+    object-fit: contain;
     background: transparent;
-    border-radius: inherit;
+    border-radius: 3px;
     pointer-events: none;
     user-select: none;
     -webkit-user-drag: none;
@@ -1551,6 +1551,7 @@
   @media (min-width: 600px) {
     .card { width: 68px; height: 96px; }
     .hand-slot { width: 68px; height: 96px; }
+    .card .card-img { inset: 4px; border-radius: 4px; }
     .card .card-corner-tl { top: 9px; left: 10px; }
     .card .card-corner-br { bottom: 9px; right: 10px; }
     .card .card-corner .card-rank { font-size: 15px; }
@@ -1564,6 +1565,7 @@
   @media (min-width: 1200px) {
     .card { width: 80px; height: 112px; border-radius: 6px; }
     .hand-slot { width: 80px; height: 112px; }
+    .card .card-img { inset: 5px; border-radius: 5px; }
     .card .card-corner-tl { top: 11px; left: 13px; }
     .card .card-corner-br { bottom: 11px; right: 13px; }
     .card .card-corner .card-rank { font-size: 17px; }
@@ -1588,6 +1590,7 @@
   @media (min-width: 1600px) {
     .card { width: 92px; height: 130px; border-radius: 7px; }
     .hand-slot { width: 92px; height: 130px; }
+    .card .card-img { inset: 6px; border-radius: 6px; }
     .card .card-corner-tl { top: 13px; left: 15px; }
     .card .card-corner-br { bottom: 13px; right: 15px; }
     .card .card-corner .card-rank { font-size: 20px; }
@@ -3917,26 +3920,49 @@ function validateAnnounce(announcedCat, holeCards, boardCards) {
   return !!best && CAT_RANK[best.cat] >= CAT_RANK[announcedCat];
 }
 
-// Calcule la "nuts" : meilleure main possible sur ce board, en excluant du pool
-// les cartes visibles sur les 3 boards (celles des 15 cartes communautaires).
-// Pool restant = 52 − 15 = 37 cartes. Itère ≈ C(37,2)=666 paires + evaluateBest.
-function computeNuts(boardCards, allCommunityCards) {
+// Calcule la "nuts" : meilleure main RÉELLEMENT atteignable par un des joueurs
+// (en utilisant 2 cartes parmi sa propre main + les 5 du board).
+// Évite d'afficher comme nuts une combinaison impossible — par exemple un carré dont
+// les 2 cartes manquantes sont réparties entre 2 joueurs différents (donc inaccessible).
+// Appelé côté hôte uniquement (a accès à toutes les mains via game.hands).
+function computeNuts(boardCards, allCommunityCards, allHands, inManchePlayers) {
   if (!boardCards || boardCards.length < 5) return null;
-  const used = new Set();
-  for (const cs of (allCommunityCards || [])) {
-    if (Array.isArray(cs)) for (const c of cs) used.add(c);
+  // Si on n'a pas les mains (appel legacy), on tombe sur l'ancien comportement : pool = deck − community
+  if (!allHands || !inManchePlayers) {
+    const used = new Set();
+    for (const cs of (allCommunityCards || [])) {
+      if (Array.isArray(cs)) for (const c of cs) used.add(c);
+    }
+    const pool = buildDeck().filter(c => !used.has(c));
+    let best = null;
+    for (let i = 0; i < pool.length; i++) {
+      for (let j = i + 1; j < pool.length; j++) {
+        const ev = evaluateBest([pool[i], pool[j], ...boardCards]);
+        if (!best || compareHands(ev, best.ev) > 0) {
+          best = { cards: [pool[i], pool[j]], ev };
+        }
+      }
+    }
+    return best ? { cat: best.ev.cat, ranks: best.ev.ranks, cards: best.cards } : null;
   }
-  const pool = buildDeck().filter(c => !used.has(c));
-  let best = null;
-  for (let i = 0; i < pool.length; i++) {
-    for (let j = i + 1; j < pool.length; j++) {
-      const ev = evaluateBest([pool[i], pool[j], ...boardCards]);
-      if (!best || compareHands(ev, best.ev) > 0) {
-        best = { cards: [pool[i], pool[j]], ev };
+  // Nuts "réelle" : on itère sur les mains de chaque joueur encore en manche.
+  // Pour chaque joueur, on cherche les 2 cartes (parmi les siennes) qui maximisent.
+  // On garde le meilleur global sur l'ensemble des joueurs.
+  let bestOverall = null;
+  for (const p of inManchePlayers) {
+    const hand = allHands[p.peerId];
+    if (!hand || hand.length < 2) continue;
+    for (let i = 0; i < hand.length; i++) {
+      for (let j = i + 1; j < hand.length; j++) {
+        const cards = [hand[i], hand[j]];
+        const ev = evaluateBest([...cards, ...boardCards]);
+        if (ev && (!bestOverall || compareHands(ev, bestOverall.ev) > 0)) {
+          bestOverall = { cards, ev };
+        }
       }
     }
   }
-  return best ? { cat: best.ev.cat, ranks: best.ev.ranks, cards: best.cards } : null;
+  return bestOverall ? { cat: bestOverall.ev.cat, ranks: bestOverall.ev.ranks, cards: bestOverall.cards } : null;
 }
 
 // Trouve les 2 cartes optimales (parmi la main) qui satisfont l'annonce et maximisent la force
@@ -3981,11 +4007,16 @@ function renderCardHTML(c, opts) {
   opts = opts || {};
   // Check faceDown EN PREMIER : sinon les cartes back avec c=null tombaient dans placeholder
   if (opts.faceDown) {
-    // Dos en CSS pur (rouge Bicycle-style)
+    // Dos Bicycle Rider Back (image locale) rendu via <img class="card-img"> : même structure
+    // que les faces, donc même ratio + scale-to-fit + padding. Si l'image rate, le gradient
+    // rouge de fallback (sur .card.back) reste visible.
     // opts.flipKey : si présent, ajoute data-flip-card pour permettre le click-to-flip (Flash mode)
+    // opts.animate + opts.delay : permet d'animer l'arrivée du dos (deal en Flash mode)
     const flipAttr = opts.flipKey ? ` data-flip-card="${opts.flipKey}"` : '';
     const clickCls = opts.flipKey ? ' flippable' : '';
-    return `<div class="card back${clickCls}"${flipAttr}></div>`;
+    const anim = opts.animate ? ' anim-in' : '';
+    const styleAttr = (opts.animate && opts.delay) ? ` style="animation-delay:${opts.delay}ms;"` : '';
+    return `<div class="card back${clickCls}${anim}"${styleAttr}${flipAttr}><img class="card-img" src="assets/card-back.png" onload="this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'" alt=""></div>`;
   }
   if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
   const r = c[0], s = c[1];
@@ -4401,7 +4432,9 @@ function hostReceiveTiebreakSubmission(fromPeerId, payload) {
   if (category === 'skip') {
     // OK
   } else {
-    if (!cards || cards.length !== 2 || cards[0] === cards[1]) return;
+    // Une carte peut suffire (cf. submitMyAnnounce)
+    if (!cards || cards.length < 1 || cards.length > 2) return;
+    if (cards.length === 2 && cards[0] === cards[1]) return;
     if (!CAT_BY_ID[category]) return;
     const myCards = game.hands[fromPeerId] || [];
     if (!cards.every(c => myCards.includes(c))) return;
@@ -4543,7 +4576,9 @@ function hostReceiveSubmission(fromPeerId, payload) {
   if (category === 'skip') {
     // Skip : pas de cartes nécessaires
   } else {
-    if (!cards || cards.length !== 2 || cards[0] === cards[1]) return;
+    // Une carte peut suffire si elle complète déjà l'annonce avec le board
+    if (!cards || cards.length < 1 || cards.length > 2) return;
+    if (cards.length === 2 && cards[0] === cards[1]) return;
     if (!CAT_BY_ID[category]) return;
     const myCards = game.hands[fromPeerId] || [];
     if (!cards.every(c => myCards.includes(c))) return;
@@ -4614,6 +4649,11 @@ function resolveBoardReveal() {
     }
   }
 
+  // Nuts réelle : on prend en compte les mains des joueurs encore en manche
+  // (un carré impossible parce que les 2 cartes manquantes sont chez 2 joueurs distincts n'apparaîtra pas)
+  const inManchePlayers = game.players.filter(p => p.inManche);
+  const nutsResult = computeNuts(boardCards, game.communityCards, game.hands, inManchePlayers);
+
   if (splitters) {
     // SPLIT : on ne paie pas maintenant, on résoudra en tie-break après les 3 boards
     // Les splitters re-annonceront avec leur main complète sur un nouveau board.
@@ -4630,7 +4670,7 @@ function resolveBoardReveal() {
       splitters: splitters.map(s => ({ peerId: s.peerId })),
       tieBreakResolved: false,
       tiebreakIterations: [],
-      nuts: computeNuts(boardCards, game.communityCards),
+      nuts: nutsResult,
     };
     game.phase = 'board-reveal';
     showToast(`Split détecté sur le Board ${boardIdx + 1} — tie-break à la fin de la manche`, false);
@@ -4644,7 +4684,7 @@ function resolveBoardReveal() {
       winnerPeerId: winner.peerId,
       winningCategory: winner.category,
       rebidRound: game.rebidRound,
-      nuts: computeNuts(boardCards, game.communityCards),
+      nuts: nutsResult,
     };
     game.phase = 'board-reveal';
     broadcastGameState();
@@ -4664,7 +4704,7 @@ function resolveBoardReveal() {
         winningCategory: null,
         rebidRound: game.rebidRound,
         abandoned: true,
-        nuts: computeNuts(boardCards, game.communityCards),
+        nuts: nutsResult,
       };
       game.phase = 'board-reveal';
       showToast('Board abandonné — aucun gagnant possible', true);
@@ -4833,7 +4873,8 @@ function maybeResetSelection() {
   if (key !== lastBoardKey) {
     if (game.phase === 'announcing' || game.phase === 'tiebreak-announcing') {
       selectedCards = [];
-      selectedCategory = 'highcard';
+      // Pas de pré-sélection : le joueur doit explicitement choisir Hauteur, une autre annonce ou Skip
+      selectedCategory = null;
     }
     lastBoardKey = key;
   }
@@ -5042,14 +5083,14 @@ function renderGame() {
         const catLabel = CAT_BY_ID[result.winningCategory] ? CAT_BY_ID[result.winningCategory].label : '';
         const multi = catMulti(result.winningCategory);
         const tbTag = result.isSplit && result.tieBreakResolved ? ' <span style="font-weight:400; opacity:0.7;">(tie-break)</span>' : '';
-        const winCardsHTML = winnerR && winnerR.cards && winnerR.cards.length === 2
+        const winCardsHTML = winnerR && winnerR.cards && winnerR.cards.length >= 1
           ? `<div class="board-cell-cards">${winnerR.cards.map(c => renderCardHTML(c)).join('')}</div>`
           : '<div class="board-cell-cards"></div>';
         winnerCellHTML = `<div class="board-cell winner-cell"><div class="board-cell-label">🏆 ${escapeHTML(winnerPlayer ? winnerPlayer.name : '?')} · ${catLabel}${multi > 1 ? ' ×' + multi : ''}${tbTag}</div>${winCardsHTML}</div>`;
       }
       if (result.nuts) {
         const nutsCatLabel = CAT_BY_ID[result.nuts.cat] ? CAT_BY_ID[result.nuts.cat].label : '?';
-        const nutsCardsHTML = result.nuts.cards && result.nuts.cards.length === 2
+        const nutsCardsHTML = result.nuts.cards && result.nuts.cards.length >= 1
           ? `<div class="board-cell-cards">${result.nuts.cards.map(c => renderCardHTML(c)).join('')}</div>`
           : '<div class="board-cell-cards"></div>';
         nutsCellHTML = `<div class="board-cell nuts-cell"><div class="board-cell-label">💎 Nuts · ${nutsCatLabel}</div>${nutsCardsHTML}</div>`;
@@ -5246,7 +5287,7 @@ function renderTiebreakUI() {
         const isWinner = lastIt && br.tieBreakResolved && br.winnerPeerId === r.peerId;
         let label = isWinner ? 'Gagnant' : (r.skip ? 'Skip' : (r.timeout ? 'Pas de réponse' : (r.excluded ? 'Hors-jeu' : (r.valid ? 'Valide' : 'Bluff'))));
         const announceCat = r.category && CAT_BY_ID[r.category] ? CAT_BY_ID[r.category].label : '—';
-        const cardsRow = (r.cards && r.cards.length === 2) ? `<div style="display:flex; gap:3px;">${r.cards.map(c => renderCardHTML(c)).join('')}</div>` : '';
+        const cardsRow = (r.cards && r.cards.length >= 1) ? `<div style="display:flex; gap:3px;">${r.cards.map(c => renderCardHTML(c)).join('')}</div>` : '';
         html += `<div style="display:flex; gap:8px; align-items:center; padding:6px 10px; background:${isWinner ? 'rgba(31,122,63,0.12)' : 'var(--bg-soft)'}; border:1px solid ${isWinner ? 'var(--green)' : 'var(--border)'}; border-radius:6px; margin-bottom:4px; font-size:13px;">
           <div style="font-weight:600; min-width:60px;">${isWinner ? '★ ' : ''}${escapeHTML(name)}</div>
           ${cardsRow}
@@ -5354,8 +5395,16 @@ function renderMyHand(interactive) {
       });
       placeholderHTML = animate && delay > 0 ? '<div class="hand-slot-placeholder"></div>' : '';
     } else {
-      // Face-down : cliquable pour révéler à soi-même
-      cardHTML = renderCardHTML(null, { faceDown: true, flipKey: c });
+      // Face-down (Flash mode) : cliquable pour révéler à soi-même + animée comme un vrai deal
+      // (même cadence par paires que les cartes face-up). seenCards évite de re-animer après distribution.
+      const animate = !seenCards.has(c);
+      if (animate) seenCards.add(c);
+      let delay = 0;
+      if (animate && game.phase === 'dealing') {
+        delay = Math.floor(idx / 2) * 2000;
+      }
+      cardHTML = renderCardHTML(null, { faceDown: true, flipKey: c, animate, delay });
+      placeholderHTML = animate && delay > 0 ? '<div class="hand-slot-placeholder"></div>' : '';
     }
     container.innerHTML += `<div class="hand-slot">${placeholderHTML}${cardHTML}</div>`;
   });
@@ -5445,21 +5494,41 @@ function renderAnnounceSkip() {
 function renderConfirmBtn() {
   const btn = document.getElementById('announce-confirm-btn');
   btn.style.display = '';
-  btn.disabled = !selectedCategory;
-  btn.style.opacity = selectedCategory ? '1' : '0.5';
   if (!selectedCategory) {
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
     btn.textContent = 'Choisis une annonce';
     return;
   }
   if (selectedCategory === 'skip') {
+    btn.disabled = false;
+    btn.style.opacity = '1';
     btn.textContent = 'Confirmer : Skip (ne pas jouer ce board)';
     return;
   }
   const catLabel = CAT_BY_ID[selectedCategory].label;
-  if (selectedCards.length === 2) {
-    btn.textContent = `Confirmer : ${catLabel} (cartes choisies)`;
+  if (selectedCategory === 'highcard') {
+    // Hauteur : seule catégorie en cartes auto. Sélection de cartes optionnelle.
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    if (selectedCards.length === 2) {
+      btn.textContent = `Confirmer : ${catLabel} (cartes choisies)`;
+    } else if (selectedCards.length === 1) {
+      btn.textContent = `Confirmer : ${catLabel} (1 carte choisie)`;
+    } else {
+      btn.textContent = `Confirmer : ${catLabel} (cartes auto)`;
+    }
   } else {
-    btn.textContent = `Confirmer : ${catLabel} (cartes auto)`;
+    // Toutes les autres annonces : sélection manuelle obligatoire (1 ou 2 cartes)
+    if (selectedCards.length === 0) {
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      btn.textContent = `Sélectionne 1 ou 2 cartes pour ${catLabel}`;
+    } else {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = `Confirmer : ${catLabel} (${selectedCards.length} carte${selectedCards.length > 1 ? 's' : ''})`;
+    }
   }
 }
 
@@ -5468,20 +5537,26 @@ function submitMyAnnounce() {
   let cards;
   if (selectedCategory === 'skip') {
     cards = [];
-  } else if (selectedCards.length === 2) {
-    cards = selectedCards.slice();
-  } else {
-    // Auto-pick basé sur la catégorie annoncée et le board courant
-    const myHand = (game.hands && game.hands[online.myPeerId]) || [];
-    const boardCards = game.phase === 'tiebreak-announcing'
-      ? (game.tbBoard || [])
-      : (game.communityCards[game.currentBoard] || []);
-    cards = autoPickCards(myHand, boardCards, selectedCategory);
-    if (!cards) {
-      // Annonce non réalisable : envoie quand même les 2 premières cartes (sera comptée comme bluff)
-      showToast('Annonce non réalisable avec tes cartes — comptée comme bluff', true);
-      cards = myHand.slice(0, 2);
+  } else if (selectedCategory === 'highcard') {
+    // Seule Hauteur peut se valider sans sélection (auto-pick des meilleures cartes)
+    if (selectedCards.length >= 1) {
+      cards = selectedCards.slice();
+    } else {
+      const myHand = (game.hands && game.hands[online.myPeerId]) || [];
+      const boardCards = game.phase === 'tiebreak-announcing'
+        ? (game.tbBoard || [])
+        : (game.communityCards[game.currentBoard] || []);
+      cards = autoPickCards(myHand, boardCards, 'highcard');
+      if (!cards) {
+        showToast('Annonce non réalisable avec tes cartes — comptée comme bluff', true);
+        cards = myHand.slice(0, 2);
+      }
     }
+  } else {
+    // Toutes les autres annonces : sélection manuelle obligatoire (1 ou 2 cartes).
+    // Une seule carte peut suffire si elle complète déjà l'annonce avec le board.
+    if (selectedCards.length === 0) return;
+    cards = selectedCards.slice();
   }
   const payload = { type: 'submit-announce', category: selectedCategory, cards };
   if (isHost()) {
@@ -5561,11 +5636,11 @@ function renderRevealList() {
     else if (!r.valid) { tagClass = 'invalid'; tagLabel = 'Bluff'; rowCls = 'invalid'; }
 
     const announceCat = r.category && CAT_BY_ID[r.category] ? CAT_BY_ID[r.category].label : (r.excluded ? '—' : (r.timeout ? '—' : 'Aucune'));
-    const actualEv = r.cards && r.cards.length === 2 ? evaluateBest([...r.cards, ...boardCards]) : null;
+    const actualEv = r.cards && r.cards.length >= 1 ? evaluateBest([...r.cards, ...boardCards]) : null;
     const actualLabel = actualEv ? CAT_BY_ID[actualEv.cat].label : '';
 
     let cardsHTML = '';
-    if (r.cards && r.cards.length === 2) {
+    if (r.cards && r.cards.length >= 1) {
       cardsHTML = `<div class="reveal-row-cards">${r.cards.map(c => renderCardHTML(c)).join('')}</div>`;
     }
 
@@ -5667,7 +5742,7 @@ function renderSeats() {
     } else if (game.phase === 'board-reveal' || game.phase === 'manche-end') {
       const result = (displayBoardIdx !== null) ? game.boardResults[displayBoardIdx] : null;
       const r = result && result.results ? result.results.find(rr => rr.peerId === p.peerId) : null;
-      if (r && r.cards && r.cards.length === 2) {
+      if (r && r.cards && r.cards.length >= 1) {
         cardsHTML = `<div class="seat-cards">${r.cards.map(c => renderCardHTML(c)).join('')}</div>`;
       } else {
         cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
@@ -5701,7 +5776,7 @@ function renderSeats() {
       const br = game.boardResults[game.currentTiebreakIdx];
       const lastIt = br && br.tiebreakIterations && br.tiebreakIterations[br.tiebreakIterations.length - 1];
       const r = lastIt && lastIt.results ? lastIt.results.find(rr => rr.peerId === p.peerId) : null;
-      if (r && r.cards && r.cards.length === 2) {
+      if (r && r.cards && r.cards.length >= 1) {
         cardsHTML = `<div class="seat-cards">${r.cards.map(c => renderCardHTML(c)).join('')}</div>`;
       } else {
         cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
