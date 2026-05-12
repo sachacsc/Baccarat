@@ -762,8 +762,8 @@
     background: white;
     border: 1px solid #c8c8c8;
     border-radius: 5px;
-    width: 58px;
-    height: 82px;
+    width: 68px;
+    height: 96px;
     user-select: none;
     flex-shrink: 0;
     box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
@@ -802,28 +802,28 @@
     font-weight: 700;
     line-height: 1;
   }
-  .card .card-corner-tl { top: 5px; left: 6px; }
-  .card .card-corner-br { bottom: 5px; right: 6px; transform: rotate(180deg); }
-  .card .card-corner .card-rank { font-size: 15px; letter-spacing: -0.5px; }
-  .card .card-corner .card-suit { font-size: 13px; margin-top: 2px; }
+  .card .card-corner-tl { top: 6px; left: 7px; }
+  .card .card-corner-br { bottom: 6px; right: 7px; transform: rotate(180deg); }
+  .card .card-corner .card-rank { font-size: 17px; letter-spacing: -0.5px; }
+  .card .card-corner .card-suit { font-size: 15px; margin-top: 2px; }
 
   .card .card-center {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 34px;
+    font-size: 40px;
     font-weight: 700;
     text-align: center;
     line-height: 0.9;
   }
   .card .card-center.face {
-    font-size: 28px;
+    font-size: 32px;
     display: flex;
     flex-direction: column;
     align-items: center;
   }
-  .card .card-center.face .face-suit { font-size: 15px; margin-top: 3px; }
+  .card .card-center.face .face-suit { font-size: 17px; margin-top: 3px; }
 
   .card.selectable { cursor: pointer; }
   .card.selectable:active { transform: scale(0.96); }
@@ -1039,8 +1039,8 @@
     flex-direction: column;
     align-items: center;
     gap: 5px;
-    min-width: 86px;
-    max-width: 130px;
+    min-width: 110px;
+    max-width: 150px;
   }
   .player-seat.dealer { border-color: var(--accent); }
   .player-seat.disconnected,
@@ -1061,18 +1061,18 @@
   }
   .seat-cards { display: flex; gap: 2px; }
   .seat-cards .card {
-    width: 32px;
-    height: 46px;
+    width: 42px;
+    height: 60px;
     box-shadow: none;
-    border-radius: 3px;
+    border-radius: 4px;
   }
-  .seat-cards .card .card-corner-tl { top: 2px; left: 3px; }
-  .seat-cards .card .card-corner-br { bottom: 2px; right: 3px; }
-  .seat-cards .card .card-corner .card-rank { font-size: 9px; }
-  .seat-cards .card .card-corner .card-suit { font-size: 8px; }
-  .seat-cards .card .card-center { font-size: 14px; }
-  .seat-cards .card .card-center.face { font-size: 11px; }
-  .seat-cards .card .card-center.face .face-suit { font-size: 8px; }
+  .seat-cards .card .card-corner-tl { top: 3px; left: 4px; }
+  .seat-cards .card .card-corner-br { bottom: 3px; right: 4px; }
+  .seat-cards .card .card-corner .card-rank { font-size: 11px; }
+  .seat-cards .card .card-corner .card-suit { font-size: 10px; }
+  .seat-cards .card .card-center { font-size: 18px; }
+  .seat-cards .card .card-center.face { font-size: 15px; }
+  .seat-cards .card .card-center.face .face-suit { font-size: 10px; }
   .seat-announce { font-size: 10px; font-weight: 600; color: var(--text); line-height: 1; text-align: center; }
   .seat-status {
     font-size: 9px;
@@ -1205,8 +1205,8 @@
   /* Slots de carte : le placeholder vide se voit pendant le délai avant l'animation flip-in */
   .hand-slot {
     position: relative;
-    width: 58px;
-    height: 82px;
+    width: 68px;
+    height: 96px;
     flex-shrink: 0;
     display: inline-block;
   }
@@ -1494,21 +1494,16 @@
     padding: 12px;
   }
 
+  /* Sidebar latérale supprimée — tout l'historique passe par le modal accessible par bouton */
   .mobile-stats-toggle { display: inline-flex; }
   .game-sidebar { display: none; }
   @media (min-width: 900px) {
-    .container { max-width: 1000px; }
-    .game-with-sidebar { grid-template-columns: 1fr 300px; align-items: start; }
-    .game-sidebar {
-      display: block;
-      position: sticky;
-      top: 20px;
-      max-height: calc(100vh - 40px);
-      overflow-y: auto;
-    }
-    .mobile-stats-toggle { display: none; }
-    /* En desktop, la rangée horizontale de scores devient redondante avec le sidebar */
-    #online-game-view .game-scores { display: none; }
+    .container { max-width: 1100px; }
+    .game-with-sidebar { grid-template-columns: 1fr; }
+    /* Toujours masqué : le sidebar n'existe plus visuellement */
+    .game-sidebar { display: none; }
+    /* Le bouton "Soldes & historique" reste visible sur desktop pour ouvrir le modal */
+    .mobile-stats-toggle { display: inline-flex; }
   }
 </style>
 </head>
@@ -3061,7 +3056,6 @@ function handleHostMessage(conn, msg) {
         }
         showToast(`${existing.name} s'est reconnecté`);
         broadcastGameState();
-        renderGame();
         return;
       }
       // Nouveau pseudo : spectateur jusqu'à la prochaine manche
@@ -3078,7 +3072,6 @@ function handleHostMessage(conn, msg) {
       online.guestConns[conn.peer] = conn;
       showToast(`${name} rejoint en spectateur`);
       broadcastGameState();
-      renderGame();
       return;
     }
 
@@ -3166,7 +3159,6 @@ function handleGuestDisconnect(peerId) {
     }
     maybeResolveAfterDisconnect();
     broadcastGameState();
-    renderGame();
   }
 }
 
@@ -3382,10 +3374,11 @@ function preloadCardImages() {
 
 function renderCardHTML(c, opts) {
   opts = opts || {};
-  if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
+  // Check faceDown EN PREMIER : sinon les cartes back avec c=null tombaient dans placeholder
   if (opts.faceDown) {
     return `<div class="card back"><img class="card-img" src="${cardBackURL()}" onerror="this.style.display='none'" alt=""></div>`;
   }
+  if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
   const r = c[0], s = c[1];
   const color = SUIT_COLORS[s];
   const rd = RANK_DISPLAY[r];
@@ -3562,7 +3555,6 @@ function startNewManche() {
   game.mancheStartScores = Object.fromEntries(game.players.map(p => [p.peerId, p.score]));
 
   broadcastGameState();
-  renderGame();
 
   // Auto-progression : dealing → flop → turn → river → announcing
   // Dealing 7.5s (3 paires × 2000ms + anim + 1s pause) — slots vides puis remplissage progressif
@@ -3588,21 +3580,21 @@ function autoTransition(targetPhase) {
     game.phase = 'flop';
     game.burnsRevealed = 1;
     for (let b = 0; b < 3; b++) game.communityCards[b] = (game.pendingFlop[b] || []).slice();
-    broadcastGameState(); renderGame();
+    broadcastGameState();
     // Flop : 9 cartes × 300ms cascade + 2.3s de pause = 5s
     scheduleNextAutoPhase('turn', 5000);
   } else if (targetPhase === 'turn') {
     game.phase = 'turn';
     game.burnsRevealed = 2;
     for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingTurns[b]);
-    broadcastGameState(); renderGame();
+    broadcastGameState();
     // Turn : 3 cartes × 300ms + 2.6s de pause = 3.5s
     scheduleNextAutoPhase('river', 3500);
   } else if (targetPhase === 'river') {
     game.phase = 'river';
     game.burnsRevealed = 3;
     for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingRivers[b]);
-    broadcastGameState(); renderGame();
+    broadcastGameState();
     // River : idem
     scheduleNextAutoPhase('announcing', 3500);
   } else if (targetPhase === 'announcing') {
@@ -3611,7 +3603,7 @@ function autoTransition(targetPhase) {
     game.rebidRound = 0;
     game.submissions = {};
     game.excludedThisBoard = [];
-    broadcastGameState(); renderGame();
+    broadcastGameState();
     startTimerIfEnabled();
   } else if (targetPhase === 'next-board-or-end') {
     advanceAfterBoardReveal();
@@ -3628,7 +3620,7 @@ function advanceAfterBoardReveal() {
     game.rebidRound = 0;
     game.submissions = {};
     game.excludedThisBoard = [];
-    broadcastGameState(); renderGame();
+    broadcastGameState();
     startTimerIfEnabled();
   } else {
     const pendingIdx = game.boardResults.findIndex(br => br && br.isSplit && !br.tieBreakResolved);
@@ -3636,7 +3628,7 @@ function advanceAfterBoardReveal() {
       enterTiebreakAnnouncing(pendingIdx);
     } else {
       finalizeManche();
-      broadcastGameState(); renderGame();
+      broadcastGameState();
     }
   }
 }
@@ -3739,7 +3731,6 @@ function enterTiebreakAnnouncing(idx) {
     showToast('Pool de cartes vide — gagnant par défaut', true);
     game.phase = 'tiebreak-reveal';
     broadcastGameState();
-    renderGame();
     scheduleNextAutoPhase('next-tiebreak-or-end', 5000);
     return;
   }
@@ -3758,7 +3749,6 @@ function enterTiebreakAnnouncing(idx) {
   game.tbIteration = (br.tiebreakIterations || []).length + 1;
   game.phase = 'tiebreak-announcing';
   broadcastGameState();
-  renderGame();
 }
 
 function isEligibleForCurrentTiebreak(p) {
@@ -3796,7 +3786,6 @@ function hostReceiveTiebreakSubmission(fromPeerId, payload) {
     resolveTiebreakReveal();
   } else {
     broadcastGameState();
-    renderGame();
   }
 }
 
@@ -3891,7 +3880,6 @@ function resolveTiebreakReveal() {
     }
   }
   broadcastGameState();
-  renderGame();
   if (game.phase === 'tiebreak-reveal') {
     scheduleNextAutoPhase('next-tiebreak-or-end', 5500);
   }
@@ -3904,7 +3892,6 @@ function advanceTiebreakOrFinalize() {
   } else {
     finalizeManche();
     broadcastGameState();
-    renderGame();
   }
 }
 
@@ -3941,7 +3928,6 @@ function hostReceiveSubmission(fromPeerId, payload) {
     resolveBoardReveal();
   } else {
     broadcastGameState();
-    renderGame();
   }
 }
 
@@ -4021,7 +4007,6 @@ function resolveBoardReveal() {
     game.phase = 'board-reveal';
     showToast(`Split détecté sur le Board ${boardIdx + 1} — tie-break à la fin de la manche`, false);
     broadcastGameState();
-    renderGame();
     scheduleNextAutoPhase('next-board-or-end', 7000);
   } else if (winner) {
     applyBoardScoring(winner, CAT_BY_ID[winner.category].multi);
@@ -4035,7 +4020,6 @@ function resolveBoardReveal() {
     };
     game.phase = 'board-reveal';
     broadcastGameState();
-    renderGame();
     scheduleNextAutoPhase('next-board-or-end', 7000);
   } else {
     // Bluffeurs : annonce active invalide → exclus définitivement du board (jamais de rebid)
@@ -4057,14 +4041,12 @@ function resolveBoardReveal() {
       game.phase = 'board-reveal';
       showToast('Board abandonné — aucun gagnant possible', true);
       broadcastGameState();
-      renderGame();
       scheduleNextAutoPhase('next-board-or-end', 7000);
     } else {
       game.rebidRound += 1;
       game.submissions = {};
       showToast('Aucune annonce valide — nouveau tour', true);
       broadcastGameState();
-      renderGame();
       startTimerIfEnabled();
     }
   }
@@ -4086,7 +4068,6 @@ function startTimerIfEnabled() {
     game.timerRemain = remain;
     if (changed) {
       broadcastGameState();
-      renderGame();
     }
     if (remain <= 0) {
       stopTimer();
@@ -4162,9 +4143,12 @@ function broadcastGameState() {
       try { conn.send(snap); } catch(e) { console.error('broadcast game-state fail', e); }
     }
   }
+  // Toujours rendre côté hôte (renderOnline si bascule lobby→in-game, sinon renderGame direct)
   if (online.status !== 'in-game') {
     online.status = 'in-game';
     renderOnline();
+  } else {
+    renderGame();
   }
 }
 
