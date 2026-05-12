@@ -1099,7 +1099,58 @@
   .seat-tag.invalid { background: var(--red); color: white; }
   .seat-tag.excluded { background: var(--text-faint); color: white; }
 
-  /* ===== Soumissions inline sous chaque board ===== */
+  /* ===== Tableau 3 colonnes par board (Communauté | Gagnant | Nuts) ===== */
+  .board-table {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 8px;
+    align-items: stretch;
+  }
+  .board-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .board-cell.community { min-width: 180px; }
+  .board-cell.winner-cell,
+  .board-cell.nuts-cell {
+    min-width: 130px;
+    padding-left: 14px;
+    border-left: 1px solid var(--border);
+  }
+  .board-cell.winner-cell.win-highlight {
+    background: rgba(31,122,63,0.04);
+  }
+  @media (max-width: 600px) {
+    .board-table { gap: 10px; }
+    .board-cell.winner-cell,
+    .board-cell.nuts-cell {
+      flex-basis: 100%;
+      border-left: none;
+      border-top: 1px solid var(--border);
+      padding-left: 0;
+      padding-top: 10px;
+    }
+  }
+  .board-cell-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    line-height: 1.3;
+  }
+  .board-cell.winner-cell .board-cell-label { color: var(--green); }
+  .board-cell.nuts-cell .board-cell-label { color: var(--accent); }
+  .board-cell.split-cell .board-cell-label { color: var(--accent); }
+  .board-cell-cards {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  /* ===== Soumissions inline sous chaque board (legacy, conservé pour compat) ===== */
   .board-submissions {
     display: flex;
     flex-wrap: wrap;
@@ -1422,9 +1473,20 @@
     margin-bottom: 6px;
     font-size: 12px;
   }
-  .stats-history-item .h-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
-  .stats-history-item .h-line { font-size: 12px; color: var(--text-dim); margin: 2px 0; }
-  .stats-history-item .h-fb { color: var(--accent); font-weight: 700; font-size: 12px; margin-top: 4px; }
+  .stats-history-item .h-title { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+  .stats-history-item .h-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12px;
+    margin: 3px 0;
+    gap: 8px;
+  }
+  .stats-history-item .h-line > span:first-child { color: var(--text); }
+  .stats-history-item .h-line .positive { color: var(--green); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stats-history-item .h-line .negative { color: var(--red); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stats-history-item .h-line .zero { color: var(--text-faint); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stats-history-item .h-fb { color: var(--accent); font-weight: 700; font-size: 12px; margin-bottom: 6px; }
   .stats-history-empty {
     font-size: 12px;
     color: var(--text-faint);
@@ -3259,6 +3321,28 @@ function validateAnnounce(announcedCat, holeCards, boardCards) {
   return !!best && CAT_RANK[best.cat] >= CAT_RANK[announcedCat];
 }
 
+// Calcule la "nuts" : meilleure main possible sur ce board, en excluant du pool
+// les cartes visibles sur les 3 boards (celles des 15 cartes communautaires).
+// Pool restant = 52 − 15 = 37 cartes. Itère ≈ C(37,2)=666 paires + evaluateBest.
+function computeNuts(boardCards, allCommunityCards) {
+  if (!boardCards || boardCards.length < 5) return null;
+  const used = new Set();
+  for (const cs of (allCommunityCards || [])) {
+    if (Array.isArray(cs)) for (const c of cs) used.add(c);
+  }
+  const pool = buildDeck().filter(c => !used.has(c));
+  let best = null;
+  for (let i = 0; i < pool.length; i++) {
+    for (let j = i + 1; j < pool.length; j++) {
+      const ev = evaluateBest([pool[i], pool[j], ...boardCards]);
+      if (!best || compareHands(ev, best.ev) > 0) {
+        best = { cards: [pool[i], pool[j]], ev };
+      }
+    }
+  }
+  return best ? { cat: best.ev.cat, ranks: best.ev.ranks, cards: best.cards } : null;
+}
+
 // Trouve les 2 cartes optimales (parmi la main) qui satisfont l'annonce et maximisent la force
 function autoPickCards(holeCards, boardCards, announcedCat) {
   if (announcedCat === 'skip') return [];
@@ -3580,10 +3664,15 @@ function finalizeManche() {
     }
   }
   game.phase = 'manche-end';
+  const deltas = {};
+  game.players.forEach(p => {
+    deltas[p.peerId] = p.score - (game.mancheStartScores[p.peerId] || 0);
+  });
   game.history.push({
     manche: game.manche,
     boardResults: game.boardResults,
     fullBoardWinner: game.fullBoardWinner,
+    deltas,
     ts: Date.now(),
   });
   stopTimer();
@@ -3927,12 +4016,13 @@ function resolveBoardReveal() {
       splitters: splitters.map(s => ({ peerId: s.peerId })),
       tieBreakResolved: false,
       tiebreakIterations: [],
+      nuts: computeNuts(boardCards, game.communityCards),
     };
     game.phase = 'board-reveal';
     showToast(`Split détecté sur le Board ${boardIdx + 1} — tie-break à la fin de la manche`, false);
     broadcastGameState();
     renderGame();
-    scheduleNextAutoPhase('next-board-or-end', 6000);
+    scheduleNextAutoPhase('next-board-or-end', 7000);
   } else if (winner) {
     applyBoardScoring(winner, CAT_BY_ID[winner.category].multi);
     game.boardResults[boardIdx] = {
@@ -3941,11 +4031,12 @@ function resolveBoardReveal() {
       winnerPeerId: winner.peerId,
       winningCategory: winner.category,
       rebidRound: game.rebidRound,
+      nuts: computeNuts(boardCards, game.communityCards),
     };
     game.phase = 'board-reveal';
     broadcastGameState();
     renderGame();
-    scheduleNextAutoPhase('next-board-or-end', 5500);
+    scheduleNextAutoPhase('next-board-or-end', 7000);
   } else {
     // Bluffeurs : annonce active invalide → exclus définitivement du board (jamais de rebid)
     // Passifs (skip + timeout) : pas de réponse → restent éligibles pour rebid si la phase rouvre
@@ -3961,12 +4052,13 @@ function resolveBoardReveal() {
         winningCategory: null,
         rebidRound: game.rebidRound,
         abandoned: true,
+        nuts: computeNuts(boardCards, game.communityCards),
       };
       game.phase = 'board-reveal';
       showToast('Board abandonné — aucun gagnant possible', true);
       broadcastGameState();
       renderGame();
-      scheduleNextAutoPhase('next-board-or-end', 4500);
+      scheduleNextAutoPhase('next-board-or-end', 7000);
     } else {
       game.rebidRound += 1;
       game.submissions = {};
@@ -4295,60 +4387,52 @@ function renderGame() {
     } else if (isCurrent) {
       statusHTML = `<div class="game-board-status">En cours</div>`;
     }
-    let cardsHTML = '<div class="game-board-cards">';
+    // Cellule Communauté
+    let commCardsHTML = '<div class="board-cell-cards">';
     for (let k = 0; k < 5; k++) {
       const cc = cards[k];
       if (cc) {
         const delayKey = `${i}-${k}`;
         const hasDelay = communityCardDelays[delayKey] !== undefined;
-        cardsHTML += renderCardHTML(cc, {
+        commCardsHTML += renderCardHTML(cc, {
           animate: hasDelay,
           delay: hasDelay ? communityCardDelays[delayKey] : 0,
         });
       } else {
-        cardsHTML += renderCardHTML(null, { placeholder: true });
+        commCardsHTML += renderCardHTML(null, { placeholder: true });
       }
     }
-    cardsHTML += '</div>';
-    // Soumissions inline (joueurs autour du board) — visible pendant board-reveal et après tie-break
-    let submissionsHTML = '';
-    if (result && result.results) {
-      const splitterIds = result.isSplit && result.splitters ? new Set(result.splitters.map(s => s.peerId)) : null;
-      const sorted = result.results.slice().sort((a, b) => {
-        if (a.peerId === result.winnerPeerId) return -1;
-        if (b.peerId === result.winnerPeerId) return 1;
-        if (splitterIds) {
-          const aS = splitterIds.has(a.peerId), bS = splitterIds.has(b.peerId);
-          if (aS !== bS) return aS ? -1 : 1;
-        }
-        if (a.valid !== b.valid) return a.valid ? -1 : 1;
-        return 0;
-      });
-      submissionsHTML = '<div class="board-submissions">';
-      sorted.forEach(r => {
-        const player = game.players.find(p => p.peerId === r.peerId);
-        if (!player) return;
-        let cls = '';
-        let tag = '';
-        if (r.peerId === result.winnerPeerId) { cls = 'winner'; tag = '<span class="bs-tag winner">Gagnant</span>'; }
-        else if (splitterIds && splitterIds.has(r.peerId)) { cls = 'split'; tag = '<span class="bs-tag split">Split</span>'; }
-        else if (r.forfeit) { cls = 'excluded'; tag = '<span class="bs-tag excluded">FFT</span>'; }
-        else if (r.skip) { cls = 'excluded'; tag = '<span class="bs-tag excluded">Skip</span>'; }
-        else if (r.timeout) { cls = 'excluded'; tag = '<span class="bs-tag excluded">Absent</span>'; }
-        else if (r.excluded) { cls = 'excluded'; tag = '<span class="bs-tag excluded">HJ</span>'; }
-        else if (!r.valid) { cls = 'invalid'; tag = '<span class="bs-tag invalid">Bluff</span>'; }
-        const cardsRow = r.cards && r.cards.length === 2
-          ? `<div class="bs-cards">${r.cards.map(c => renderCardHTML(c)).join('')}</div>`
-          : '';
-        const announce = r.category && CAT_BY_ID[r.category] ? CAT_BY_ID[r.category].label : '—';
-        submissionsHTML += `<div class="board-submission ${cls}">
-          <div class="bs-name">${escapeHTML(player.name)}</div>
-          ${cardsRow}
-          <div class="bs-announce">${announce}</div>
-          ${tag}
-        </div>`;
-      });
-      submissionsHTML += '</div>';
+    commCardsHTML += '</div>';
+    const communityCellHTML = `<div class="board-cell community"><div class="board-cell-label">Communauté</div>${commCardsHTML}</div>`;
+
+    // Cellules Gagnant + Nuts (visibles uniquement quand result existe)
+    let winnerCellHTML = '';
+    let nutsCellHTML = '';
+    if (result) {
+      if (result.abandoned) {
+        winnerCellHTML = `<div class="board-cell winner-cell"><div class="board-cell-label" style="color:var(--text-faint);">Abandonné — aucun gagnant</div></div>`;
+      } else if (result.isSplit && !result.tieBreakResolved) {
+        const names = (result.originalSplitters || []).map(s => escapeHTML((game.players.find(p => p.peerId === s.peerId)||{}).name || '?')).join(', ');
+        const catLabel = CAT_BY_ID[result.winningCategory] ? CAT_BY_ID[result.winningCategory].label : '';
+        winnerCellHTML = `<div class="board-cell winner-cell split-cell"><div class="board-cell-label">⚡ Split · ${catLabel}</div><div style="font-size:11px; color:var(--text-dim); line-height:1.3;">${names}</div></div>`;
+      } else if (result.winnerPeerId) {
+        const winnerPlayer = game.players.find(p => p.peerId === result.winnerPeerId);
+        const winnerR = result.results ? result.results.find(rr => rr.peerId === result.winnerPeerId) : null;
+        const catLabel = CAT_BY_ID[result.winningCategory] ? CAT_BY_ID[result.winningCategory].label : '';
+        const multi = catMulti(result.winningCategory);
+        const tbTag = result.isSplit && result.tieBreakResolved ? ' <span style="font-weight:400; opacity:0.7;">(tie-break)</span>' : '';
+        const winCardsHTML = winnerR && winnerR.cards && winnerR.cards.length === 2
+          ? `<div class="board-cell-cards">${winnerR.cards.map(c => renderCardHTML(c)).join('')}</div>`
+          : '<div class="board-cell-cards"></div>';
+        winnerCellHTML = `<div class="board-cell winner-cell win-highlight"><div class="board-cell-label">🏆 ${escapeHTML(winnerPlayer ? winnerPlayer.name : '?')} · ${catLabel}${multi > 1 ? ' ×' + multi : ''}${tbTag}</div>${winCardsHTML}</div>`;
+      }
+      if (result.nuts) {
+        const nutsCatLabel = CAT_BY_ID[result.nuts.cat] ? CAT_BY_ID[result.nuts.cat].label : '?';
+        const nutsCardsHTML = result.nuts.cards && result.nuts.cards.length === 2
+          ? `<div class="board-cell-cards">${result.nuts.cards.map(c => renderCardHTML(c)).join('')}</div>`
+          : '<div class="board-cell-cards"></div>';
+        nutsCellHTML = `<div class="board-cell nuts-cell"><div class="board-cell-label">💎 Nuts · ${nutsCatLabel}</div>${nutsCardsHTML}</div>`;
+      }
     }
 
     block.innerHTML = `
@@ -4356,8 +4440,11 @@ function renderGame() {
         <div class="game-board-title">Board ${i+1}${isCurrent ? '<span class="b-current">en cours</span>' : ''}</div>
         ${statusHTML}
       </div>
-      ${cardsHTML}
-      ${submissionsHTML}
+      <div class="board-table">
+        ${communityCellHTML}
+        ${winnerCellHTML}
+        ${nutsCellHTML}
+      </div>
     `;
     boardsContainer.appendChild(block);
   }
@@ -4884,9 +4971,9 @@ function renderSeats() {
     let tagHTML = '';
 
     if (game.phase === 'announcing') {
+      // Pendant l'annonce : juste le statut, pas de cartes (les seats sont la ligne d'état)
       const submitted = !!(game.submissionsStatus && game.submissionsStatus[p.peerId]) || !!(game.submissions && game.submissions[p.peerId]);
       const eligible = p.connected && p.inManche && p.forfeitFromBoard === null && !(game.excludedThisBoard || []).includes(p.peerId);
-      cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
       if (!p.connected) statusHTML = '<div class="seat-status">Déconnecté</div>';
       else if (!p.inManche) statusHTML = '<div class="seat-status">Spectateur</div>';
       else if (p.forfeitFromBoard !== null) statusHTML = '<div class="seat-status" style="color:var(--red);">Forfait</div>';
@@ -4917,7 +5004,7 @@ function renderSeats() {
       const br = game.boardResults[game.currentTiebreakIdx];
       const isSplitter = br && br.splitters && br.splitters.some(s => s.peerId === p.peerId);
       const submitted = !!(game.tbSubmissionsStatus && game.tbSubmissionsStatus[p.peerId]) || !!(game.tbSubmissions && game.tbSubmissions[p.peerId]);
-      cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+      // Pas de cartes pendant l'annonce du tie-break — juste statut
       if (!isSplitter) statusHTML = '<div class="seat-status">Observateur</div>';
       else if ((game.tbExcluded || []).includes(p.peerId)) statusHTML = '<div class="seat-status" style="color:var(--red);">Bluff (TB)</div>';
       else if (submitted) statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
@@ -4941,11 +5028,11 @@ function renderSeats() {
         classes.push('invalid');
       }
     } else {
-      // dealing / flop / turn / river : cartes face-down, pas d'annonce
-      cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+      // dealing / flop / turn / river : pas de cartes, juste statut compact
       if (!p.connected) statusHTML = '<div class="seat-status">Déconnecté</div>';
       else if (!p.inManche) statusHTML = '<div class="seat-status">Spectateur</div>';
       else if (isDealerP) statusHTML = '<div class="seat-status" style="color:var(--accent);">Donneur</div>';
+      else statusHTML = '<div class="seat-status">En jeu</div>';
     }
 
     seat.className = classes.join(' ');
@@ -4984,20 +5071,36 @@ function renderGameStats(targetEl) {
   } else {
     const recent = game.history.slice(-10).reverse();
     recent.forEach(h => {
-      const lines = (h.boardResults || []).map((br, i) => {
-        if (!br) return '';
-        if (br.abandoned) return `<div class="h-line">B${i+1} : abandonné</div>`;
-        const winPlayer = game.players.find(p => p.peerId === br.winnerPeerId);
-        const wname = winPlayer ? winPlayer.name : '?';
-        const cat = CAT_BY_ID[br.winningCategory] ? CAT_BY_ID[br.winningCategory].label : '?';
-        return `<div class="h-line">B${i+1} : <strong>${escapeHTML(wname)}</strong> · ${cat}</div>`;
-      }).join('');
       let fbHTML = '';
       if (h.fullBoardWinner) {
         const fbP = game.players.find(p => p.peerId === h.fullBoardWinner);
         fbHTML = `<div class="h-fb">★ Full Board : ${escapeHTML(fbP ? fbP.name : '?')}</div>`;
       }
-      html += `<div class="stats-history-item"><div class="h-title">Manche ${h.manche}</div>${lines}${fbHTML}</div>`;
+      // Lignes par joueur avec delta + boards remportés
+      const deltas = h.deltas || {};
+      const playerLines = [];
+      Object.entries(deltas).forEach(([peerId, delta]) => {
+        const player = game.players.find(p => p.peerId === peerId);
+        if (!player) return;
+        // Boards remportés par ce joueur dans cette manche
+        const boardsWon = [];
+        (h.boardResults || []).forEach((br, bi) => {
+          if (!br || br.winnerPeerId !== peerId) return;
+          const m = catMulti(br.winningCategory);
+          boardsWon.push(`B${bi+1}${m > 1 ? '×' + m : ''}`);
+        });
+        const boardsStr = boardsWon.length > 0 ? ` <span style="color:var(--text-dim); font-weight:500;">(${boardsWon.join(', ')})</span>` : '';
+        const cls = delta > 0.001 ? 'positive' : (delta < -0.001 ? 'negative' : 'zero');
+        const sign = delta > 0 ? '+' : '';
+        playerLines.push({
+          delta,
+          html: `<div class="h-line"><span>${escapeHTML(player.name)}${boardsStr}</span><span class="${cls}">${sign}${delta.toFixed(2)}€</span></div>`,
+        });
+      });
+      // Tri par delta décroissant
+      playerLines.sort((a, b) => b.delta - a.delta);
+      const linesHTML = playerLines.map(l => l.html).join('');
+      html += `<div class="stats-history-item"><div class="h-title">Manche ${h.manche}</div>${fbHTML}${linesHTML}</div>`;
     });
   }
   targetEl.innerHTML = html;
