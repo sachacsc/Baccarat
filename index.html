@@ -903,13 +903,14 @@
   }
 
   /* Image overlay (faces Bicycle PNG ET dos local).
-     Ratio fixe + scale-to-fit (object-fit:contain) + padding (inset) :
-     l'image conserve son aspect d'origine, n'est jamais croppée, et le cadre blanc de
-     la .card est visible autour. Faces et dos partagent exactement la même structure. */
+     Ratio fixe + scale-to-fill (object-fit:cover) + padding (inset) :
+     l'image remplit toujours toute la zone interne (la .card-img occupe inset:3px → 46×68),
+     en croppant légèrement si son aspect ne matche pas exactement. Le cadre blanc de la
+     .card reste visible autour. Faces et dos rendent avec la même taille apparente. */
   .card .card-img {
     position: absolute;
     inset: 3px;
-    object-fit: contain;
+    object-fit: cover;
     background: transparent;
     border-radius: 3px;
     pointer-events: none;
