@@ -879,6 +879,12 @@
   .card.disabled { opacity: 0.45; pointer-events: none; }
   .card.sortable-ghost { opacity: 0.25; }
   .card.sortable-chosen { box-shadow: 0 10px 24px rgba(0,0,0,0.28); cursor: grabbing; z-index: 10; }
+  .card.back.flippable {
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .card.back.flippable:hover { transform: translateY(-3px); box-shadow: 0 4px 10px rgba(0,0,0,0.25); }
+  .card.back.flippable:active { transform: translateY(0) scale(0.97); }
 
   .cards-row { display: flex; gap: 5px; flex-wrap: wrap; }
   .cards-row.center { justify-content: center; }
@@ -1774,6 +1780,12 @@
             </select>
             <div class="readonly-val" id="lobby-timer-readonly" style="display:none;">Désactivé</div>
           </div>
+          <div class="field">
+            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+              <input type="checkbox" id="lobby-flash-input" style="width:18px; height:18px; cursor:pointer;">
+              <span>Mode Flash <span style="font-weight:400; color:var(--text-dim); font-size:12px;">— 4 cartes cachées + dernières en clair</span></span>
+            </label>
+          </div>
         </div>
 
         <button class="btn btn-validate" id="lobby-start-btn" style="display:none;">Démarrer la partie</button>
@@ -1786,8 +1798,9 @@
       <div id="online-game-view" style="display:none;">
         <div class="section-title">
           <span id="game-section-title">Manche 1</span>
-          <div style="display:flex; gap:6px;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button class="section-title-action mobile-stats-toggle" id="open-stats-btn">📊 Soldes</button>
+            <button class="section-title-action" id="open-settings-btn" style="display:none;">⚙ Paramètres</button>
             <button class="section-title-action" id="game-leave-btn">× Quitter</button>
           </div>
         </div>
@@ -1859,6 +1872,49 @@
       </div>
     </div>
 
+    <!-- MODAL Settings de partie online (hôte uniquement pour éditer) -->
+    <div class="modal-overlay" id="game-settings-modal">
+      <div class="modal">
+        <div class="modal-title">Paramètres de la partie</div>
+        <div class="modal-sub">Prix/timer/flash appliqués à la prochaine manche. Soldes immédiats.</div>
+
+        <div class="field">
+          <label>Prix de la ligne (€)</label>
+          <input type="number" id="game-settings-price" step="0.5" min="0" inputmode="decimal">
+        </div>
+
+        <div class="field">
+          <label>Timer par phase d'annonce</label>
+          <select id="game-settings-timer">
+            <option value="0">Désactivé</option>
+            <option value="20">20 secondes</option>
+            <option value="30">30 secondes</option>
+            <option value="45">45 secondes</option>
+            <option value="60">60 secondes</option>
+            <option value="90">90 secondes</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+            <input type="checkbox" id="game-settings-flash" style="width:18px; height:18px; cursor:pointer;">
+            <span>Mode Flash <span style="font-weight:400; color:var(--text-dim); font-size:12px;">— 4 cartes cachées + dernières en clair</span></span>
+          </label>
+        </div>
+
+        <div class="field">
+          <label>Soldes des joueurs (clic dans la valeur pour modifier)</label>
+          <div id="game-settings-scores" style="display:flex; flex-direction:column; gap:6px; max-height:280px; overflow-y:auto;"></div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn" id="game-settings-save-btn">Appliquer</button>
+          <button class="btn btn-blue" id="game-settings-copy-btn">📋 Copier comptes</button>
+        </div>
+        <button class="btn btn-secondary" id="game-settings-close-btn" style="margin-top:8px;">Fermer</button>
+      </div>
+    </div>
+
     <section id="footer-actions" style="display:none;">
       <div class="footer-divider"></div>
       <button class="btn btn-secondary" id="change-mode-btn">↩ Changer de mode</button>
@@ -1902,6 +1958,22 @@
       <div class="modal-actions">
         <button class="btn" id="import-confirm-btn">Charger la partie</button>
         <button class="btn btn-secondary" id="import-close-btn">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL Édition manuelle d'un solde (counter) -->
+  <div class="modal-overlay" id="score-edit-modal">
+    <div class="modal">
+      <div class="modal-title">Modifier le solde</div>
+      <div class="modal-sub" id="score-edit-sub">—</div>
+      <div class="field">
+        <label>Nouveau solde (€)</label>
+        <input type="number" id="score-edit-input" step="0.5" inputmode="decimal">
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="score-edit-save-btn">Enregistrer</button>
+        <button class="btn btn-secondary" id="score-edit-close-btn">Annuler</button>
       </div>
     </div>
   </div>
@@ -2175,14 +2247,17 @@ function renderScoreboard() {
     const inactivePill = !p.active ? '<span class="inactive-pill">Hors-jeu</span>' : '';
     const row = document.createElement('div');
     row.className = `score-row ${inactiveCls} ${dealerCls}`.trim();
+    row.style.cursor = 'pointer';
+    row.title = 'Cliquer pour modifier le solde';
     row.innerHTML = `
       <div class="score-name-wrap">
         <span class="score-name">${escapeHTML(p.name)}</span>
         ${dealerPill}
         ${inactivePill}
       </div>
-      <div class="score-value ${cls}">${fmtMoney(score)}</div>
+      <div class="score-value ${cls}">${fmtMoney(score)} <span style="font-size:11px; opacity:0.4; margin-left:4px;">✎</span></div>
     `;
+    row.addEventListener('click', () => openScoreEditModal(p.id));
     sb.appendChild(row);
   });
   const actives = activePlayers().length;
@@ -2946,6 +3021,36 @@ function confirmImport() {
     showToast(`✓ Partie reprise (${d.players.length} joueurs)`);
   }
   window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+// ========== MODAL Édition solde (counter) ==========
+let scoreEditPlayerId = null;
+function openScoreEditModal(playerId) {
+  const p = state.players.find(pp => pp.id === playerId);
+  if (!p) return;
+  scoreEditPlayerId = playerId;
+  document.getElementById('score-edit-sub').textContent = `Solde de ${p.name}`;
+  document.getElementById('score-edit-input').value = (state.scores[playerId] || 0).toFixed(2);
+  document.getElementById('score-edit-modal').classList.add('show');
+  setTimeout(() => {
+    const inp = document.getElementById('score-edit-input');
+    inp.focus();
+    inp.select();
+  }, 80);
+}
+function closeScoreEditModal() {
+  scoreEditPlayerId = null;
+  document.getElementById('score-edit-modal').classList.remove('show');
+}
+function saveScoreEdit() {
+  if (!scoreEditPlayerId) return;
+  const v = parseFloat(document.getElementById('score-edit-input').value);
+  if (isNaN(v)) { showToast('Valeur invalide', true); return; }
+  state.scores[scoreEditPlayerId] = v;
+  save();
+  closeScoreEditModal();
+  renderAll();
+  showToast('Solde modifié');
 }
 
 // ========== MODAL Prix ==========
@@ -3867,8 +3972,11 @@ function renderCardHTML(c, opts) {
   opts = opts || {};
   // Check faceDown EN PREMIER : sinon les cartes back avec c=null tombaient dans placeholder
   if (opts.faceDown) {
-    // Dos en CSS pur (rouge Bicycle-style), plus d'image — fiable et instantané
-    return `<div class="card back"></div>`;
+    // Dos en CSS pur (rouge Bicycle-style)
+    // opts.flipKey : si présent, ajoute data-flip-card pour permettre le click-to-flip (Flash mode)
+    const flipAttr = opts.flipKey ? ` data-flip-card="${opts.flipKey}"` : '';
+    const clickCls = opts.flipKey ? ' flippable' : '';
+    return `<div class="card back${clickCls}"${flipAttr}></div>`;
   }
   if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
   const r = c[0], s = c[1];
@@ -3900,6 +4008,7 @@ let seenCards = new Set();  // cartes déjà animées (pour éviter de re-jouer 
 let animOrderIdx = 0;       // index séquentiel pour staggered delay
 let myHandOrder = null;     // ordre visuel choisi par drag&drop (null = ordre par défaut)
 let myHandSortable = null;  // instance SortableJS
+let localFlippedCards = new Set();  // Flash mode : cartes face-down que J'AI retournées pour les voir
 
 function isHost() { return online.role === 'host'; }
 
@@ -3915,6 +4024,7 @@ function onlineStartGame() {
     return;
   }
   const timerSec = parseInt(document.getElementById('lobby-timer-input').value || '0');
+  const flashMode = !!document.getElementById('lobby-flash-input')?.checked;
   game = {
     manche: 0,
     players: online.players.map(p => ({
@@ -3929,6 +4039,8 @@ function onlineStartGame() {
     dealerIdx: 0,
     linePrice: price,
     timer: { enabled: timerSec > 0, seconds: timerSec },
+    flashMode: flashMode,
+    publicHands: {},
     history: [],
     phase: null,
   };
@@ -3967,6 +4079,7 @@ function startNewManche() {
   if (!isHost()) return;
   seenCards.clear();
   myHandOrder = null;
+  localFlippedCards.clear();
 
   // Reset flags par-manche
   game.players.forEach(p => {
@@ -4041,6 +4154,18 @@ function startNewManche() {
   game.submissions = {};
   game.boardResults = [null, null, null];
   game.fullBoardWinner = null;
+  // Flash mode : calcule les "publicHands" (dernières cartes visibles à tous)
+  game.publicHands = {};
+  if (game.flashMode) {
+    Object.keys(hands).forEach(pid => {
+      const h = hands[pid];
+      if (h && h.length >= 5) {
+        game.publicHands[pid] = h.slice(4);  // 1 carte si 5, 2 si 6
+      } else {
+        game.publicHands[pid] = [];
+      }
+    });
+  }
   game.tiebreakPool = tiebreakPool;
   game.currentTiebreakIdx = null;
   game.tiebreakIteration = 0;
@@ -4608,6 +4733,8 @@ function gameSnapshotFor(forPeerId) {
     tbSubmissionsFull: game.phase === 'tiebreak-reveal' ? game.tbSubmissions : null,
     tbExcluded: game.tbExcluded,
     tbIteration: game.tbIteration,
+    flashMode: game.flashMode,
+    publicHands: game.publicHands || {},
   };
 }
 
@@ -4649,6 +4776,7 @@ function handleGameMessageGuest(msg) {
   if (msg.manche !== prevManche) {
     seenCards.clear();
     myHandOrder = null;
+    localFlippedCards.clear();
   }
   game = {
     manche: msg.manche,
@@ -4674,6 +4802,8 @@ function handleGameMessageGuest(msg) {
     tbSubmissionsStatus: msg.tbSubmissionsStatus || {},
     tbExcluded: msg.tbExcluded || [],
     tbIteration: msg.tbIteration || 0,
+    flashMode: !!msg.flashMode,
+    publicHands: msg.publicHands || {},
   };
   if (online.status !== 'in-game') {
     online.status = 'in-game';
@@ -4718,6 +4848,9 @@ function renderGame() {
 
   document.getElementById('game-section-title').textContent = `Manche ${game.manche}`;
   document.getElementById('game-code-value').textContent = online.roomCode || '----';
+  // Bouton settings : visible uniquement pour l'hôte
+  const settingsBtn = document.getElementById('open-settings-btn');
+  if (settingsBtn) settingsBtn.style.display = isHost() ? 'inline-flex' : 'none';
 
   const phase = game.phase;
   const dealer = game.players[game.dealerIdx];
@@ -5167,32 +5300,61 @@ function getMyHandDisplay() {
 function renderMyHand(interactive) {
   const myHand = getMyHandDisplay();
   const container = document.getElementById('my-hand-cards');
-  // Détruire l'instance Sortable existante avant de re-render
-  if (myHandSortable) {
-    try { myHandSortable.destroy(); } catch(e) {}
-    myHandSortable = null;
-  }
+  if (myHandSortable) { try { myHandSortable.destroy(); } catch(e) {} myHandSortable = null; }
   container.innerHTML = '';
+  // Titre dynamique selon Flash mode
+  const titleEl = document.querySelector('#my-hand-zone .my-hand-title');
+  if (titleEl) {
+    if (game && game.flashMode) {
+      titleEl.innerHTML = 'Tes cartes <span style="font-weight:400; color:var(--text-faint); text-transform:none; letter-spacing:0;">(Flash mode — clique les dos pour les retourner)</span>';
+    } else {
+      titleEl.innerHTML = 'Tes cartes <span style="font-weight:400; color:var(--text-faint); text-transform:none; letter-spacing:0;">(drag pour réorganiser)</span>';
+    }
+  }
+
+  // Flash mode : déterminer quelles cartes sont publiques (visibles à tous)
+  // Les autres sont face-down sauf si moi-même je les ai retournées (localFlippedCards)
+  const flashOn = !!(game && game.flashMode);
+  const myPublicSet = new Set((flashOn && game.publicHands && game.publicHands[online.myPeerId]) || []);
+
   myHand.forEach((c, idx) => {
     const isSel = selectedCards.includes(c);
-    const animate = !isSel && !seenCards.has(c);
-    if (animate) seenCards.add(c);
-    // Distribution 2 par 2 : cartes 0+1 ensemble, 2+3 ensemble, etc. (la dernière seule si impair)
-    // Délai entre paires volontairement lent pour faire monter la tension du deal
-    const pairIdx = Math.floor(idx / 2);
-    const delay = animate ? pairIdx * 2000 : 0;
-    const cardHTML = renderCardHTML(c, {
-      selectable: interactive,
-      selected: isSel,
-      data: true,
-      animate,
-      delay,
-    });
-    // Placeholder visible pendant le délai d'animation (couvert par la carte une fois apparue)
-    const placeholderHTML = animate ? '<div class="hand-slot-placeholder"></div>' : '';
+    const isPublic = myPublicSet.has(c);
+    const isFlippedSelf = localFlippedCards.has(c);
+    const showFaceUp = !flashOn || isPublic || isFlippedSelf;
+
+    let cardHTML;
+    let placeholderHTML = '';
+    if (showFaceUp) {
+      const animate = !isSel && !seenCards.has(c);
+      if (animate) seenCards.add(c);
+      const pairIdx = Math.floor(idx / 2);
+      const delay = animate ? pairIdx * 2000 : 0;
+      cardHTML = renderCardHTML(c, {
+        selectable: interactive,
+        selected: isSel,
+        data: true,
+        animate,
+        delay,
+      });
+      placeholderHTML = animate ? '<div class="hand-slot-placeholder"></div>' : '';
+    } else {
+      // Face-down : cliquable pour révéler à soi-même
+      cardHTML = renderCardHTML(null, { faceDown: true, flipKey: c });
+    }
     container.innerHTML += `<div class="hand-slot">${placeholderHTML}${cardHTML}</div>`;
   });
-  // Clic pour sélection manuelle (override de l'auto-pick)
+
+  // Clic pour révéler à soi-même (Flash mode)
+  container.querySelectorAll('.card[data-flip-card]').forEach(el => {
+    el.addEventListener('click', () => {
+      const c = el.getAttribute('data-flip-card');
+      localFlippedCards.add(c);
+      renderMyHand(interactive);
+    });
+  });
+
+  // Clic pour sélection manuelle (cartes face-up)
   container.querySelectorAll('.card[data-card]').forEach(el => {
     el.addEventListener('click', () => {
       if (!interactive) return;
@@ -5207,7 +5369,7 @@ function renderMyHand(interactive) {
       renderConfirmBtn();
     });
   });
-  // Drag&drop : réorganisation visuelle (toujours actif quand on a une main)
+
   if (window.Sortable && myHand.length > 1) {
     myHandSortable = Sortable.create(container, {
       animation: 180,
@@ -5216,8 +5378,9 @@ function renderMyHand(interactive) {
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
       onEnd: () => {
-        myHandOrder = Array.from(container.querySelectorAll('.card[data-card]'))
-          .map(el => el.getAttribute('data-card'));
+        myHandOrder = Array.from(container.querySelectorAll('.card'))
+          .map(el => el.getAttribute('data-card') || el.getAttribute('data-flip-card'))
+          .filter(Boolean);
       },
     });
   }
@@ -5446,6 +5609,13 @@ function renderSeats() {
     let statusHTML = '';
     let tagHTML = '';
 
+    // En Flash mode : on affiche d'office les cartes publiques de chaque joueur
+    // (le board-reveal/manche-end override ensuite avec les cartes soumises)
+    const flashPub = (game.flashMode && game.publicHands && game.publicHands[p.peerId]) || [];
+    if (game.flashMode && flashPub.length > 0) {
+      cardsHTML = `<div class="seat-cards">${flashPub.map(c => renderCardHTML(c)).join('')}</div>`;
+    }
+
     if (game.phase === 'announcing') {
       const submitted = !!(game.submissionsStatus && game.submissionsStatus[p.peerId]) || !!(game.submissions && game.submissions[p.peerId]);
       const eligible = p.connected && p.inManche && p.forfeitFromBoard === null && !(game.excludedThisBoard || []).includes(p.peerId);
@@ -5454,8 +5624,11 @@ function renderSeats() {
       else if (p.forfeitFromBoard !== null) statusHTML = '<div class="seat-status" style="color:var(--red);">Forfait</div>';
       else if (!eligible) statusHTML = '<div class="seat-status">Hors-jeu</div>';
       else if (submitted) {
-        // Joueur qui a soumis : 2 cartes face-down (image dos) pour marquer son engagement
-        cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+        // Si Flash mode actif : on garde les cartes publiques visibles (déjà dans cardsHTML)
+        // Sinon : 2 cartes face-down pour marquer l'engagement
+        if (!game.flashMode || flashPub.length === 0) {
+          cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+        }
         statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
       }
       else statusHTML = '<div class="seat-status pending">⏳ En attente</div>';
@@ -5486,7 +5659,9 @@ function renderSeats() {
       if (!isSplitter) statusHTML = '<div class="seat-status">Observateur</div>';
       else if ((game.tbExcluded || []).includes(p.peerId)) statusHTML = '<div class="seat-status" style="color:var(--red);">Bluff (TB)</div>';
       else if (submitted) {
-        cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+        if (!game.flashMode || flashPub.length === 0) {
+          cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+        }
         statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
       }
       else statusHTML = '<div class="seat-status pending">⏳ En attente</div>';
@@ -5595,6 +5770,102 @@ function closeStatsModal() {
   document.getElementById('stats-modal').classList.remove('show');
 }
 
+// Settings de partie online (host)
+function openGameSettingsModal() {
+  if (!isHost() || !game) { showToast('Hôte uniquement', true); return; }
+  document.getElementById('game-settings-price').value = game.linePrice || 2.5;
+  document.getElementById('game-settings-timer').value = String((game.timer && game.timer.seconds) || 0);
+  document.getElementById('game-settings-flash').checked = !!game.flashMode;
+  renderGameSettingsScores();
+  document.getElementById('game-settings-modal').classList.add('show');
+}
+function closeGameSettingsModal() {
+  document.getElementById('game-settings-modal').classList.remove('show');
+}
+function renderGameSettingsScores() {
+  const list = document.getElementById('game-settings-scores');
+  list.innerHTML = '';
+  game.players.forEach(p => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:7px 11px; background:var(--bg-soft); border-radius:7px; gap:8px;';
+    let tag = '';
+    if (!p.connected) tag = '<span style="font-size:10px; color:var(--text-faint); margin-left:6px;">(DC)</span>';
+    else if (!p.inManche) tag = '<span style="font-size:10px; color:var(--blue); margin-left:6px;">(spect)</span>';
+    row.innerHTML = `
+      <span style="font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHTML(p.name)}${tag}</span>
+      <input type="number" step="0.5" value="${(p.score || 0).toFixed(2)}" data-pid="${p.peerId}" style="width:90px; padding:6px 8px; border:1.5px solid var(--border-strong); border-radius:6px; font-family:inherit; text-align:right; background:var(--bg);">
+    `;
+    list.appendChild(row);
+  });
+}
+function saveGameSettings() {
+  if (!isHost() || !game) return;
+  const price = parseFloat(document.getElementById('game-settings-price').value);
+  const timerSec = parseInt(document.getElementById('game-settings-timer').value || '0', 10);
+  const flash = document.getElementById('game-settings-flash').checked;
+
+  if (!isNaN(price) && price > 0) game.linePrice = price;
+  game.timer = { enabled: timerSec > 0, seconds: timerSec };
+  game.flashMode = flash;
+
+  document.querySelectorAll('#game-settings-scores input[data-pid]').forEach(inp => {
+    const pid = inp.dataset.pid;
+    const v = parseFloat(inp.value);
+    if (isNaN(v)) return;
+    const p = game.players.find(pp => pp.peerId === pid);
+    if (p) p.score = v;
+  });
+
+  broadcastGameState();
+  closeGameSettingsModal();
+  showToast('✓ Paramètres appliqués');
+}
+function copyGameAccounts() {
+  if (!game || !game.players) { showToast('Pas de partie en cours', true); return; }
+  const lines = [];
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  lines.push('=== BACCARAT (Partie en ligne) ===');
+  lines.push(`Date: ${dateStr}`);
+  lines.push(`Prix ligne: ${(game.linePrice || 0).toFixed(2)}€`);
+  lines.push(`Manches jouées: ${(game.history || []).length}`);
+  lines.push('');
+  lines.push('COMPTES:');
+  const dealerPeerId = game.players[game.dealerIdx] ? game.players[game.dealerIdx].peerId : null;
+  game.players.forEach(p => {
+    const tags = [];
+    if (p.peerId === dealerPeerId && p.inManche) tags.push('donne');
+    if (!p.connected) tags.push('déconnecté');
+    else if (!p.inManche && game.phase) tags.push('spectateur');
+    if (p.forfeitFromBoard !== null) tags.push('forfait');
+    const tagStr = tags.length ? `  [${tags.join(', ')}]` : '';
+    const sc = p.score || 0;
+    const sign = sc > 0 ? '+' : '';
+    lines.push(`  ${p.name}: ${sign}${sc.toFixed(2)}€${tagStr}`);
+  });
+  const text = lines.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => showToast('✓ Comptes copiés dans le presse-papier'),
+      () => { fallbackCopy(text); }
+    );
+  } else {
+    fallbackCopy(text);
+  }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); showToast('✓ Comptes copiés'); }
+  catch(e) { showToast('Échec de la copie', true); }
+  document.body.removeChild(ta);
+}
+
 function renderMancheRecap() {
   const zone = document.getElementById('manche-recap-zone');
   const startScores = game.mancheStartScores || {};
@@ -5669,6 +5940,13 @@ document.getElementById('stats-modal').addEventListener('click', e => {
   if (e.target.id === 'stats-modal') closeStatsModal();
 });
 document.getElementById('game-code-pill').addEventListener('click', copyRoomCode);
+document.getElementById('open-settings-btn').addEventListener('click', openGameSettingsModal);
+document.getElementById('game-settings-save-btn').addEventListener('click', saveGameSettings);
+document.getElementById('game-settings-close-btn').addEventListener('click', closeGameSettingsModal);
+document.getElementById('game-settings-copy-btn').addEventListener('click', copyGameAccounts);
+document.getElementById('game-settings-modal').addEventListener('click', e => {
+  if (e.target.id === 'game-settings-modal') closeGameSettingsModal();
+});
 // Fermer la connexion proprement si la page se ferme
 window.addEventListener('beforeunload', () => {
   try { if (online.peer) online.peer.destroy(); } catch(e) {}
@@ -5703,6 +5981,15 @@ document.getElementById('import-confirm-btn').addEventListener('click', confirmI
 document.getElementById('import-close-btn').addEventListener('click', closeImportModal);
 document.getElementById('import-modal').addEventListener('click', e => {
   if (e.target.id === 'import-modal') closeImportModal();
+});
+
+document.getElementById('score-edit-save-btn').addEventListener('click', saveScoreEdit);
+document.getElementById('score-edit-close-btn').addEventListener('click', closeScoreEditModal);
+document.getElementById('score-edit-modal').addEventListener('click', e => {
+  if (e.target.id === 'score-edit-modal') closeScoreEditModal();
+});
+document.getElementById('score-edit-input').addEventListener('keypress', e => {
+  if (e.key === 'Enter') saveScoreEdit();
 });
 
 document.getElementById('price-confirm-btn').addEventListener('click', confirmPriceChange);
