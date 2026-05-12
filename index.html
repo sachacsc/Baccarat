@@ -804,10 +804,10 @@
     background: white;
     border: 1px solid #c8c8c8;
     border-radius: 5px;
-    /* Ratio fixe = celui du dos Bicycle Rider Back (≈ 0.74) → le dos remplit pile la carte.
-       Les faces (ratio 0.687) sont rendues en object-fit:contain, le reste comblé de blanc. */
+    /* Ratio 5:7 (≈ 0.714) — natif des assets Xadeck (faces + dos = 750×1050).
+       Faces et dos sont rendus en object-fit:cover (aspects identiques → pas de marge ni crop). */
     width: 52px;
-    height: 70px;
+    height: 73px;
     user-select: none;
     flex-shrink: 0;
     box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
@@ -903,17 +903,14 @@
     .card.anim-in { animation: none; }
   }
 
-  /* Image overlay (faces Bicycle PNG ET dos local).
-     object-fit:contain → l'image est affichée à 100% de son aspect d'origine.
-     - Le dos (ratio identique à la boîte) remplit pile la carte.
-     - Les faces (ratio 0.687, + étroites que la boîte 0.74) sont ajustées en hauteur ;
-       le reste de la boîte reste blanc (= le background de .card) → spacing naturel. */
+  /* Image overlay (faces + dos Xadeck — mêmes dimensions natives, ratio 5:7).
+     object-fit:cover : remplit pile la boîte (aspect identique → pas de crop ni marge blanche). */
   .card .card-img {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: cover;
     background: transparent;
     border-radius: inherit;
     pointer-events: none;
@@ -1210,7 +1207,7 @@
   .board-submission.excluded { opacity: 0.55; }
   .board-submission .bs-name { font-weight: 700; font-size: 12px; }
   .board-submission .bs-cards { display: flex; gap: 2px; }
-  .board-submission .bs-cards .card { width: 26px; height: 35px; box-shadow: none; }
+  .board-submission .bs-cards .card { width: 26px; height: 36px; box-shadow: none; }
   .board-submission .bs-cards .card .card-corner-tl { top: 1px; left: 2px; }
   .board-submission .bs-cards .card .card-corner-br { bottom: 1px; right: 2px; }
   .board-submission .bs-cards .card .card-corner .card-rank { font-size: 9px; }
@@ -1259,7 +1256,7 @@
   .hand-slot {
     position: relative;
     width: 52px;
-    height: 70px;
+    height: 73px;
     flex-shrink: 0;
     display: inline-block;
   }
@@ -1410,7 +1407,7 @@
     font-size: 13px;
   }
   .reveal-row-cards { display: flex; gap: 3px; flex-shrink: 0; }
-  .reveal-row-cards .card { width: 36px; height: 49px; box-shadow: none; border-radius: 3px; }
+  .reveal-row-cards .card { width: 36px; height: 50px; box-shadow: none; border-radius: 3px; }
   .reveal-row-cards .card .card-corner-tl { top: 2px; left: 3px; }
   .reveal-row-cards .card .card-corner-br { bottom: 2px; right: 3px; }
   .reveal-row-cards .card .card-corner .card-rank { font-size: 10px; }
@@ -1558,8 +1555,8 @@
   }
   /* Écrans moyens (tablette portrait, grand téléphone landscape, desktop standard) */
   @media (min-width: 600px) {
-    .card { width: 68px; height: 92px; }
-    .hand-slot { width: 68px; height: 92px; }
+    .card { width: 68px; height: 95px; }
+    .hand-slot { width: 68px; height: 95px; }
     .card .card-corner-tl { top: 9px; left: 10px; }
     .card .card-corner-br { bottom: 9px; right: 10px; }
     .card .card-corner .card-rank { font-size: 15px; }
@@ -1571,8 +1568,8 @@
 
   /* Desktop large : scale les cartes pour profiter de l'espace */
   @media (min-width: 1200px) {
-    .card { width: 80px; height: 108px; border-radius: 6px; }
-    .hand-slot { width: 80px; height: 108px; }
+    .card { width: 80px; height: 112px; border-radius: 6px; }
+    .hand-slot { width: 80px; height: 112px; }
     .card .card-corner-tl { top: 11px; left: 13px; }
     .card .card-corner-br { bottom: 11px; right: 13px; }
     .card .card-corner .card-rank { font-size: 17px; }
@@ -1580,7 +1577,7 @@
     .card .card-center { font-size: 40px; }
     .card .card-center.face { font-size: 33px; }
     .card .card-center.face .face-suit { font-size: 17px; }
-    .seat-cards .card { width: 48px; height: 65px; border-radius: 4px; }
+    .seat-cards .card { width: 48px; height: 67px; border-radius: 4px; }
     .seat-cards .card .card-corner-tl { top: 4px; left: 5px; }
     .seat-cards .card .card-corner-br { bottom: 4px; right: 5px; }
     .seat-cards .card .card-corner .card-rank { font-size: 13px; }
@@ -1595,8 +1592,8 @@
   }
   /* Ultra-wide : encore plus grand */
   @media (min-width: 1600px) {
-    .card { width: 92px; height: 124px; border-radius: 7px; }
-    .hand-slot { width: 92px; height: 124px; }
+    .card { width: 92px; height: 129px; border-radius: 7px; }
+    .hand-slot { width: 92px; height: 129px; }
     .card .card-corner-tl { top: 13px; left: 15px; }
     .card .card-corner-br { bottom: 13px; right: 15px; }
     .card .card-corner .card-rank { font-size: 20px; }
@@ -1604,7 +1601,7 @@
     .card .card-center { font-size: 46px; }
     .card .card-center.face { font-size: 38px; }
     .card .card-center.face .face-suit { font-size: 20px; }
-    .seat-cards .card { width: 54px; height: 73px; }
+    .seat-cards .card { width: 54px; height: 76px; }
     .seat-cards .card .card-corner .card-rank { font-size: 15px; }
     .seat-cards .card .card-corner .card-suit { font-size: 13px; }
     .seat-cards .card .card-center { font-size: 24px; }
@@ -4038,15 +4035,14 @@ function autoPickCards(holeCards, boardCards, announcedCat) {
   return best ? best.cards : null;
 }
 
-// CDN pour les images Bicycle-style (deck Vector Playing Cards rendu PNG)
-const CARDS_CDN_BASE = 'https://cdn.jsdelivr.net/gh/hayeah/playing-cards-assets@master/png';
-const RANK_NAME = { '2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9','T':'10','J':'jack','Q':'queen','K':'king','A':'ace' };
-const SUIT_NAME = { c:'clubs', d:'diamonds', h:'hearts', s:'spades' };
+// CDN Xadeck/xCards : faces + dos avec mêmes dimensions natives 750×1050 (ratio 5:7).
+// Naming : /face/{R}{S}@2x.png (suit en MAJUSCULE) ; /back/bicycle_blue@2x.png.
+const CARDS_CDN_BASE = 'https://cdn.jsdelivr.net/gh/Xadeck/xCards@master/png';
 function cardImgURL(c) {
-  return `${CARDS_CDN_BASE}/${RANK_NAME[c[0]]}_of_${SUIT_NAME[c[1]]}.png`;
+  return `${CARDS_CDN_BASE}/face/${c[0]}${c[1].toUpperCase()}@2x.png`;
 }
 function cardBackURL() {
-  return `${CARDS_CDN_BASE}/back.png`;
+  return `${CARDS_CDN_BASE}/back/bicycle_blue@2x.png`;
 }
 
 let cardsPreloaded = false;
@@ -4054,8 +4050,7 @@ function preloadCardImages() {
   if (cardsPreloaded) return;
   cardsPreloaded = true;
   buildDeck().forEach(c => { const img = new Image(); img.src = cardImgURL(c); });
-  // Dos local Bicycle Rider Back (image fournie par le user)
-  const localBack = new Image(); localBack.src = 'assets/card-back.png';
+  const back = new Image(); back.src = cardBackURL();
 }
 
 function renderCardHTML(c, opts) {
@@ -4071,7 +4066,7 @@ function renderCardHTML(c, opts) {
     const clickCls = opts.flipKey ? ' flippable' : '';
     const anim = opts.animate ? ' anim-in' : '';
     const styleAttr = (opts.animate && opts.delay) ? ` style="animation-delay:${opts.delay}ms;"` : '';
-    return `<div class="card back${clickCls}${anim}"${styleAttr}${flipAttr}><img class="card-img" src="assets/card-back.png" onload="this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'" alt=""></div>`;
+    return `<div class="card back${clickCls}${anim}"${styleAttr}${flipAttr}><img class="card-img" src="${cardBackURL()}" onload="this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'" alt=""></div>`;
   }
   if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
   const r = c[0], s = c[1];
