@@ -33,10 +33,23 @@
     font-size: 17px;
     line-height: 1.4;
     min-height: 100vh;
+    /* Empêche le scroll horizontal de la page entière sur mobile */
+    overflow-x: hidden;
+    max-width: 100vw;
   }
   body { padding-bottom: 80px; }
 
-  .container { max-width: 600px; margin: 0 auto; padding: 20px 16px; }
+  .container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px 16px;
+    /* Garde-fou contre tout débordement */
+    box-sizing: border-box;
+  }
+  /* Tous les containers de jeu respectent la largeur disponible */
+  .game-section-wrap > *,
+  .game-board,
+  .game-main { max-width: 100%; box-sizing: border-box; }
 
   header {
     text-align: center;
@@ -908,19 +921,19 @@
   }
 
   /* Image overlay (style Bicycle PNG) — couvre le rendu CSS si elle charge */
+  /* IMPORTANT : background transparent pour qu'on voie le rendu CSS du dessous pendant le chargement */
   .card .card-img {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    background: white;
+    background: transparent;
     border-radius: 5px;
     pointer-events: none;
     user-select: none;
     -webkit-user-drag: none;
   }
-  .card.back .card-img { background: transparent; }
 
   /* ===== Boards ===== */
   .game-section-wrap {
@@ -5328,8 +5341,12 @@ function renderMyHand(interactive) {
     if (showFaceUp) {
       const animate = !isSel && !seenCards.has(c);
       if (animate) seenCards.add(c);
-      const pairIdx = Math.floor(idx / 2);
-      const delay = animate ? pairIdx * 2000 : 0;
+      // Pair delay UNIQUEMENT pendant la phase 'dealing' (et pour la non-flash, ou les publics en flash)
+      // Sinon (click-to-flip après le deal), animation immédiate (delay 0)
+      let delay = 0;
+      if (animate && game.phase === 'dealing' && (!flashOn || isPublic)) {
+        delay = Math.floor(idx / 2) * 2000;
+      }
       cardHTML = renderCardHTML(c, {
         selectable: interactive,
         selected: isSel,
@@ -5337,7 +5354,7 @@ function renderMyHand(interactive) {
         animate,
         delay,
       });
-      placeholderHTML = animate ? '<div class="hand-slot-placeholder"></div>' : '';
+      placeholderHTML = animate && delay > 0 ? '<div class="hand-slot-placeholder"></div>' : '';
     } else {
       // Face-down : cliquable pour révéler à soi-même
       cardHTML = renderCardHTML(null, { faceDown: true, flipKey: c });
@@ -5582,6 +5599,13 @@ function renderSeats() {
   container.style.display = 'flex';
   container.innerHTML = '';
 
+  // Flash mode : arrivée des cartes publiques calée sur la 3e paire du deal
+  // (3 paires × 2000ms = 6000ms après le début de la distribution)
+  // Plus 350ms par joueur pour staggered effect entre les seats.
+  const inMancheCount = game.players.filter(pp => pp.inManche).length;
+  const handTarget = inMancheCount <= 6 ? 6 : (inMancheCount <= 8 ? 4 : 0);
+  const publicArrivalMs = (game.flashMode && handTarget >= 5) ? Math.floor((handTarget - 1) / 2) * 2000 : 0;
+
   // Quel board afficher dans les seats ?
   let displayBoardIdx = null;
   if (game.phase === 'announcing' || game.phase === 'board-reveal') {
@@ -5611,9 +5635,19 @@ function renderSeats() {
 
     // En Flash mode : on affiche d'office les cartes publiques de chaque joueur
     // (le board-reveal/manche-end override ensuite avec les cartes soumises)
+    // Animation : staggered seat par seat pour imiter la révélation progressive du dealer
     const flashPub = (game.flashMode && game.publicHands && game.publicHands[p.peerId]) || [];
     if (game.flashMode && flashPub.length > 0) {
-      cardsHTML = `<div class="seat-cards">${flashPub.map(c => renderCardHTML(c)).join('')}</div>`;
+      const seatIdx = idx;
+      let pubHTML = '<div class="seat-cards">';
+      flashPub.forEach((c, ci) => {
+        const animate = !seenCards.has(c);
+        if (animate) seenCards.add(c);
+        const delay = animate ? publicArrivalMs + (seatIdx * 350) + (ci * 150) : 0;
+        pubHTML += renderCardHTML(c, { animate, delay });
+      });
+      pubHTML += '</div>';
+      cardsHTML = pubHTML;
     }
 
     if (game.phase === 'announcing') {
