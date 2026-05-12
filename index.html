@@ -1026,6 +1026,79 @@
   .burned-zone-cards .card .card-center.face { font-size: 14px; }
   .burned-zone-cards .card .card-center.face .face-suit { font-size: 9px; margin-top: 1px; }
 
+  /* ===== Seats "autour de la table" (autres joueurs) ===== */
+  .poker-seats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 10px;
+    background: linear-gradient(180deg, rgba(31,122,63,0.06), rgba(31,122,63,0.02));
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+  }
+  .player-seat {
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 8px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-width: 86px;
+    max-width: 130px;
+  }
+  .player-seat.dealer { border-color: var(--accent); }
+  .player-seat.disconnected,
+  .player-seat.spectator { opacity: 0.5; }
+  .player-seat.forfeit { border-color: var(--red); background: rgba(198,40,40,0.04); }
+  .player-seat.winner { border-color: var(--green); background: rgba(31,122,63,0.08); }
+  .player-seat.split-winner { border-color: var(--accent); background: rgba(179,133,0,0.08); }
+  .player-seat.invalid { border-color: var(--red); background: rgba(198,40,40,0.05); }
+  .seat-name {
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 110px;
+  }
+  .seat-cards { display: flex; gap: 2px; }
+  .seat-cards .card { width: 30px; height: 44px; box-shadow: none; }
+  .seat-cards .card .card-corner-tl { top: 2px; left: 2px; }
+  .seat-cards .card .card-corner-br { bottom: 2px; right: 2px; }
+  .seat-cards .card .card-corner .card-rank { font-size: 9px; }
+  .seat-cards .card .card-corner .card-suit { font-size: 8px; }
+  .seat-cards .card .card-center { font-size: 14px; }
+  .seat-cards .card .card-center.face { font-size: 11px; }
+  .seat-cards .card .card-center.face .face-suit { font-size: 8px; }
+  .seat-announce { font-size: 10px; font-weight: 600; color: var(--text); line-height: 1; text-align: center; }
+  .seat-status {
+    font-size: 9px;
+    color: var(--text-faint);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+  .seat-status.submitted { color: var(--green); }
+  .seat-status.pending { color: var(--text-dim); }
+  .seat-tag {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .seat-tag.winner { background: var(--green); color: white; }
+  .seat-tag.split { background: var(--accent); color: white; }
+  .seat-tag.invalid { background: var(--red); color: white; }
+  .seat-tag.excluded { background: var(--text-faint); color: white; }
+
   /* ===== Soumissions inline sous chaque board ===== */
   .board-submissions {
     display: flex;
@@ -1602,6 +1675,8 @@
                 <div class="burned-zone-title">Cartes brûlées</div>
                 <div class="burned-zone-cards" id="burned-zone-cards"></div>
               </div>
+
+              <div class="poker-seats" id="poker-seats" style="display:none;"></div>
 
               <div id="game-rebid-alert" class="rebid-alert" style="display:none;"></div>
               <div id="game-fullboard-alert" class="full-board-bonus-alert" style="display:none;"></div>
@@ -4148,6 +4223,9 @@ function renderGame() {
     fbAlert.style.display = 'none';
   }
 
+  // Seats "autour de la table" (autres joueurs)
+  renderSeats();
+
   // Zone des cartes brûlées (visible dès qu'au moins une brûle a été révélée)
   const burnedZone = document.getElementById('burned-zone');
   if (game.burns && game.burnsRevealed > 0) {
@@ -4744,6 +4822,119 @@ function renderRevealList() {
       </div>
     `;
     list.appendChild(row);
+  });
+}
+
+function renderSeats() {
+  const container = document.getElementById('poker-seats');
+  if (!container || !game || !game.players) { if (container) container.style.display = 'none'; return; }
+  // Toujours visible si on a au moins un autre joueur que soi-même
+  const others = game.players.filter(p => p.peerId !== online.myPeerId);
+  if (others.length === 0) { container.style.display = 'none'; return; }
+  container.style.display = 'flex';
+  container.innerHTML = '';
+
+  // Quel board afficher dans les seats ?
+  let displayBoardIdx = null;
+  if (game.phase === 'announcing' || game.phase === 'board-reveal') {
+    displayBoardIdx = game.currentBoard;
+  } else if (game.phase === 'manche-end') {
+    // À la fin : on affiche le dernier board (board 3)
+    displayBoardIdx = 2;
+  } else if (game.phase === 'tiebreak-announcing' || game.phase === 'tiebreak-reveal') {
+    // En tie-break : on affiche les soumissions du tie-break courant si dispo
+    displayBoardIdx = game.currentTiebreakIdx;
+  }
+
+  others.forEach((p, idx) => {
+    const seat = document.createElement('div');
+    const classes = ['player-seat'];
+
+    const isDealerP = game.players.indexOf(p) === game.dealerIdx && p.inManche;
+    if (isDealerP) classes.push('dealer');
+    if (!p.connected) classes.push('disconnected');
+    else if (!p.inManche) classes.push('spectator');
+    else if (p.forfeitFromBoard !== null) classes.push('forfeit');
+
+    let cardsHTML = '';
+    let announceHTML = '';
+    let statusHTML = '';
+    let tagHTML = '';
+
+    if (game.phase === 'announcing') {
+      const submitted = !!(game.submissionsStatus && game.submissionsStatus[p.peerId]) || !!(game.submissions && game.submissions[p.peerId]);
+      const eligible = p.connected && p.inManche && p.forfeitFromBoard === null && !(game.excludedThisBoard || []).includes(p.peerId);
+      cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+      if (!p.connected) statusHTML = '<div class="seat-status">Déconnecté</div>';
+      else if (!p.inManche) statusHTML = '<div class="seat-status">Spectateur</div>';
+      else if (p.forfeitFromBoard !== null) statusHTML = '<div class="seat-status" style="color:var(--red);">Forfait</div>';
+      else if (!eligible) statusHTML = '<div class="seat-status">Hors-jeu</div>';
+      else if (submitted) statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
+      else statusHTML = '<div class="seat-status pending">⏳ En attente</div>';
+    } else if (game.phase === 'board-reveal' || game.phase === 'manche-end') {
+      const result = (displayBoardIdx !== null) ? game.boardResults[displayBoardIdx] : null;
+      const r = result && result.results ? result.results.find(rr => rr.peerId === p.peerId) : null;
+      if (r && r.cards && r.cards.length === 2) {
+        cardsHTML = `<div class="seat-cards">${r.cards.map(c => renderCardHTML(c)).join('')}</div>`;
+      } else {
+        cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+      }
+      const announceLabel = r && r.category && CAT_BY_ID[r.category] ? CAT_BY_ID[r.category].label : '—';
+      announceHTML = `<div class="seat-announce">${announceLabel}</div>`;
+      if (r && result) {
+        const splitterIds = result.isSplit && result.splitters ? new Set(result.splitters.map(s => s.peerId)) : null;
+        if (r.peerId === result.winnerPeerId) { tagHTML = '<div class="seat-tag winner">Gagnant</div>'; classes.push('winner'); }
+        else if (splitterIds && splitterIds.has(r.peerId)) { tagHTML = '<div class="seat-tag split">Split</div>'; classes.push('split-winner'); }
+        else if (r.forfeit) { tagHTML = '<div class="seat-tag excluded">FFT</div>'; }
+        else if (r.skip) { tagHTML = '<div class="seat-tag excluded">Skip</div>'; }
+        else if (r.timeout) { tagHTML = '<div class="seat-tag excluded">Absent</div>'; }
+        else if (r.excluded) { tagHTML = '<div class="seat-tag excluded">Hors-jeu</div>'; }
+        else if (!r.valid) { tagHTML = '<div class="seat-tag invalid">Bluff</div>'; classes.push('invalid'); }
+      }
+    } else if (game.phase === 'tiebreak-announcing') {
+      const br = game.boardResults[game.currentTiebreakIdx];
+      const isSplitter = br && br.splitters && br.splitters.some(s => s.peerId === p.peerId);
+      const submitted = !!(game.tbSubmissionsStatus && game.tbSubmissionsStatus[p.peerId]) || !!(game.tbSubmissions && game.tbSubmissions[p.peerId]);
+      cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+      if (!isSplitter) statusHTML = '<div class="seat-status">Observateur</div>';
+      else if ((game.tbExcluded || []).includes(p.peerId)) statusHTML = '<div class="seat-status" style="color:var(--red);">Bluff (TB)</div>';
+      else if (submitted) statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
+      else statusHTML = '<div class="seat-status pending">⏳ En attente</div>';
+    } else if (game.phase === 'tiebreak-reveal') {
+      const br = game.boardResults[game.currentTiebreakIdx];
+      const lastIt = br && br.tiebreakIterations && br.tiebreakIterations[br.tiebreakIterations.length - 1];
+      const r = lastIt && lastIt.results ? lastIt.results.find(rr => rr.peerId === p.peerId) : null;
+      if (r && r.cards && r.cards.length === 2) {
+        cardsHTML = `<div class="seat-cards">${r.cards.map(c => renderCardHTML(c)).join('')}</div>`;
+      } else {
+        cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+      }
+      const announceLabel = r && r.category && CAT_BY_ID[r.category] ? CAT_BY_ID[r.category].label : '—';
+      announceHTML = `<div class="seat-announce">${announceLabel}</div>`;
+      if (br && br.tieBreakResolved && br.winnerPeerId === p.peerId) {
+        tagHTML = '<div class="seat-tag winner">Gagnant TB</div>';
+        classes.push('winner');
+      } else if (r && !r.valid) {
+        tagHTML = '<div class="seat-tag invalid">Bluff</div>';
+        classes.push('invalid');
+      }
+    } else {
+      // dealing / flop / turn / river : cartes face-down, pas d'annonce
+      cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+      if (!p.connected) statusHTML = '<div class="seat-status">Déconnecté</div>';
+      else if (!p.inManche) statusHTML = '<div class="seat-status">Spectateur</div>';
+      else if (isDealerP) statusHTML = '<div class="seat-status" style="color:var(--accent);">Donneur</div>';
+    }
+
+    seat.className = classes.join(' ');
+    seat.innerHTML = `
+      <div class="seat-name">${escapeHTML(p.name)}${isDealerP ? ' ♦' : ''}</div>
+      ${cardsHTML}
+      ${announceHTML}
+      ${statusHTML}
+      ${tagHTML}
+    `;
+    container.appendChild(seat);
   });
 }
 
