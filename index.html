@@ -1202,6 +1202,25 @@
     margin: -8px -4px;
   }
   .my-hand-cards .card { touch-action: none; }
+  /* Slots de carte : le placeholder vide se voit pendant le délai avant l'animation flip-in */
+  .hand-slot {
+    position: relative;
+    width: 58px;
+    height: 82px;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  .hand-slot-placeholder {
+    position: absolute;
+    inset: 0;
+    border: 1.5px dashed var(--border-strong);
+    border-radius: 5px;
+    pointer-events: none;
+  }
+  .hand-slot > .card {
+    position: relative;
+    z-index: 1;
+  }
   .my-hand-hint {
     text-align: center;
     font-size: 12px;
@@ -3546,8 +3565,8 @@ function startNewManche() {
   renderGame();
 
   // Auto-progression : dealing → flop → turn → river → announcing
-  // Dealing 5.5s (3 paires × 1500ms + anim + pause) pour laisser la tension monter
-  scheduleNextAutoPhase('flop', 5500);
+  // Dealing 7.5s (3 paires × 2000ms + anim + 1s pause) — slots vides puis remplissage progressif
+  scheduleNextAutoPhase('flop', 7500);
 }
 
 // ===== Auto-progression =====
@@ -4685,14 +4704,17 @@ function renderMyHand(interactive) {
     // Distribution 2 par 2 : cartes 0+1 ensemble, 2+3 ensemble, etc. (la dernière seule si impair)
     // Délai entre paires volontairement lent pour faire monter la tension du deal
     const pairIdx = Math.floor(idx / 2);
-    const delay = animate ? pairIdx * 1500 : 0;
-    container.innerHTML += renderCardHTML(c, {
+    const delay = animate ? pairIdx * 2000 : 0;
+    const cardHTML = renderCardHTML(c, {
       selectable: interactive,
       selected: isSel,
       data: true,
       animate,
       delay,
     });
+    // Placeholder visible pendant le délai d'animation (couvert par la carte une fois apparue)
+    const placeholderHTML = animate ? '<div class="hand-slot-placeholder"></div>' : '';
+    container.innerHTML += `<div class="hand-slot">${placeholderHTML}${cardHTML}</div>`;
   });
   // Clic pour sélection manuelle (override de l'auto-pick)
   container.querySelectorAll('.card[data-card]').forEach(el => {
