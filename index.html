@@ -446,6 +446,11 @@
   .history-line .winner-name { font-weight: 600; }
   .history-line .multi-tag { color: var(--accent); font-weight: 700; margin-left: 4px; }
   .history-line .gain { color: var(--green); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .history-line .delta-pos { color: var(--green); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .history-line .delta-neg { color: var(--red); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .history-line .delta-zero { color: var(--text-faint); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .history-line .boards-won { color: var(--text-dim); font-weight: 500; font-size: 12px; margin-left: 4px; }
+  .history-fb { color: var(--accent); font-weight: 700; font-size: 12px; margin-bottom: 6px; }
   .history-line .full-tag {
     background: var(--accent);
     color: white;
@@ -2506,49 +2511,98 @@ function renderHistory() {
     const date = new Date(m.ts);
     const time = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
     const price = m.linePrice || state.linePrice;
+    const numActive = m.numActive || state.players.length;
+    // Liste des participants de la manche (fallback : tous les joueurs actuels si ancien format)
+    const participantIds = (m.participantIds && m.participantIds.length > 0)
+      ? m.participantIds
+      : state.players.map(p => p.id);
 
-    let lines = '';
-    m.boards.forEach((b, i) => {
-      // Compat ancien format
+    // Calcule delta + boards gagnés par participant (mêmes formules que validateManche)
+    const deltas = {};
+    const boardsWon = {};
+    participantIds.forEach(pid => { deltas[pid] = 0; boardsWon[pid] = []; });
+
+    m.boards.forEach((b, bi) => {
       const winnerIds = b.winnerIds || (b.winnerId ? [b.winnerId] : []);
+      if (winnerIds.length === 0) return;
       const tiebreak = b.tiebreak || null;
       const isSplit = winnerIds.length > 1;
       const finalWinner = tiebreak ? tiebreak.winnerId : winnerIds[0];
       const finalMulti = tiebreak ? tiebreak.multi : b.multi;
-      const player = state.players.find(p => p.id === finalWinner);
-      const name = player ? player.name : '?';
-      const multiTag = finalMulti > 1 ? `<span class="multi-tag">×${finalMulti}</span>` : '';
-      const splitTag = isSplit ? ' <span style="background:var(--accent); color:white; font-size:9px; padding:1px 5px; border-radius:5px; font-weight:700;">SPLIT</span>' : '';
-      const numTotal = (m.numActive || state.players.length);
-      let gain;
+
       if (isSplit) {
-        const splittersExcl = winnerIds.filter(id => id !== finalWinner).length;
-        const nonSplitters = numTotal - winnerIds.length;
-        gain = price * finalMulti * splittersExcl + price * 1 * nonSplitters;
+        const splitterSet = new Set(winnerIds);
+        const paymentSplit = price * finalMulti;
+        const paymentBase = price * 1;
+        let winnerGain = 0;
+        participantIds.forEach(pid => {
+          if (pid === finalWinner) return;
+          if (splitterSet.has(pid)) {
+            if (deltas[pid] !== undefined) deltas[pid] -= paymentSplit;
+            winnerGain += paymentSplit;
+          } else {
+            if (deltas[pid] !== undefined) deltas[pid] -= paymentBase;
+            winnerGain += paymentBase;
+          }
+        });
+        if (deltas[finalWinner] !== undefined) deltas[finalWinner] += winnerGain;
       } else {
-        gain = price * b.multi * (numTotal - 1);
+        const winnerId = winnerIds[0];
+        const payment = price * b.multi;
+        participantIds.forEach(pid => {
+          if (pid === winnerId) {
+            if (deltas[pid] !== undefined) deltas[pid] += payment * (numActive - 1);
+          } else {
+            if (deltas[pid] !== undefined) deltas[pid] -= payment;
+          }
+        });
       }
-      lines += `<div class="history-line">
-        <span>B${i+1} · <span class="winner-name">${escapeHTML(name)}</span>${multiTag}${splitTag}</span>
-        <span class="gain">+${gain.toFixed(2)}€</span>
-      </div>`;
+
+      if (finalWinner && boardsWon[finalWinner]) {
+        boardsWon[finalWinner].push(`B${bi+1}${finalMulti > 1 ? '×' + finalMulti : ''}`);
+      }
     });
 
-    if (m.fullBoard) {
-      const fbPlayer = state.players.find(p => p.id === m.fullBoard.winnerId);
-      const numLosers = (m.numActive || state.players.length) - 1;
-      const fbGain = price * numLosers;
-      lines += `<div class="history-line">
-        <span><span class="full-tag">FULL</span> <span class="winner-name">${escapeHTML(fbPlayer ? fbPlayer.name : '?')}</span></span>
-        <span class="gain">+${fbGain.toFixed(2)}€</span>
-      </div>`;
+    let fbHTML = '';
+    if (m.fullBoard && m.fullBoard.winnerId) {
+      const fbId = m.fullBoard.winnerId;
+      const fbPlayer = state.players.find(p => p.id === fbId);
+      const fbName = fbPlayer ? fbPlayer.name : '?';
+      fbHTML = `<div class="history-fb">★ Full Board : ${escapeHTML(fbName)}</div>`;
+      const bonus = price;
+      participantIds.forEach(pid => {
+        if (pid === fbId) {
+          if (deltas[pid] !== undefined) deltas[pid] += bonus * (numActive - 1);
+        } else {
+          if (deltas[pid] !== undefined) deltas[pid] -= bonus;
+        }
+      });
     }
+
+    // Lignes par joueur, triées par delta décroissant
+    const playerLines = participantIds.map(pid => {
+      const player = state.players.find(p => p.id === pid);
+      const name = player ? player.name : '?';
+      const delta = deltas[pid] || 0;
+      const cls = delta > 0.001 ? 'delta-pos' : (delta < -0.001 ? 'delta-neg' : 'delta-zero');
+      const sign = delta > 0 ? '+' : '';
+      const wonStr = (boardsWon[pid] && boardsWon[pid].length > 0)
+        ? `<span class="boards-won">(${boardsWon[pid].join(', ')})</span>`
+        : '';
+      return {
+        delta,
+        html: `<div class="history-line"><span><span class="winner-name">${escapeHTML(name)}</span>${wonStr}</span><span class="${cls}">${sign}${delta.toFixed(2)}€</span></div>`,
+      };
+    });
+    playerLines.sort((a, b) => b.delta - a.delta);
+    const linesHTML = playerLines.map(l => l.html).join('');
 
     const item = document.createElement('div');
     item.className = 'history-item';
     item.innerHTML = `
       <div class="history-header"><span>Manche ${num} · ${price.toFixed(2)}€/ligne</span><span class="time">${time}</span></div>
-      ${lines}
+      ${fbHTML}
+      ${linesHTML}
     `;
     list.appendChild(item);
   });
