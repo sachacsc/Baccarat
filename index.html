@@ -897,13 +897,15 @@
     .card.anim-in { animation: none; }
   }
 
-  /* Image overlay (style Bicycle PNG) — légèrement inset pour donner l'effet "cadre blanc" autour du dessin */
+  /* Image overlay (style Bicycle PNG) — fill complet pour aligner avec le rendu du dos */
   .card .card-img {
     position: absolute;
-    inset: 3px;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     object-fit: cover;
     background: transparent;
-    border-radius: 3px;
+    border-radius: 5px;
     pointer-events: none;
     user-select: none;
     -webkit-user-drag: none;
@@ -1543,7 +1545,6 @@
   @media (min-width: 1200px) {
     .card { width: 80px; height: 112px; border-radius: 6px; }
     .hand-slot { width: 80px; height: 112px; }
-    .card .card-img { inset: 4px; }
     .card .card-corner-tl { top: 11px; left: 13px; }
     .card .card-corner-br { bottom: 11px; right: 13px; }
     .card .card-corner .card-rank { font-size: 17px; }
@@ -1568,7 +1569,6 @@
   @media (min-width: 1600px) {
     .card { width: 92px; height: 130px; border-radius: 7px; }
     .hand-slot { width: 92px; height: 130px; }
-    .card .card-img { inset: 5px; }
     .card .card-corner-tl { top: 13px; left: 15px; }
     .card .card-corner-br { bottom: 13px; right: 15px; }
     .card .card-corner .card-rank { font-size: 20px; }
