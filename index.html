@@ -2488,6 +2488,22 @@ let online = {
 
 const ONLINE_PEER_PREFIX = 'baccarat-app-';
 
+// Configuration ICE explicite : plusieurs STUN Google + TURN PeerJS pour aider la traversée de NAT
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  {
+    urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'],
+    username: 'peerjs',
+    credential: 'peerjsp',
+  },
+];
+const PEER_OPTIONS = { debug: 2, config: { iceServers: ICE_SERVERS } };
+const CONNECT_TIMEOUT_MS = 15000;
+
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans 0/O/1/I/L pour éviter confusion
   let s = '';
@@ -2632,7 +2648,7 @@ function onlineHostStart() {
   }
 
   try {
-    online.peer = new Peer(roomCodeToPeerId(online.roomCode), { debug: 1 });
+    online.peer = new Peer(roomCodeToPeerId(online.roomCode), PEER_OPTIONS);
   } catch (e) {
     showToast('Impossible d\'initialiser PeerJS', true);
     onlineCleanup();
@@ -2641,7 +2657,19 @@ function onlineHostStart() {
     return;
   }
 
+  let hostOpened = false;
+  const hostOpenTimeout = setTimeout(() => {
+    if (hostOpened) return;
+    showToast('Serveur PeerJS injoignable — réessaie', true);
+    try { online.peer.destroy(); } catch(e) {}
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+  }, CONNECT_TIMEOUT_MS);
+
   online.peer.on('open', (id) => {
+    hostOpened = true;
+    clearTimeout(hostOpenTimeout);
     online.myPeerId = id;
     online.players = [{
       peerId: id,
@@ -2688,7 +2716,7 @@ function onlineGuestStart() {
   }
 
   try {
-    online.peer = new Peer({ debug: 1 });
+    online.peer = new Peer(PEER_OPTIONS);
   } catch (e) {
     showToast('Impossible d\'initialiser PeerJS', true);
     onlineCleanup();
@@ -2697,7 +2725,20 @@ function onlineGuestStart() {
     return;
   }
 
+  // Timeout au cas où peer.open ne se déclenche jamais (signaling cassé)
+  let peerOpened = false;
+  const peerOpenTimeout = setTimeout(() => {
+    if (peerOpened) return;
+    showToast('Serveur PeerJS injoignable — réessaie', true);
+    try { online.peer.destroy(); } catch(e) {}
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+  }, CONNECT_TIMEOUT_MS);
+
   online.peer.on('open', (myId) => {
+    peerOpened = true;
+    clearTimeout(peerOpenTimeout);
     online.myPeerId = myId;
     const conn = online.peer.connect(roomCodeToPeerId(online.roomCode), {
       reliable: true,
@@ -2706,26 +2747,38 @@ function onlineGuestStart() {
     online.hostConn = conn;
 
     let connectedOK = false;
+    // Timeout si la connexion P2P (ICE) n'aboutit pas en 15 s — typique d'un NAT trop restrictif
+    const connectTimeout = setTimeout(() => {
+      if (connectedOK) return;
+      console.warn('Connect timeout — la connexion ICE n\'a pas pu s\'établir');
+      showToast('Impossible de joindre l\'hôte (timeout). Vérifie le code ou essaie sur un autre réseau.', true);
+      try { conn.close(); } catch(e) {}
+      try { online.peer.destroy(); } catch(e) {}
+      onlineCleanup();
+      online.status = 'entry';
+      renderOnline();
+    }, CONNECT_TIMEOUT_MS);
 
     conn.on('open', () => {
       connectedOK = true;
+      clearTimeout(connectTimeout);
       conn.send({ type: 'hello', name: online.myName });
     });
 
     conn.on('data', (data) => handleGuestMessage(data));
 
     conn.on('close', () => {
-      if (connectedOK) {
-        showToast('Connexion perdue avec l\'hôte', true);
-      }
+      clearTimeout(connectTimeout);
+      if (connectedOK) showToast('Connexion perdue avec l\'hôte', true);
       onlineCleanup();
       online.status = 'entry';
       renderOnline();
     });
 
     conn.on('error', (err) => {
+      clearTimeout(connectTimeout);
       console.error('Conn error', err);
-      showToast('Connexion impossible', true);
+      showToast('Connexion impossible : ' + (err.type || 'erreur inconnue'), true);
       onlineCleanup();
       online.status = 'entry';
       renderOnline();
