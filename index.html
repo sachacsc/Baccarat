@@ -2710,13 +2710,25 @@ let online = {
 
 const ONLINE_PEER_PREFIX = 'baccarat-app-';
 
-// Configuration ICE explicite : plusieurs STUN Google + TURN PeerJS pour aider la traversée de NAT
+// Configuration ICE : STUN multiples + Metered TURN (free tier 50 GB/mois) + PeerJS TURN en backup.
+// Les credentials Metered sont publics dans ce fichier (limite acceptable au volume utilisé).
+// Pour les régénérer en cas de soucis : dashboard Metered → TURN credentials.
+const METERED_USER = 'ebb6d38f47c90aa6c20be07f';
+const METERED_PASS = 'NQK68zu64b0K2qRd';
 const ICE_SERVERS = [
+  // STUN (détection IP publique / type de NAT)
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  // TURN Metered — couvre UDP/TCP/TLS sur 80 et 443 pour passer même les firewalls restrictifs
+  { urls: 'turn:global.relay.metered.ca:80',                username: METERED_USER, credential: METERED_PASS },
+  { urls: 'turn:global.relay.metered.ca:80?transport=tcp',  username: METERED_USER, credential: METERED_PASS },
+  { urls: 'turn:global.relay.metered.ca:443',               username: METERED_USER, credential: METERED_PASS },
+  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: METERED_USER, credential: METERED_PASS },
+  // Backup : TURN PeerJS Cloud (au cas où Metered serait down)
   {
     urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'],
     username: 'peerjs',
