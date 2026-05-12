@@ -774,19 +774,38 @@
   }
   .card.red { color: #c81818; }
   .card.black { color: #111; }
+  /* Dos classique rouge style Bicycle, en pur CSS (pas d'image) */
   .card.back {
     background:
-      radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08) 0, transparent 40%),
-      repeating-linear-gradient(45deg, #14375e 0, #14375e 6px, #1d4d83 6px, #1d4d83 12px);
-    border-color: #0a253f;
+      /* Reflet doux au centre */
+      radial-gradient(ellipse 55% 70% at 50% 50%, rgba(255,240,200,0.12) 0%, transparent 70%),
+      /* Cross-hatch très subtil pour texture */
+      repeating-linear-gradient(45deg, rgba(0,0,0,0.15) 0 1px, transparent 1px 7px),
+      repeating-linear-gradient(-45deg, rgba(0,0,0,0.15) 0 1px, transparent 1px 7px),
+      /* Rouge profond avec léger dégradé */
+      linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
+    border-color: #4a0a0e;
     color: transparent;
   }
-  .card.back::after {
+  .card.back::before {
+    /* Cadre crème style Bicycle */
     content: '';
     position: absolute;
-    inset: 4px;
-    border: 1px solid rgba(255,255,255,0.22);
+    inset: 3px;
+    border: 2px solid rgba(248,232,200,0.92);
     border-radius: 4px;
+    pointer-events: none;
+  }
+  .card.back::after {
+    /* Ornement intérieur (ligne fine + glow) */
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border: 1px solid rgba(248,232,200,0.45);
+    border-radius: 3px;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(248,232,200,0.14) 0%, transparent 35%);
+    pointer-events: none;
   }
   .card.placeholder {
     background: transparent;
@@ -2953,8 +2972,8 @@ function onlineGuestStart() {
     // Timeout si la connexion P2P (ICE) n'aboutit pas en 15 s — typique d'un NAT trop restrictif
     const connectTimeout = setTimeout(() => {
       if (connectedOK) return;
-      console.warn('Connect timeout — la connexion ICE n\'a pas pu s\'établir');
-      showToast('Impossible de joindre l\'hôte (timeout). Vérifie le code ou essaie sur un autre réseau.', true);
+      console.warn('Connect timeout — la connexion ICE WebRTC n\'a pas pu s\'établir');
+      showToast('Délai dépassé. Le code est-il correct ? Sinon, ton réseau bloque WebRTC — essaie le même WiFi que l\'hôte.', true);
       try { conn.close(); } catch(e) {}
       try { online.peer.destroy(); } catch(e) {}
       onlineCleanup();
@@ -2991,9 +3010,9 @@ function onlineGuestStart() {
   online.peer.on('error', (err) => {
     console.error('Peer error', err);
     if (err.type === 'peer-unavailable') {
-      showToast('Code introuvable — vérifie qu\'il est correct', true);
+      showToast('Code introuvable — vérifie qu\'il est correct (ou que la partie est encore active)', true);
     } else if (err.type === 'network' || err.type === 'server-error') {
-      showToast('Erreur réseau PeerJS', true);
+      showToast('Erreur réseau PeerJS — réessaie', true);
     } else {
       showToast('Erreur PeerJS: ' + err.type, true);
     }
@@ -3376,7 +3395,8 @@ function renderCardHTML(c, opts) {
   opts = opts || {};
   // Check faceDown EN PREMIER : sinon les cartes back avec c=null tombaient dans placeholder
   if (opts.faceDown) {
-    return `<div class="card back"><img class="card-img" src="${cardBackURL()}" onerror="this.style.display='none'" alt=""></div>`;
+    // Dos en CSS pur (rouge Bicycle-style), plus d'image — fiable et instantané
+    return `<div class="card back"></div>`;
   }
   if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
   const r = c[0], s = c[1];
