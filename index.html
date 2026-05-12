@@ -1099,13 +1099,14 @@
   .seat-tag.invalid { background: var(--red); color: white; }
   .seat-tag.excluded { background: var(--text-faint); color: white; }
 
-  /* ===== Tableau 3 colonnes par board (Communauté | Gagnant | Nuts) ===== */
+  /* ===== Structure du board (Communauté | Gagnant | Nuts) ===== */
+  /* Pas de séparateurs visuels — juste du whitespace ; wrap auto si pas assez de place */
   .board-table {
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
-    margin-top: 8px;
-    align-items: stretch;
+    gap: 22px;
+    margin-top: 10px;
+    align-items: flex-start;
   }
   .board-cell {
     display: flex;
@@ -1116,25 +1117,7 @@
   }
   .board-cell.community { min-width: 180px; }
   .board-cell.winner-cell,
-  .board-cell.nuts-cell {
-    min-width: 130px;
-    padding-left: 14px;
-    border-left: 1px solid var(--border);
-  }
-  .board-cell.winner-cell.win-highlight {
-    background: rgba(31,122,63,0.04);
-  }
-  @media (max-width: 600px) {
-    .board-table { gap: 10px; }
-    .board-cell.winner-cell,
-    .board-cell.nuts-cell {
-      flex-basis: 100%;
-      border-left: none;
-      border-top: 1px solid var(--border);
-      padding-left: 0;
-      padding-top: 10px;
-    }
-  }
+  .board-cell.nuts-cell { min-width: 130px; }
   .board-cell-label {
     font-size: 11px;
     font-weight: 700;
@@ -4424,7 +4407,7 @@ function renderGame() {
         const winCardsHTML = winnerR && winnerR.cards && winnerR.cards.length === 2
           ? `<div class="board-cell-cards">${winnerR.cards.map(c => renderCardHTML(c)).join('')}</div>`
           : '<div class="board-cell-cards"></div>';
-        winnerCellHTML = `<div class="board-cell winner-cell win-highlight"><div class="board-cell-label">🏆 ${escapeHTML(winnerPlayer ? winnerPlayer.name : '?')} · ${catLabel}${multi > 1 ? ' ×' + multi : ''}${tbTag}</div>${winCardsHTML}</div>`;
+        winnerCellHTML = `<div class="board-cell winner-cell"><div class="board-cell-label">🏆 ${escapeHTML(winnerPlayer ? winnerPlayer.name : '?')} · ${catLabel}${multi > 1 ? ' ×' + multi : ''}${tbTag}</div>${winCardsHTML}</div>`;
       }
       if (result.nuts) {
         const nutsCatLabel = CAT_BY_ID[result.nuts.cat] ? CAT_BY_ID[result.nuts.cat].label : '?';
