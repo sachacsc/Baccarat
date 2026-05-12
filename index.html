@@ -1001,6 +1001,77 @@
   .game-board-status.win { color: var(--green); }
   .game-board-cards { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; }
 
+  /* ===== Zone des cartes brûlées ===== */
+  .burned-zone {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+  }
+  .burned-zone-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .burned-zone-cards { display: flex; gap: 5px; }
+  .burned-zone-cards .card { width: 36px; height: 50px; box-shadow: none; opacity: 0.75; }
+  .burned-zone-cards .card .card-corner-tl { top: 3px; left: 3px; }
+  .burned-zone-cards .card .card-corner-br { bottom: 3px; right: 3px; }
+  .burned-zone-cards .card .card-corner .card-rank { font-size: 10px; }
+  .burned-zone-cards .card .card-corner .card-suit { font-size: 9px; }
+  .burned-zone-cards .card .card-center { font-size: 18px; }
+  .burned-zone-cards .card .card-center.face { font-size: 14px; }
+  .burned-zone-cards .card .card-center.face .face-suit { font-size: 9px; margin-top: 1px; }
+
+  /* ===== Soumissions inline sous chaque board ===== */
+  .board-submissions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+    justify-content: center;
+  }
+  .board-submission {
+    background: var(--bg-soft);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 78px;
+  }
+  .board-submission.winner { border-color: var(--green); background: rgba(31,122,63,0.08); }
+  .board-submission.split { border-color: var(--accent); background: rgba(179,133,0,0.08); }
+  .board-submission.invalid { border-color: var(--red); background: rgba(198,40,40,0.05); opacity: 0.85; }
+  .board-submission.excluded { opacity: 0.55; }
+  .board-submission .bs-name { font-weight: 700; font-size: 12px; }
+  .board-submission .bs-cards { display: flex; gap: 2px; }
+  .board-submission .bs-cards .card { width: 26px; height: 38px; box-shadow: none; }
+  .board-submission .bs-cards .card .card-corner-tl { top: 1px; left: 2px; }
+  .board-submission .bs-cards .card .card-corner-br { bottom: 1px; right: 2px; }
+  .board-submission .bs-cards .card .card-corner .card-rank { font-size: 9px; }
+  .board-submission .bs-cards .card .card-corner .card-suit { font-size: 7px; }
+  .board-submission .bs-cards .card .card-center { font-size: 13px; }
+  .board-submission .bs-cards .card .card-center.face { font-size: 11px; }
+  .board-submission .bs-announce { font-size: 11px; font-weight: 600; }
+  .board-submission .bs-tag {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .board-submission .bs-tag.winner { background: var(--green); color: white; }
+  .board-submission .bs-tag.split { background: var(--accent); color: white; }
+  .board-submission .bs-tag.invalid { background: var(--red); color: white; }
+  .board-submission .bs-tag.excluded { background: var(--text-faint); color: white; }
+
   .my-hand-zone {
     background: var(--bg);
     border: 1.5px solid var(--border);
@@ -1526,6 +1597,11 @@
               </div>
 
               <div class="game-scores" id="game-scores-row"></div>
+
+              <div id="burned-zone" class="burned-zone" style="display:none;">
+                <div class="burned-zone-title">Cartes brûlées</div>
+                <div class="burned-zone-cards" id="burned-zone-cards"></div>
+              </div>
 
               <div id="game-rebid-alert" class="rebid-alert" style="display:none;"></div>
               <div id="game-fullboard-alert" class="full-board-bonus-alert" style="display:none;"></div>
@@ -3312,15 +3388,17 @@ function startNewManche() {
   const tiebreakPool = shuffleDeck([burn1, burn2, burn3, ...deck]);
 
   game.manche += 1;
-  game.phase = 'flop';
+  game.phase = 'dealing';
   game.currentBoard = 0;
   game.rebidRound = 0;
   game.excludedThisBoard = [];
   game.hands = hands;
   game.burns = [burn1, burn2, burn3];
+  game.burnsRevealed = 0;             // 0..3 : nombre de brûles révélées
+  game.pendingFlop = flop;            // tableau de 3 boards × 3 cartes
   game.pendingTurns = turns;
   game.pendingRivers = rivers;
-  game.communityCards = [flop[0].slice(), flop[1].slice(), flop[2].slice()];
+  game.communityCards = [[], [], []]; // vide jusqu'à la phase flop
   game.submissions = {};
   game.boardResults = [null, null, null];
   game.fullBoardWinner = null;
@@ -3331,50 +3409,87 @@ function startNewManche() {
 
   broadcastGameState();
   renderGame();
+
+  // Auto-progression : dealing → flop → turn → river → announcing
+  scheduleNextAutoPhase('flop', 4000);
 }
 
-function hostAdvancePhase() {
+// ===== Auto-progression =====
+// Chaque transition planifie la suivante via setTimeout. L'hôte n'a qu'à lancer la manche.
+
+function scheduleNextAutoPhase(targetPhase, delayMs) {
   if (!isHost()) return;
-  if (game.phase === 'flop') {
-    for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingTurns[b]);
+  const mancheRef = game ? game.manche : -1;
+  setTimeout(() => {
+    if (!game || !isHost()) return;
+    if (game.manche !== mancheRef) return; // manche annulée / changée entre-temps
+    autoTransition(targetPhase);
+  }, delayMs);
+}
+
+function autoTransition(targetPhase) {
+  if (!isHost() || !game) return;
+  if (targetPhase === 'flop') {
+    game.phase = 'flop';
+    game.burnsRevealed = 1;
+    for (let b = 0; b < 3; b++) game.communityCards[b] = (game.pendingFlop[b] || []).slice();
+    broadcastGameState(); renderGame();
+    scheduleNextAutoPhase('turn', 4000);
+  } else if (targetPhase === 'turn') {
     game.phase = 'turn';
-  } else if (game.phase === 'turn') {
-    for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingRivers[b]);
+    game.burnsRevealed = 2;
+    for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingTurns[b]);
+    broadcastGameState(); renderGame();
+    scheduleNextAutoPhase('river', 3500);
+  } else if (targetPhase === 'river') {
     game.phase = 'river';
-  } else if (game.phase === 'river') {
+    game.burnsRevealed = 3;
+    for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingRivers[b]);
+    broadcastGameState(); renderGame();
+    scheduleNextAutoPhase('announcing', 3500);
+  } else if (targetPhase === 'announcing') {
     game.phase = 'announcing';
     game.currentBoard = 0;
     game.rebidRound = 0;
     game.submissions = {};
     game.excludedThisBoard = [];
+    broadcastGameState(); renderGame();
     startTimerIfEnabled();
-  } else if (game.phase === 'board-reveal') {
-    if (game.currentBoard < 2) {
-      game.currentBoard += 1;
-      game.phase = 'announcing';
-      game.rebidRound = 0;
-      game.submissions = {};
-      game.excludedThisBoard = [];
-      startTimerIfEnabled();
-    } else {
-      // Tous les 3 boards joués : check splits pendants
-      const pendingIdx = game.boardResults.findIndex(br => br && br.isSplit && !br.tieBreakResolved);
-      if (pendingIdx >= 0) {
-        enterTiebreakAnnouncing(pendingIdx);
-        return;
-      } else {
-        finalizeManche();
-      }
-    }
-  } else if (game.phase === 'tiebreak-reveal') {
+  } else if (targetPhase === 'next-board-or-end') {
+    advanceAfterBoardReveal();
+  } else if (targetPhase === 'next-tiebreak-or-end') {
     advanceTiebreakOrFinalize();
-    return;
-  } else if (game.phase === 'manche-end') {
+  }
+}
+
+function advanceAfterBoardReveal() {
+  if (!isHost() || !game) return;
+  if (game.currentBoard < 2) {
+    game.currentBoard += 1;
+    game.phase = 'announcing';
+    game.rebidRound = 0;
+    game.submissions = {};
+    game.excludedThisBoard = [];
+    broadcastGameState(); renderGame();
+    startTimerIfEnabled();
+  } else {
+    const pendingIdx = game.boardResults.findIndex(br => br && br.isSplit && !br.tieBreakResolved);
+    if (pendingIdx >= 0) {
+      enterTiebreakAnnouncing(pendingIdx);
+    } else {
+      finalizeManche();
+      broadcastGameState(); renderGame();
+    }
+  }
+}
+
+function hostAdvancePhase() {
+  if (!isHost()) return;
+  // Seul "manche-end → manche suivante" est manuel ; tout le reste est auto-progressé
+  if (game.phase === 'manche-end') {
     startNewManche();
     return;
   }
-  broadcastGameState();
-  renderGame();
 }
 
 function finalizeManche() {
@@ -3462,6 +3577,7 @@ function enterTiebreakAnnouncing(idx) {
     game.phase = 'tiebreak-reveal';
     broadcastGameState();
     renderGame();
+    scheduleNextAutoPhase('next-tiebreak-or-end', 5000);
     return;
   }
   const newBoard = [
@@ -3613,6 +3729,9 @@ function resolveTiebreakReveal() {
   }
   broadcastGameState();
   renderGame();
+  if (game.phase === 'tiebreak-reveal') {
+    scheduleNextAutoPhase('next-tiebreak-or-end', 5500);
+  }
 }
 
 function advanceTiebreakOrFinalize() {
@@ -3739,6 +3858,7 @@ function resolveBoardReveal() {
     showToast(`Split détecté sur le Board ${boardIdx + 1} — tie-break à la fin de la manche`, false);
     broadcastGameState();
     renderGame();
+    scheduleNextAutoPhase('next-board-or-end', 6000);
   } else if (winner) {
     applyBoardScoring(winner, CAT_BY_ID[winner.category].multi);
     game.boardResults[boardIdx] = {
@@ -3751,6 +3871,7 @@ function resolveBoardReveal() {
     game.phase = 'board-reveal';
     broadcastGameState();
     renderGame();
+    scheduleNextAutoPhase('next-board-or-end', 5500);
   } else {
     // Bluffeurs : annonce active invalide → exclus définitivement du board (jamais de rebid)
     // Passifs (skip + timeout) : pas de réponse → restent éligibles pour rebid si la phase rouvre
@@ -3771,6 +3892,7 @@ function resolveBoardReveal() {
       showToast('Board abandonné — aucun gagnant possible', true);
       broadcastGameState();
       renderGame();
+      scheduleNextAutoPhase('next-board-or-end', 4500);
     } else {
       game.rebidRound += 1;
       game.submissions = {};
@@ -3959,9 +4081,10 @@ function renderGame() {
   const dealer = game.players[game.dealerIdx];
   const dealerLabel = dealer ? `Donneur : <strong>${escapeHTML(dealer.name)}</strong>` : '';
   let statusText = '';
-  if (phase === 'flop') statusText = `${dealerLabel} · Flop révélé`;
-  else if (phase === 'turn') statusText = `${dealerLabel} · Turn révélé`;
-  else if (phase === 'river') statusText = `${dealerLabel} · River révélée — place aux annonces`;
+  if (phase === 'dealing') statusText = `${dealerLabel} · Distribution des cartes...`;
+  else if (phase === 'flop') statusText = `${dealerLabel} · Flop`;
+  else if (phase === 'turn') statusText = `${dealerLabel} · Turn`;
+  else if (phase === 'river') statusText = `${dealerLabel} · River`;
   else if (phase === 'announcing') statusText = `${dealerLabel} · Board ${game.currentBoard + 1}${game.rebidRound > 0 ? ` (tour ${game.rebidRound + 1})` : ''}`;
   else if (phase === 'board-reveal') statusText = `${dealerLabel} · Résultat Board ${game.currentBoard + 1}`;
   else if (phase === 'tiebreak-announcing') {
@@ -4025,6 +4148,25 @@ function renderGame() {
     fbAlert.style.display = 'none';
   }
 
+  // Zone des cartes brûlées (visible dès qu'au moins une brûle a été révélée)
+  const burnedZone = document.getElementById('burned-zone');
+  if (game.burns && game.burnsRevealed > 0) {
+    burnedZone.style.display = 'block';
+    const bzCards = document.getElementById('burned-zone-cards');
+    let bzHTML = '';
+    for (let i = 0; i < game.burnsRevealed; i++) {
+      const bc = game.burns[i];
+      if (!bc) continue;
+      const animate = !seenCards.has(bc);
+      if (animate) seenCards.add(bc);
+      const delay = animate ? (animOrderIdx++) * 70 : 0;
+      bzHTML += renderCardHTML(bc, { animate, delay });
+    }
+    bzCards.innerHTML = bzHTML;
+  } else {
+    burnedZone.style.display = 'none';
+  }
+
   // Boards
   const boardsContainer = document.getElementById('game-boards-container');
   boardsContainer.innerHTML = '';
@@ -4063,12 +4205,54 @@ function renderGame() {
       }
     }
     cardsHTML += '</div>';
+    // Soumissions inline (joueurs autour du board) — visible pendant board-reveal et après tie-break
+    let submissionsHTML = '';
+    if (result && result.results) {
+      const splitterIds = result.isSplit && result.splitters ? new Set(result.splitters.map(s => s.peerId)) : null;
+      const sorted = result.results.slice().sort((a, b) => {
+        if (a.peerId === result.winnerPeerId) return -1;
+        if (b.peerId === result.winnerPeerId) return 1;
+        if (splitterIds) {
+          const aS = splitterIds.has(a.peerId), bS = splitterIds.has(b.peerId);
+          if (aS !== bS) return aS ? -1 : 1;
+        }
+        if (a.valid !== b.valid) return a.valid ? -1 : 1;
+        return 0;
+      });
+      submissionsHTML = '<div class="board-submissions">';
+      sorted.forEach(r => {
+        const player = game.players.find(p => p.peerId === r.peerId);
+        if (!player) return;
+        let cls = '';
+        let tag = '';
+        if (r.peerId === result.winnerPeerId) { cls = 'winner'; tag = '<span class="bs-tag winner">Gagnant</span>'; }
+        else if (splitterIds && splitterIds.has(r.peerId)) { cls = 'split'; tag = '<span class="bs-tag split">Split</span>'; }
+        else if (r.forfeit) { cls = 'excluded'; tag = '<span class="bs-tag excluded">FFT</span>'; }
+        else if (r.skip) { cls = 'excluded'; tag = '<span class="bs-tag excluded">Skip</span>'; }
+        else if (r.timeout) { cls = 'excluded'; tag = '<span class="bs-tag excluded">Absent</span>'; }
+        else if (r.excluded) { cls = 'excluded'; tag = '<span class="bs-tag excluded">HJ</span>'; }
+        else if (!r.valid) { cls = 'invalid'; tag = '<span class="bs-tag invalid">Bluff</span>'; }
+        const cardsRow = r.cards && r.cards.length === 2
+          ? `<div class="bs-cards">${r.cards.map(c => renderCardHTML(c)).join('')}</div>`
+          : '';
+        const announce = r.category && CAT_BY_ID[r.category] ? CAT_BY_ID[r.category].label : '—';
+        submissionsHTML += `<div class="board-submission ${cls}">
+          <div class="bs-name">${escapeHTML(player.name)}</div>
+          ${cardsRow}
+          <div class="bs-announce">${announce}</div>
+          ${tag}
+        </div>`;
+      });
+      submissionsHTML += '</div>';
+    }
+
     block.innerHTML = `
       <div class="game-board-header">
         <div class="game-board-title">Board ${i+1}${isCurrent ? '<span class="b-current">en cours</span>' : ''}</div>
         ${statusHTML}
       </div>
       ${cardsHTML}
+      ${submissionsHTML}
     `;
     boardsContainer.appendChild(block);
   }
@@ -4087,25 +4271,19 @@ function renderGame() {
 
   const myHand = (game.hands && game.hands[online.myPeerId]) || [];
 
-  if (phase === 'flop' || phase === 'turn' || phase === 'river') {
+  if (phase === 'dealing' || phase === 'flop' || phase === 'turn' || phase === 'river') {
     if (myHand.length > 0) {
       myHandZone.style.display = 'block';
       renderMyHand(false);
       let hint;
       if (meIsForfeit()) hint = 'Forfait — tu paies les boards manqués.';
-      else if (isHost()) hint = 'Clique sur "Suivant" pour révéler la prochaine carte.';
-      else hint = 'En attente de la suite par l\'hôte...';
+      else if (phase === 'dealing') hint = 'Distribution en cours...';
+      else if (phase === 'flop') hint = 'Flop révélé — turn arrive...';
+      else if (phase === 'turn') hint = 'Turn révélé — river arrive...';
+      else hint = 'River révélée — phase d\'annonce dans un instant...';
       document.getElementById('my-hand-hint').textContent = hint;
     }
-    if (isHost()) {
-      hostActions.style.display = 'block';
-      let btnLabel = '';
-      if (phase === 'flop') btnLabel = '→ Brûler + Turn';
-      else if (phase === 'turn') btnLabel = '→ Brûler + River';
-      else if (phase === 'river') btnLabel = '→ Passer aux annonces';
-      hostActions.innerHTML = `<button class="btn btn-validate" id="host-advance-btn">${btnLabel}</button>`;
-      document.getElementById('host-advance-btn').addEventListener('click', hostAdvancePhase);
-    }
+    // Plus de bouton hôte : auto-progression
   } else if (phase === 'announcing') {
     const meSpec = meIsSpectator();
     const meForfeit = meIsForfeit();
@@ -4159,14 +4337,8 @@ function renderGame() {
       renderMyHand(false);
       document.getElementById('my-hand-hint').textContent = '—';
     }
-    revealZone.style.display = 'block';
-    renderRevealList();
-    if (isHost()) {
-      hostActions.style.display = 'block';
-      const btnLabel = game.currentBoard < 2 ? `→ Board ${game.currentBoard + 2}` : '→ Fin de la manche';
-      hostActions.innerHTML = `<button class="btn btn-validate" id="host-advance-btn">${btnLabel}</button>`;
-      document.getElementById('host-advance-btn').addEventListener('click', hostAdvancePhase);
-    }
+    // Soumissions affichées directement dans chaque board (board-submissions inline)
+    // Plus de bouton : auto-progression vers board suivant ou fin
   } else if (phase === 'tiebreak-announcing') {
     const br = game.boardResults[game.currentTiebreakIdx];
     const meIsSplitter = br && br.splitters && br.splitters.some(s => s.peerId === online.myPeerId);
@@ -4216,14 +4388,7 @@ function renderGame() {
     }
     revealZone.style.display = 'block';
     renderTiebreakUI();
-    if (isHost()) {
-      hostActions.style.display = 'block';
-      const idx = game.currentTiebreakIdx;
-      const nextIdx = game.boardResults.findIndex((b, i) => i > idx && b && b.isSplit && !b.tieBreakResolved);
-      const btnLabel = nextIdx >= 0 ? '→ Tie-break suivant' : '→ Fin de manche';
-      hostActions.innerHTML = `<button class="btn btn-validate" id="host-advance-btn">${btnLabel}</button>`;
-      document.getElementById('host-advance-btn').addEventListener('click', hostAdvancePhase);
-    }
+    // Plus de bouton : auto-progression vers tiebreak suivant ou fin
   } else if (phase === 'manche-end') {
     mancheRecap.style.display = 'block';
     renderMancheRecap();
@@ -4343,11 +4508,13 @@ function renderMyHand(interactive) {
     myHandSortable = null;
   }
   container.innerHTML = '';
-  myHand.forEach(c => {
+  myHand.forEach((c, idx) => {
     const isSel = selectedCards.includes(c);
     const animate = !isSel && !seenCards.has(c);
     if (animate) seenCards.add(c);
-    const delay = animate ? (animOrderIdx++) * 70 : 0;
+    // Distribution 2 par 2 : cartes 0+1 ensemble, 2+3 ensemble, etc. (la dernière seule si impair)
+    const pairIdx = Math.floor(idx / 2);
+    const delay = animate ? pairIdx * 700 : 0;
     container.innerHTML += renderCardHTML(c, {
       selectable: interactive,
       selected: isSel,
