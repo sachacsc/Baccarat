@@ -1198,12 +1198,8 @@
     gap: 6px;
     margin-bottom: 10px;
   }
-  .announce-quick {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-bottom: 10px;
-  }
+  .announce-skip-row { margin-top: 10px; }
+  .announce-skip-row .announce-cat-btn { width: 100%; }
   .announce-cat-btn {
     background: var(--bg);
     border: 1.5px solid var(--border-strong);
@@ -1692,9 +1688,8 @@
               <div class="announce-panel" id="announce-panel" style="display:none;">
                 <div class="announce-title" id="announce-panel-title">Choisis ton annonce</div>
                 <div class="announce-cats" id="announce-cats"></div>
-                <div class="announce-quick" id="announce-quick"></div>
                 <button class="btn btn-validate" id="announce-confirm-btn" disabled style="opacity:0.5;">Confirmer ma main</button>
-                <div class="submit-status" id="submit-status"></div>
+                <div class="announce-skip-row" id="announce-skip-row"></div>
               </div>
 
               <div id="reveal-zone" style="display:none;">
@@ -3486,7 +3481,8 @@ function startNewManche() {
   renderGame();
 
   // Auto-progression : dealing → flop → turn → river → announcing
-  scheduleNextAutoPhase('flop', 4000);
+  // Dealing 5.5s (3 paires × 1500ms + anim + pause) pour laisser la tension monter
+  scheduleNextAutoPhase('flop', 5500);
 }
 
 // ===== Auto-progression =====
@@ -3509,18 +3505,21 @@ function autoTransition(targetPhase) {
     game.burnsRevealed = 1;
     for (let b = 0; b < 3; b++) game.communityCards[b] = (game.pendingFlop[b] || []).slice();
     broadcastGameState(); renderGame();
-    scheduleNextAutoPhase('turn', 4000);
+    // Flop : 9 cartes × 300ms cascade + 2.3s de pause = 5s
+    scheduleNextAutoPhase('turn', 5000);
   } else if (targetPhase === 'turn') {
     game.phase = 'turn';
     game.burnsRevealed = 2;
     for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingTurns[b]);
     broadcastGameState(); renderGame();
+    // Turn : 3 cartes × 300ms + 2.6s de pause = 3.5s
     scheduleNextAutoPhase('river', 3500);
   } else if (targetPhase === 'river') {
     game.phase = 'river';
     game.burnsRevealed = 3;
     for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingRivers[b]);
     broadcastGameState(); renderGame();
+    // River : idem
     scheduleNextAutoPhase('announcing', 3500);
   } else if (targetPhase === 'announcing') {
     game.phase = 'announcing';
@@ -4226,23 +4225,49 @@ function renderGame() {
   // Seats "autour de la table" (autres joueurs)
   renderSeats();
 
-  // Zone des cartes brûlées (visible dès qu'au moins une brûle a été révélée)
+  // Zone des cartes brûlées : visible dès qu'au moins une brûle a été posée,
+  // mais face-down pendant la manche — seulement révélées (face-up) à la fin de la manche
   const burnedZone = document.getElementById('burned-zone');
   if (game.burns && game.burnsRevealed > 0) {
     burnedZone.style.display = 'block';
     const bzCards = document.getElementById('burned-zone-cards');
+    const revealBurns = (game.phase === 'manche-end');
     let bzHTML = '';
     for (let i = 0; i < game.burnsRevealed; i++) {
       const bc = game.burns[i];
       if (!bc) continue;
-      const animate = !seenCards.has(bc);
-      if (animate) seenCards.add(bc);
-      const delay = animate ? (animOrderIdx++) * 70 : 0;
-      bzHTML += renderCardHTML(bc, { animate, delay });
+      if (revealBurns) {
+        const animate = !seenCards.has(bc);
+        if (animate) seenCards.add(bc);
+        const delay = animate ? i * 300 : 0;
+        bzHTML += renderCardHTML(bc, { animate, delay });
+      } else {
+        bzHTML += renderCardHTML(null, { faceDown: true });
+      }
     }
     bzCards.innerHTML = bzHTML;
+    document.querySelector('.burned-zone-title').textContent = revealBurns
+      ? 'Cartes brûlées (révélées)'
+      : `Cartes brûlées (${game.burnsRevealed})`;
   } else {
     burnedZone.style.display = 'none';
+  }
+
+  // Pré-calcul des délais d'animation pour les cartes communautaires
+  // Ordre across-boards (column-major) : board1 carte k, board2 carte k, board3 carte k, puis k+1 etc.
+  // Cela imite un vrai dealer qui pose une carte sur chaque board avant de revenir
+  const COMMUNITY_CASCADE_MS = 300;
+  const communityCardDelays = {};
+  let cascadeIdx = 0;
+  for (let k = 0; k < 5; k++) {
+    for (let i = 0; i < 3; i++) {
+      const cc = game.communityCards[i] && game.communityCards[i][k];
+      if (cc && !seenCards.has(cc)) {
+        communityCardDelays[`${i}-${k}`] = cascadeIdx * COMMUNITY_CASCADE_MS;
+        seenCards.add(cc);
+        cascadeIdx++;
+      }
+    }
   }
 
   // Boards
@@ -4274,10 +4299,12 @@ function renderGame() {
     for (let k = 0; k < 5; k++) {
       const cc = cards[k];
       if (cc) {
-        const animate = !seenCards.has(cc);
-        if (animate) seenCards.add(cc);
-        const delay = animate ? (animOrderIdx++) * 70 : 0;
-        cardsHTML += renderCardHTML(cc, { animate, delay });
+        const delayKey = `${i}-${k}`;
+        const hasDelay = communityCardDelays[delayKey] !== undefined;
+        cardsHTML += renderCardHTML(cc, {
+          animate: hasDelay,
+          delay: hasDelay ? communityCardDelays[delayKey] : 0,
+        });
       } else {
         cardsHTML += renderCardHTML(null, { placeholder: true });
       }
@@ -4383,11 +4410,11 @@ function renderGame() {
 
     announcePanel.style.display = 'block';
     const cats = document.getElementById('announce-cats');
-    const quick = document.getElementById('announce-quick');
+    const skipRow = document.getElementById('announce-skip-row');
     const confirmBtn = document.getElementById('announce-confirm-btn');
     function clearAnnounce() {
       cats.innerHTML = '';
-      quick.innerHTML = '';
+      skipRow.innerHTML = '';
       confirmBtn.style.display = 'none';
     }
     if (meSpec) {
@@ -4405,10 +4432,10 @@ function renderGame() {
     } else {
       document.getElementById('announce-panel-title').textContent = `Ton annonce pour le Board ${game.currentBoard + 1}`;
       renderAnnounceCats();
-      renderAnnounceQuick();
       renderConfirmBtn();
+      renderAnnounceSkip();
     }
-    renderSubmitStatus();
+    // Plus de renderSubmitStatus() : les seats au-dessus montrent qui a soumis
   } else if (phase === 'board-reveal') {
     if (myHand.length > 0) {
       myHandZone.style.display = 'block';
@@ -4435,10 +4462,10 @@ function renderGame() {
     }
 
     announcePanel.style.display = 'block';
-    const cats = document.getElementById('announce-cats');
-    const quick = document.getElementById('announce-quick');
-    const confirmBtn = document.getElementById('announce-confirm-btn');
-    function clearTbAnnounce() { cats.innerHTML = ''; quick.innerHTML = ''; confirmBtn.style.display = 'none'; }
+    const catsTb = document.getElementById('announce-cats');
+    const skipRowTb = document.getElementById('announce-skip-row');
+    const confirmBtnTb = document.getElementById('announce-confirm-btn');
+    function clearTbAnnounce() { catsTb.innerHTML = ''; skipRowTb.innerHTML = ''; confirmBtnTb.style.display = 'none'; }
     if (!meIsSplitter) {
       document.getElementById('announce-panel-title').textContent = 'Tu n\'es pas dans ce tie-break';
       clearTbAnnounce();
@@ -4451,10 +4478,10 @@ function renderGame() {
     } else {
       document.getElementById('announce-panel-title').textContent = `Ton annonce — Tie-break Board ${br.board + 1} (itération ${game.tbIteration})`;
       renderAnnounceCats();
-      renderAnnounceQuick();
       renderConfirmBtn();
+      renderAnnounceSkip();
     }
-    renderSubmitStatusTiebreak();
+    // Plus de renderSubmitStatusTiebreak() : les seats au-dessus montrent qui a soumis
 
     revealZone.style.display = 'block';
     renderTiebreakUI();
@@ -4591,8 +4618,9 @@ function renderMyHand(interactive) {
     const animate = !isSel && !seenCards.has(c);
     if (animate) seenCards.add(c);
     // Distribution 2 par 2 : cartes 0+1 ensemble, 2+3 ensemble, etc. (la dernière seule si impair)
+    // Délai entre paires volontairement lent pour faire monter la tension du deal
     const pairIdx = Math.floor(idx / 2);
-    const delay = animate ? pairIdx * 700 : 0;
+    const delay = animate ? pairIdx * 1500 : 0;
     container.innerHTML += renderCardHTML(c, {
       selectable: interactive,
       selected: isSel,
@@ -4633,50 +4661,44 @@ function renderMyHand(interactive) {
 }
 
 function renderAnnounceCats() {
-  // Grille principale : Paire → Royale (Hauteur et Skip sont dans .announce-quick)
+  // 10 catégories en grille 2 colonnes : Hauteur (auto) en haut à gauche, puis Paire → Royale
   const container = document.getElementById('announce-cats');
   container.innerHTML = '';
-  CATEGORIES.slice(1).forEach(c => {
+  CATEGORIES.forEach((c, idx) => {
     const sel = selectedCategory === c.id ? 'selected' : '';
     const multiTag = c.multi > 1 ? `<span class="multi-tag">×${c.multi}</span>` : '';
+    const label = (idx === 0) ? `${c.label} <span style="font-weight:400; opacity:0.65; font-size:11px;">(auto)</span>` : c.label;
     const btn = document.createElement('button');
     btn.className = `announce-cat-btn ${sel}`;
     btn.dataset.cat = c.id;
-    btn.innerHTML = `<span>${c.label}</span>${multiTag}`;
+    btn.innerHTML = `<span>${label}</span>${multiTag}`;
     btn.addEventListener('click', () => {
       selectedCategory = c.id;
       renderAnnounceCats();
-      renderAnnounceQuick();
+      renderAnnounceSkip();
       renderConfirmBtn();
     });
     container.appendChild(btn);
   });
 }
 
-function renderAnnounceQuick() {
-  // Boutons rapides : Hauteur (auto-pick) et Skip, juste au-dessus de Confirmer
-  const container = document.getElementById('announce-quick');
+function renderAnnounceSkip() {
+  // Skip en dessous du bouton Confirmer
+  const container = document.getElementById('announce-skip-row');
   container.innerHTML = '';
-  const items = [
-    { id: 'highcard', label: 'Hauteur (auto)', isSkip: false },
-    { id: 'skip',     label: 'Skip (ne pas jouer)', isSkip: true },
-  ];
-  items.forEach(c => {
-    const sel = selectedCategory === c.id ? 'selected' : '';
-    const isSkipCls = c.isSkip ? ' skip' : '';
-    const btn = document.createElement('button');
-    btn.className = `announce-cat-btn${isSkipCls} ${sel}`;
-    btn.dataset.cat = c.id;
-    btn.innerHTML = `<span>${c.label}</span>`;
-    btn.addEventListener('click', () => {
-      selectedCategory = c.id;
-      if (c.id === 'skip') selectedCards = [];
-      renderAnnounceCats();
-      renderAnnounceQuick();
-      renderConfirmBtn();
-    });
-    container.appendChild(btn);
+  const sel = selectedCategory === 'skip' ? 'selected' : '';
+  const btn = document.createElement('button');
+  btn.className = `announce-cat-btn skip ${sel}`;
+  btn.dataset.cat = 'skip';
+  btn.innerHTML = `<span>Skip (ne pas jouer ce board)</span>`;
+  btn.addEventListener('click', () => {
+    selectedCategory = 'skip';
+    selectedCards = [];
+    renderAnnounceCats();
+    renderAnnounceSkip();
+    renderConfirmBtn();
   });
+  container.appendChild(btn);
 }
 
 function renderConfirmBtn() {
