@@ -761,7 +761,7 @@
     position: relative;
     background: white;
     border: 1px solid #c8c8c8;
-    border-radius: 7px;
+    border-radius: 5px;
     width: 58px;
     height: 82px;
     user-select: none;
@@ -1017,14 +1017,7 @@
     margin-bottom: 6px;
   }
   .burned-zone-cards { display: flex; gap: 5px; }
-  .burned-zone-cards .card { width: 36px; height: 50px; box-shadow: none; opacity: 0.75; }
-  .burned-zone-cards .card .card-corner-tl { top: 3px; left: 3px; }
-  .burned-zone-cards .card .card-corner-br { bottom: 3px; right: 3px; }
-  .burned-zone-cards .card .card-corner .card-rank { font-size: 10px; }
-  .burned-zone-cards .card .card-corner .card-suit { font-size: 9px; }
-  .burned-zone-cards .card .card-center { font-size: 18px; }
-  .burned-zone-cards .card .card-center.face { font-size: 14px; }
-  .burned-zone-cards .card .card-center.face .face-suit { font-size: 9px; margin-top: 1px; }
+  .burned-zone-cards .card { opacity: 0.78; }  /* taille standard 58×82, juste légèrement assombri */
 
   /* ===== Seats "autour de la table" (autres joueurs) ===== */
   .poker-seats {
@@ -1067,9 +1060,14 @@
     max-width: 110px;
   }
   .seat-cards { display: flex; gap: 2px; }
-  .seat-cards .card { width: 30px; height: 44px; box-shadow: none; }
-  .seat-cards .card .card-corner-tl { top: 2px; left: 2px; }
-  .seat-cards .card .card-corner-br { bottom: 2px; right: 2px; }
+  .seat-cards .card {
+    width: 32px;
+    height: 46px;
+    box-shadow: none;
+    border-radius: 3px;
+  }
+  .seat-cards .card .card-corner-tl { top: 2px; left: 3px; }
+  .seat-cards .card .card-corner-br { bottom: 2px; right: 3px; }
   .seat-cards .card .card-corner .card-rank { font-size: 9px; }
   .seat-cards .card .card-corner .card-suit { font-size: 8px; }
   .seat-cards .card .card-center { font-size: 14px; }
@@ -1104,7 +1102,7 @@
   .board-table {
     display: flex;
     flex-wrap: wrap;
-    gap: 22px;
+    gap: 40px;
     margin-top: 10px;
     align-items: flex-start;
   }
@@ -1340,9 +1338,9 @@
     font-size: 13px;
   }
   .reveal-row-cards { display: flex; gap: 3px; flex-shrink: 0; }
-  .reveal-row-cards .card { width: 36px; height: 50px; box-shadow: none; }
-  .reveal-row-cards .card .card-corner-tl { top: 3px; left: 3px; }
-  .reveal-row-cards .card .card-corner-br { bottom: 3px; right: 3px; }
+  .reveal-row-cards .card { width: 36px; height: 50px; box-shadow: none; border-radius: 3px; }
+  .reveal-row-cards .card .card-corner-tl { top: 2px; left: 3px; }
+  .reveal-row-cards .card .card-corner-br { bottom: 2px; right: 3px; }
   .reveal-row-cards .card .card-corner .card-rank { font-size: 10px; }
   .reveal-row-cards .card .card-corner .card-suit { font-size: 9px; }
   .reveal-row-cards .card .card-center { font-size: 18px; }
@@ -4386,7 +4384,8 @@ function renderGame() {
       }
     }
     commCardsHTML += '</div>';
-    const communityCellHTML = `<div class="board-cell community"><div class="board-cell-label">Communauté</div>${commCardsHTML}</div>`;
+    const boardLabel = `Board ${i+1}${isCurrent ? ' <span style="color:var(--accent); font-weight:600; font-size:10px;">— en cours</span>' : ''}`;
+    const communityCellHTML = `<div class="board-cell community"><div class="board-cell-label">${boardLabel}</div>${commCardsHTML}</div>`;
 
     // Cellules Gagnant + Nuts (visibles uniquement quand result existe)
     let winnerCellHTML = '';
@@ -4419,10 +4418,6 @@ function renderGame() {
     }
 
     block.innerHTML = `
-      <div class="game-board-header">
-        <div class="game-board-title">Board ${i+1}${isCurrent ? '<span class="b-current">en cours</span>' : ''}</div>
-        ${statusHTML}
-      </div>
       <div class="board-table">
         ${communityCellHTML}
         ${winnerCellHTML}
@@ -4954,14 +4949,17 @@ function renderSeats() {
     let tagHTML = '';
 
     if (game.phase === 'announcing') {
-      // Pendant l'annonce : juste le statut, pas de cartes (les seats sont la ligne d'état)
       const submitted = !!(game.submissionsStatus && game.submissionsStatus[p.peerId]) || !!(game.submissions && game.submissions[p.peerId]);
       const eligible = p.connected && p.inManche && p.forfeitFromBoard === null && !(game.excludedThisBoard || []).includes(p.peerId);
       if (!p.connected) statusHTML = '<div class="seat-status">Déconnecté</div>';
       else if (!p.inManche) statusHTML = '<div class="seat-status">Spectateur</div>';
       else if (p.forfeitFromBoard !== null) statusHTML = '<div class="seat-status" style="color:var(--red);">Forfait</div>';
       else if (!eligible) statusHTML = '<div class="seat-status">Hors-jeu</div>';
-      else if (submitted) statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
+      else if (submitted) {
+        // Joueur qui a soumis : 2 cartes face-down (image dos) pour marquer son engagement
+        cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+        statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
+      }
       else statusHTML = '<div class="seat-status pending">⏳ En attente</div>';
     } else if (game.phase === 'board-reveal' || game.phase === 'manche-end') {
       const result = (displayBoardIdx !== null) ? game.boardResults[displayBoardIdx] : null;
@@ -4987,10 +4985,12 @@ function renderSeats() {
       const br = game.boardResults[game.currentTiebreakIdx];
       const isSplitter = br && br.splitters && br.splitters.some(s => s.peerId === p.peerId);
       const submitted = !!(game.tbSubmissionsStatus && game.tbSubmissionsStatus[p.peerId]) || !!(game.tbSubmissions && game.tbSubmissions[p.peerId]);
-      // Pas de cartes pendant l'annonce du tie-break — juste statut
       if (!isSplitter) statusHTML = '<div class="seat-status">Observateur</div>';
       else if ((game.tbExcluded || []).includes(p.peerId)) statusHTML = '<div class="seat-status" style="color:var(--red);">Bluff (TB)</div>';
-      else if (submitted) statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
+      else if (submitted) {
+        cardsHTML = `<div class="seat-cards">${renderCardHTML(null, { faceDown: true })}${renderCardHTML(null, { faceDown: true })}</div>`;
+        statusHTML = '<div class="seat-status submitted">✓ Soumis</div>';
+      }
       else statusHTML = '<div class="seat-status pending">⏳ En attente</div>';
     } else if (game.phase === 'tiebreak-reveal') {
       const br = game.boardResults[game.currentTiebreakIdx];
