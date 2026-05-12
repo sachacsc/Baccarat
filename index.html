@@ -601,6 +601,27 @@
     margin-top: 8px;
   }
 
+  /* ===== Resume banner (sauvegarde online auto) ===== */
+  .resume-banner {
+    background: rgba(179, 133, 0, 0.08);
+    border: 1.5px solid var(--accent);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .resume-banner-title { font-weight: 700; font-size: 14px; color: var(--text); }
+  .resume-banner-desc { font-size: 13px; color: var(--text-dim); line-height: 1.4; margin-top: 4px; }
+  .resume-banner-actions { display: flex; gap: 8px; }
+  .resume-banner-actions .btn { flex: 1; padding: 10px 14px; font-size: 13px; }
+  @media (min-width: 600px) {
+    .resume-banner { flex-direction: row; align-items: center; }
+    .resume-banner-body { flex: 1; }
+    .resume-banner-actions { flex: 0 0 auto; }
+  }
+
   /* ===== Landing (sélecteur de mode) ===== */
   .landing-card {
     background: var(--bg);
@@ -1620,6 +1641,16 @@
     </header>
 
     <section id="landing-section" style="display:none;">
+      <div class="resume-banner" id="resume-banner" style="display:none;">
+        <div class="resume-banner-body">
+          <div class="resume-banner-title">⚠ Partie en ligne interrompue</div>
+          <div class="resume-banner-desc" id="resume-banner-desc">—</div>
+        </div>
+        <div class="resume-banner-actions">
+          <button class="btn btn-blue" id="resume-online-btn">Reprendre</button>
+          <button class="btn btn-secondary" id="resume-discard-btn">Supprimer</button>
+        </div>
+      </div>
       <div class="landing-card">
         <div class="landing-title">Comment veux-tu jouer ?</div>
         <div class="landing-sub">Choisis un mode pour démarrer.</div>
@@ -2625,6 +2656,7 @@ function renderAll() {
     showSection('online-section', false);
     showSection('footer-actions', false);
     sub.textContent = 'Choisis ton mode de jeu';
+    refreshResumeBanner();
     return;
   }
 
@@ -2695,6 +2727,8 @@ function backToLanding() {
           try { conn.send({ type: 'kicked', reason: 'L\'hôte a quitté' }); } catch(e) {}
         }
       });
+      // Quitter volontairement = on n'aura pas besoin de reprendre cette partie
+      clearOnlineState();
     }
     stopTimer();
     game = null;
@@ -3151,6 +3185,146 @@ let online = {
 };
 
 const ONLINE_PEER_PREFIX = 'baccarat-app-';
+
+// ===== Sauvegarde auto online (côté hôte) =====
+// L'hôte sérialise tout l'état de la partie dans localStorage à chaque broadcastGameState.
+// Si l'onglet/navigateur crashe, on peut reprendre la partie au reload avec les comptes intacts.
+// Les guests se reconnectent par nom (mêmes pseudo) → la migration peerId existante refait le reste.
+const ONLINE_RESUME_KEY = 'baccarat-online-resume';
+const ONLINE_RESUME_TTL_MS = 7 * 24 * 3600 * 1000;  // on garde la sauvegarde 7 jours max
+
+function saveOnlineState() {
+  if (!isHost() || !game) return;
+  try {
+    const payload = {
+      ts: Date.now(),
+      roomCode: online.roomCode,
+      myName: online.myName,
+      game,
+    };
+    localStorage.setItem(ONLINE_RESUME_KEY, JSON.stringify(payload));
+  } catch(e) {}
+}
+function loadOnlineState() {
+  try {
+    const raw = localStorage.getItem(ONLINE_RESUME_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !d.game || !d.roomCode || !d.myName) return null;
+    if (Date.now() - (d.ts || 0) > ONLINE_RESUME_TTL_MS) {
+      try { localStorage.removeItem(ONLINE_RESUME_KEY); } catch(e) {}
+      return null;
+    }
+    return d;
+  } catch(e) { return null; }
+}
+function clearOnlineState() {
+  try { localStorage.removeItem(ONLINE_RESUME_KEY); } catch(e) {}
+}
+
+function refreshResumeBanner() {
+  const banner = document.getElementById('resume-banner');
+  const desc = document.getElementById('resume-banner-desc');
+  if (!banner) return;
+  const saved = loadOnlineState();
+  if (!saved) { banner.style.display = 'none'; return; }
+  const when = new Date(saved.ts || Date.now());
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${pad(when.getDate())}/${pad(when.getMonth()+1)} à ${pad(when.getHours())}:${pad(when.getMinutes())}`;
+  const numPlayers = saved.game && saved.game.players ? saved.game.players.length : 0;
+  const manche = saved.game ? saved.game.manche : '?';
+  desc.innerHTML = `Code <strong>${escapeHTML(saved.roomCode)}</strong> · ${numPlayers} joueurs · manche ${manche} · sauvegardé le ${dateStr}.<br>Reprends-la côté hôte ; les autres rejoignent avec le même code et leur pseudo.`;
+  banner.style.display = '';
+}
+
+function onlineHostResume() {
+  const saved = loadOnlineState();
+  if (!saved) { showToast('Aucune sauvegarde trouvée', true); return; }
+  if (typeof Peer === 'undefined') { showToast('PeerJS non chargé', true); return; }
+
+  // Restaure les variables online de base
+  online.role = 'host';
+  online.roomCode = saved.roomCode;
+  online.myName = saved.myName;
+
+  // Restaure le game et marque tout le monde déconnecté (les peers WebRTC sont morts)
+  game = saved.game;
+  if (game && Array.isArray(game.players)) {
+    game.players.forEach(p => { p.connected = false; });
+  }
+  // Réinitialise les états runtime non rebroadcastables
+  online.guestConns = {};
+  seenCards.clear();
+  localFlippedCards.clear();
+  myHandOrder = null;
+
+  state.mode = 'online';
+
+  try {
+    online.peer = new Peer(roomCodeToPeerId(online.roomCode), PEER_OPTIONS);
+  } catch (e) {
+    showToast('Impossible d\'initialiser PeerJS', true);
+    onlineCleanup();
+    online.status = 'entry';
+    renderAll();
+    return;
+  }
+
+  let opened = false;
+  const t = setTimeout(() => {
+    if (opened) return;
+    showToast('Serveur PeerJS injoignable — réessaie', true);
+    try { online.peer.destroy(); } catch(e) {}
+    onlineCleanup();
+    online.status = 'entry';
+    renderAll();
+  }, CONNECT_TIMEOUT_MS);
+
+  online.peer.on('open', (id) => {
+    opened = true;
+    clearTimeout(t);
+    // L'ID hôte est dérivé du roomCode → stable entre sessions, donc égal à l'ancien
+    online.myPeerId = id;
+    // Marque le slot hôte comme connecté + migre si jamais le peerId a glissé
+    const hostP = game.players.find(p => p.isHost);
+    if (hostP) {
+      if (hostP.peerId !== id) {
+        const old = hostP.peerId;
+        hostP.peerId = id;
+        if (game.hands && game.hands[old]) { game.hands[id] = game.hands[old]; delete game.hands[old]; }
+        if (game.submissions && game.submissions[old]) { game.submissions[id] = game.submissions[old]; delete game.submissions[old]; }
+        if (game.tbSubmissions && game.tbSubmissions[old]) { game.tbSubmissions[id] = game.tbSubmissions[old]; delete game.tbSubmissions[old]; }
+        if (game.publicHands && game.publicHands[old]) { game.publicHands[id] = game.publicHands[old]; delete game.publicHands[old]; }
+        if (game.mancheStartScores && game.mancheStartScores[old] !== undefined) { game.mancheStartScores[id] = game.mancheStartScores[old]; delete game.mancheStartScores[old]; }
+      }
+      hostP.connected = true;
+    }
+    online.status = 'in-game';
+    showSection('landing-section', false);
+    showSection('online-section', true);
+    showToast('Partie reprise — les joueurs peuvent rejoindre avec le code');
+    broadcastGameState();
+  });
+
+  online.peer.on('connection', (conn) => {
+    conn.on('data', (data) => handleHostMessage(conn, data));
+    conn.on('close', () => handleGuestDisconnect(conn.peer));
+    conn.on('error', (err) => console.error('Conn error', err));
+  });
+
+  online.peer.on('error', (err) => {
+    console.error('Peer error on resume', err);
+    if (err.type === 'unavailable-id') {
+      showToast('Code déjà utilisé ailleurs — impossible de reprendre', true);
+    } else {
+      showToast('Erreur PeerJS: ' + err.type, true);
+    }
+    try { online.peer.destroy(); } catch(e) {}
+    onlineCleanup();
+    online.status = 'entry';
+    renderAll();
+  });
+}
 
 // Configuration ICE : STUN multiples + Metered TURN (free tier 50 GB/mois) + PeerJS TURN en backup.
 // Les credentials Metered sont publics dans ce fichier (limite acceptable au volume utilisé).
@@ -3712,6 +3886,17 @@ function handleHostMessage(conn, msg) {
         if (game.mancheStartScores && game.mancheStartScores[oldPeerId] !== undefined) {
           game.mancheStartScores[conn.peer] = game.mancheStartScores[oldPeerId];
           delete game.mancheStartScores[oldPeerId];
+        }
+        if (game.publicHands && game.publicHands[oldPeerId]) {
+          game.publicHands[conn.peer] = game.publicHands[oldPeerId];
+          delete game.publicHands[oldPeerId];
+        }
+        if (game.tbSubmissions && game.tbSubmissions[oldPeerId]) {
+          game.tbSubmissions[conn.peer] = game.tbSubmissions[oldPeerId];
+          delete game.tbSubmissions[oldPeerId];
+        }
+        if (game.tbExcluded) {
+          game.tbExcluded = game.tbExcluded.map(pid => pid === oldPeerId ? conn.peer : pid);
         }
         showToast(`${existing.name} s'est reconnecté`);
         broadcastGameState();
@@ -4843,6 +5028,8 @@ function broadcastGameState() {
       try { conn.send(snap); } catch(e) { console.error('broadcast game-state fail', e); }
     }
   }
+  // Persiste l'état pour pouvoir reprendre après crash (cf. ONLINE_RESUME_KEY)
+  saveOnlineState();
   // Toujours rendre côté hôte (renderOnline si bascule lobby→in-game, sinon renderGame direct)
   if (online.status !== 'in-game') {
     online.status = 'in-game';
@@ -6055,6 +6242,12 @@ load();
 document.getElementById('mode-counter-btn').addEventListener('click', () => setMode('counter'));
 document.getElementById('mode-online-btn').addEventListener('click', () => setMode('online'));
 document.getElementById('change-mode-btn').addEventListener('click', backToLanding);
+document.getElementById('resume-online-btn').addEventListener('click', onlineHostResume);
+document.getElementById('resume-discard-btn').addEventListener('click', () => {
+  if (!confirm('Supprimer la sauvegarde de la partie ? Les comptes seront perdus.')) return;
+  clearOnlineState();
+  refreshResumeBanner();
+});
 
 // Online mode
 document.getElementById('online-create-btn').addEventListener('click', onlineCreateStart);
