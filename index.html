@@ -380,6 +380,30 @@
     align-items: center;
     gap: 8px;
   }
+
+  /* Counter — zone tie-break (multi-winners → résolution) */
+  .counter-tiebreak-card {
+    background: rgba(179,133,0,0.06);
+    border: 1.5px solid var(--accent);
+    border-radius: 12px;
+    padding: 14px;
+    margin-top: 12px;
+  }
+  .counter-tiebreak-title {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .counter-tiebreak-board {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 10px;
+  }
+  .board-label .status.split { color: var(--accent); font-weight: 700; }
+  .winner-chip.selected[data-winner] ~ .winner-chip.selected[data-winner] { /* placeholder */ }
   .full-board-alert .icon { font-size: 18px; }
 
   .history-item {
@@ -1517,12 +1541,54 @@
   .mobile-stats-toggle { display: inline-flex; }
   .game-sidebar { display: none; }
   @media (min-width: 900px) {
-    .container { max-width: 1100px; }
+    .container { max-width: min(96vw, 1500px); }
     .game-with-sidebar { grid-template-columns: 1fr; }
-    /* Toujours masqué : le sidebar n'existe plus visuellement */
     .game-sidebar { display: none; }
-    /* Le bouton "Soldes & historique" reste visible sur desktop pour ouvrir le modal */
     .mobile-stats-toggle { display: inline-flex; }
+  }
+  /* Desktop large : scale les cartes pour profiter de l'espace */
+  @media (min-width: 1200px) {
+    .card { width: 80px; height: 112px; border-radius: 6px; }
+    .hand-slot { width: 80px; height: 112px; }
+    .card .card-corner-tl { top: 7px; left: 8px; }
+    .card .card-corner-br { bottom: 7px; right: 8px; }
+    .card .card-corner .card-rank { font-size: 20px; }
+    .card .card-corner .card-suit { font-size: 18px; }
+    .card .card-center { font-size: 46px; }
+    .card .card-center.face { font-size: 38px; }
+    .card .card-center.face .face-suit { font-size: 20px; }
+    .seat-cards .card { width: 48px; height: 68px; border-radius: 4px; }
+    .seat-cards .card .card-corner-tl { top: 4px; left: 5px; }
+    .seat-cards .card .card-corner-br { bottom: 4px; right: 5px; }
+    .seat-cards .card .card-corner .card-rank { font-size: 13px; }
+    .seat-cards .card .card-corner .card-suit { font-size: 12px; }
+    .seat-cards .card .card-center { font-size: 21px; }
+    .seat-cards .card .card-center.face { font-size: 18px; }
+    .seat-cards .card .card-center.face .face-suit { font-size: 12px; }
+    .player-seat { min-width: 120px; max-width: 160px; }
+    .board-cell.community { min-width: 220px; }
+    .board-cell.winner-cell, .board-cell.nuts-cell { min-width: 160px; }
+    .board-table { gap: 50px; }
+  }
+  /* Ultra-wide : encore plus grand */
+  @media (min-width: 1600px) {
+    .card { width: 92px; height: 130px; border-radius: 7px; }
+    .hand-slot { width: 92px; height: 130px; }
+    .card .card-corner-tl { top: 8px; left: 9px; }
+    .card .card-corner-br { bottom: 8px; right: 9px; }
+    .card .card-corner .card-rank { font-size: 23px; }
+    .card .card-corner .card-suit { font-size: 21px; }
+    .card .card-center { font-size: 54px; }
+    .card .card-center.face { font-size: 44px; }
+    .card .card-center.face .face-suit { font-size: 23px; }
+    .seat-cards .card { width: 54px; height: 76px; }
+    .seat-cards .card .card-corner .card-rank { font-size: 15px; }
+    .seat-cards .card .card-corner .card-suit { font-size: 13px; }
+    .seat-cards .card .card-center { font-size: 24px; }
+    .seat-cards .card .card-center.face { font-size: 20px; }
+    .player-seat { min-width: 135px; max-width: 175px; }
+    .board-cell.community { min-width: 250px; }
+    .board-cell.winner-cell, .board-cell.nuts-cell { min-width: 180px; }
   }
 </style>
 </head>
@@ -1604,6 +1670,7 @@
       <div class="section-title">Nouvelle manche</div>
       <div class="manche-card" id="manche-card"></div>
       <div id="full-board-zone"></div>
+      <div id="counter-tiebreak-zone" style="display:none;"></div>
       <button class="btn btn-validate" id="validate-manche-btn">Valider la manche</button>
       <div class="actions-row">
         <button class="btn btn-secondary" id="reset-manche-btn">Effacer</button>
@@ -1894,6 +1961,13 @@ function load() {
       if (typeof state.dealerIdx !== 'number') state.dealerIdx = 0;
       state.players.forEach(p => { if (typeof p.active !== 'boolean') p.active = true; });
       state.history.forEach(h => { if (typeof h.linePrice !== 'number') h.linePrice = state.linePrice; });
+      // Migration : ancien shape winnerId (string) → winnerIds (array) pour supporter le split
+      state.currentManche.forEach((b, i) => {
+        if (b && b.winnerId && !b.winnerIds) {
+          b.winnerIds = [b.winnerId];
+          delete b.winnerId;
+        }
+      });
       // Compat : partie sauvegardée avant l'ajout du sélecteur de mode = mode compteur
       if (state.configured && !state.mode) state.mode = 'counter';
       // Mode online non restaurable au reload (la connexion WebRTC est perdue) → retour landing
@@ -2129,12 +2203,20 @@ function renderManche() {
   for (let i = 0; i < 3; i++) {
     const block = document.createElement('div');
     block.className = 'board-block';
-    const current = state.currentManche[i] || { winnerId: null, multi: 1 };
-    const isDone = !!current.winnerId;
+    const current = state.currentManche[i] || { winnerIds: [], multi: 1 };
+    const winnerIds = current.winnerIds || [];
+    const isSplit = winnerIds.length > 1;
+    const isDone = winnerIds.length >= 1;
 
-    let winnersHTML = '<div class="sub-label">Gagnant</div><div class="winner-grid">';
+    let statusLabel;
+    if (isSplit) statusLabel = `⚡ Split (${winnerIds.length})`;
+    else if (isDone) statusLabel = '✓ Choisi';
+    else statusLabel = 'À choisir';
+    const statusCls = isSplit ? 'split' : (isDone ? 'done' : '');
+
+    let winnersHTML = '<div class="sub-label">Gagnant <span style="font-weight:400; color:var(--text-faint); text-transform:none; letter-spacing:0;">(plusieurs = split)</span></div><div class="winner-grid">';
     actives.forEach(p => {
-      const sel = current.winnerId === p.id ? 'selected' : '';
+      const sel = winnerIds.includes(p.id) ? 'selected' : '';
       winnersHTML += `<div class="winner-chip ${sel}" data-board="${i}" data-winner="${p.id}">${escapeHTML(p.name)}</div>`;
     });
     winnersHTML += '</div>';
@@ -2148,13 +2230,25 @@ function renderManche() {
     });
     multiHTML += '</div>';
 
+    // Si tie-break déjà résolu sur ce board, afficher la résolution
+    let tbHTML = '';
+    if (current.tiebreak) {
+      const wp = actives.find(p => p.id === current.tiebreak.winnerId);
+      const mopt = MULTI_OPTIONS.find(m => m.value === current.tiebreak.multi);
+      tbHTML = `<div class="sub-label" style="color:var(--accent);">Tie-break résolu</div>
+        <div style="background:rgba(179,133,0,0.08); border:1.5px solid var(--accent); border-radius:8px; padding:8px 12px; font-size:13px;">
+          🏆 ${escapeHTML(wp ? wp.name : '?')} · ${mopt ? mopt.label : '×1'} ${mopt && mopt.value > 1 ? '(' + mopt.sub + ')' : ''}
+        </div>`;
+    }
+
     block.innerHTML = `
       <div class="board-label">
         <span>Board ${i+1}</span>
-        <span class="status ${isDone ? 'done' : ''}">${isDone ? '✓ Choisi' : 'À choisir'}</span>
+        <span class="status ${statusCls}">${statusLabel}</span>
       </div>
       ${winnersHTML}
       ${multiHTML}
+      ${tbHTML}
     `;
     card.appendChild(block);
   }
@@ -2163,32 +2257,136 @@ function renderManche() {
     chip.addEventListener('click', () => {
       const b = parseInt(chip.dataset.board);
       const w = chip.dataset.winner;
-      if (!state.currentManche[b]) state.currentManche[b] = { winnerId: null, multi: 1 };
-      state.currentManche[b].winnerId = state.currentManche[b].winnerId === w ? null : w;
+      if (!state.currentManche[b]) state.currentManche[b] = { winnerIds: [], multi: 1 };
+      if (!state.currentManche[b].winnerIds) state.currentManche[b].winnerIds = [];
+      const wi = state.currentManche[b].winnerIds;
+      const idx = wi.indexOf(w);
+      if (idx >= 0) wi.splice(idx, 1);
+      else wi.push(w);
+      // Si l'utilisateur change la sélection après un tie-break, on annule la résolution
+      delete state.currentManche[b].tiebreak;
       save();
       renderManche();
       renderFullBoardAlert();
+      renderTiebreakZone();
+      updateValidateButtonLabel();
     });
   });
   card.querySelectorAll('.multi-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const b = parseInt(chip.dataset.board);
       const m = parseInt(chip.dataset.multi);
-      if (!state.currentManche[b]) state.currentManche[b] = { winnerId: null, multi: 1 };
+      if (!state.currentManche[b]) state.currentManche[b] = { winnerIds: [], multi: 1 };
       state.currentManche[b].multi = m;
       save();
       renderManche();
+      renderTiebreakZone();
     });
   });
+}
+
+function hasUnresolvedSplit() {
+  return state.currentManche.some(b => b && b.winnerIds && b.winnerIds.length > 1 && !b.tiebreak);
+}
+function hasAnySplit() {
+  return state.currentManche.some(b => b && b.winnerIds && b.winnerIds.length > 1);
+}
+
+function renderTiebreakZone() {
+  const zone = document.getElementById('full-board-zone');  // on partage la zone d'alerte
+  // On le redessine en plus de renderFullBoardAlert (qui peut écraser)
+  // Mieux : on a un container dédié. Pour simplifier, on append à manche-card.
+  let tbContainer = document.getElementById('counter-tiebreak-zone');
+  if (!tbContainer) return;
+  tbContainer.innerHTML = '';
+  const splits = state.currentManche.map((b, i) => ({ b, i })).filter(x => x.b && x.b.winnerIds && x.b.winnerIds.length > 1);
+  if (splits.length === 0) {
+    tbContainer.style.display = 'none';
+    return;
+  }
+  tbContainer.style.display = 'block';
+  let html = '<div class="counter-tiebreak-card"><div class="counter-tiebreak-title">⚡ Tie-break à résoudre</div>';
+  html += '<div style="font-size:13px; color:var(--text-dim); margin-bottom:12px;">Pour chaque board en split, choisis le gagnant final + le multiplicateur de sa main.</div>';
+  splits.forEach(({ b, i }) => {
+    const actives = activePlayers();
+    const splittersHTML = b.winnerIds.map(wid => {
+      const p = actives.find(pp => pp.id === wid);
+      if (!p) return '';
+      const sel = b.tiebreak && b.tiebreak.winnerId === wid ? 'selected' : '';
+      return `<div class="winner-chip ${sel}" data-tbboard="${i}" data-tbwinner="${wid}">${escapeHTML(p.name)}</div>`;
+    }).join('');
+    let mHTML = '';
+    MULTI_OPTIONS.forEach(m => {
+      const sel = b.tiebreak && b.tiebreak.multi === m.value ? 'selected' : '';
+      mHTML += `<div class="multi-chip ${sel}" data-tbboard="${i}" data-tbmulti="${m.value}">${m.label}<span class="multi-x">${m.sub}</span></div>`;
+    });
+    html += `
+      <div class="counter-tiebreak-board">
+        <div class="board-label" style="margin-bottom:8px;"><span>Board ${i+1} · ${b.winnerIds.length} splitters</span></div>
+        <div class="sub-label" style="margin-top:0;">Gagnant final</div>
+        <div class="winner-grid">${splittersHTML}</div>
+        <div class="sub-label">Combinaison finale</div>
+        <div class="multi-grid">${mHTML}</div>
+      </div>
+    `;
+  });
+  html += '</div>';
+  tbContainer.innerHTML = html;
+
+  tbContainer.querySelectorAll('[data-tbwinner]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const i = parseInt(chip.dataset.tbboard);
+      const w = chip.dataset.tbwinner;
+      if (!state.currentManche[i].tiebreak) state.currentManche[i].tiebreak = { winnerId: null, multi: state.currentManche[i].multi };
+      state.currentManche[i].tiebreak.winnerId = state.currentManche[i].tiebreak.winnerId === w ? null : w;
+      save();
+      renderManche();
+      renderTiebreakZone();
+      updateValidateButtonLabel();
+    });
+  });
+  tbContainer.querySelectorAll('[data-tbmulti]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const i = parseInt(chip.dataset.tbboard);
+      const m = parseInt(chip.dataset.tbmulti);
+      if (!state.currentManche[i].tiebreak) state.currentManche[i].tiebreak = { winnerId: null, multi: m };
+      else state.currentManche[i].tiebreak.multi = m;
+      save();
+      renderTiebreakZone();
+      updateValidateButtonLabel();
+    });
+  });
+}
+
+function updateValidateButtonLabel() {
+  const btn = document.getElementById('validate-manche-btn');
+  if (!btn) return;
+  if (hasUnresolvedSplit()) {
+    btn.textContent = '⚡ Résous les tie-breaks d\'abord';
+    btn.style.opacity = '0.5';
+    btn.disabled = true;
+  } else if (hasAnySplit()) {
+    btn.textContent = 'Valider la manche (avec tie-break)';
+    btn.style.opacity = '1';
+    btn.disabled = false;
+  } else {
+    btn.textContent = 'Valider la manche';
+    btn.style.opacity = '1';
+    btn.disabled = false;
+  }
 }
 
 function detectFullBoard() {
   const m = state.currentManche;
   if (!m[0] || !m[1] || !m[2]) return null;
-  if (!m[0].winnerId || !m[1].winnerId || !m[2].winnerId) return null;
-  if (m[0].winnerId === m[1].winnerId && m[1].winnerId === m[2].winnerId) {
-    return m[0].winnerId;
-  }
+  const getWinner = (b) => {
+    if (!b.winnerIds || b.winnerIds.length === 0) return null;
+    if (b.winnerIds.length === 1) return b.winnerIds[0];
+    return b.tiebreak ? b.tiebreak.winnerId : null;  // split non résolu
+  };
+  const w0 = getWinner(m[0]), w1 = getWinner(m[1]), w2 = getWinner(m[2]);
+  if (!w0 || !w1 || !w2) return null;
+  if (w0 === w1 && w1 === w2) return w0;
   return null;
 }
 
@@ -2225,13 +2423,27 @@ function renderHistory() {
 
     let lines = '';
     m.boards.forEach((b, i) => {
-      const player = state.players.find(p => p.id === b.winnerId);
+      // Compat ancien format
+      const winnerIds = b.winnerIds || (b.winnerId ? [b.winnerId] : []);
+      const tiebreak = b.tiebreak || null;
+      const isSplit = winnerIds.length > 1;
+      const finalWinner = tiebreak ? tiebreak.winnerId : winnerIds[0];
+      const finalMulti = tiebreak ? tiebreak.multi : b.multi;
+      const player = state.players.find(p => p.id === finalWinner);
       const name = player ? player.name : '?';
-      const multiTag = b.multi > 1 ? `<span class="multi-tag">×${b.multi}</span>` : '';
-      const numLosers = (m.numActive || state.players.length) - 1;
-      const gain = price * b.multi * numLosers;
+      const multiTag = finalMulti > 1 ? `<span class="multi-tag">×${finalMulti}</span>` : '';
+      const splitTag = isSplit ? ' <span style="background:var(--accent); color:white; font-size:9px; padding:1px 5px; border-radius:5px; font-weight:700;">SPLIT</span>' : '';
+      const numTotal = (m.numActive || state.players.length);
+      let gain;
+      if (isSplit) {
+        const splittersExcl = winnerIds.filter(id => id !== finalWinner).length;
+        const nonSplitters = numTotal - winnerIds.length;
+        gain = price * finalMulti * splittersExcl + price * 1 * nonSplitters;
+      } else {
+        gain = price * b.multi * (numTotal - 1);
+      }
       lines += `<div class="history-line">
-        <span>B${i+1} · <span class="winner-name">${escapeHTML(name)}</span>${multiTag}</span>
+        <span>B${i+1} · <span class="winner-name">${escapeHTML(name)}</span>${multiTag}${splitTag}</span>
         <span class="gain">+${gain.toFixed(2)}€</span>
       </div>`;
     });
@@ -2309,6 +2521,8 @@ function renderAll() {
     renderScoreboard();
     renderManche();
     renderFullBoardAlert();
+    renderTiebreakZone();
+    updateValidateButtonLabel();
     renderHistory();
   } else {
     showSection('setup-section', true);
@@ -2383,9 +2597,15 @@ function startGame() {
 }
 
 function validateManche() {
+  // Validation : chaque board doit avoir au moins 1 winner, et les splits doivent être résolus
   for (let i = 0; i < 3; i++) {
-    if (!state.currentManche[i] || !state.currentManche[i].winnerId) {
-      showToast(`Board ${i+1} : choisissez un gagnant`, true);
+    const cm = state.currentManche[i];
+    if (!cm || !cm.winnerIds || cm.winnerIds.length === 0) {
+      showToast(`Board ${i+1} : choisis au moins un gagnant`, true);
+      return;
+    }
+    if (cm.winnerIds.length > 1 && (!cm.tiebreak || !cm.tiebreak.winnerId)) {
+      showToast(`Board ${i+1} : résous le tie-break avant de valider`, true);
       return;
     }
   }
@@ -2399,14 +2619,38 @@ function validateManche() {
   const price = state.linePrice;
 
   state.currentManche.forEach(b => {
-    const payment = price * b.multi;
-    actives.forEach(p => {
-      if (p.id === b.winnerId) {
-        state.scores[p.id] += payment * (numActive - 1);
-      } else {
-        state.scores[p.id] -= payment;
-      }
-    });
+    const isSplit = b.winnerIds.length > 1;
+    if (isSplit) {
+      // Split résolu en tie-break : autres splitters paient au multi de la TB, non-splitters au base
+      const finalWinner = b.tiebreak.winnerId;
+      const finalMulti = b.tiebreak.multi;
+      const splitterSet = new Set(b.winnerIds);
+      const paymentSplit = price * finalMulti;
+      const paymentBase = price * 1;
+      let winnerGain = 0;
+      actives.forEach(p => {
+        if (p.id === finalWinner) return;
+        if (splitterSet.has(p.id)) {
+          state.scores[p.id] -= paymentSplit;
+          winnerGain += paymentSplit;
+        } else {
+          state.scores[p.id] -= paymentBase;
+          winnerGain += paymentBase;
+        }
+      });
+      state.scores[finalWinner] += winnerGain;
+    } else {
+      // Board normal
+      const winnerId = b.winnerIds[0];
+      const payment = price * b.multi;
+      actives.forEach(p => {
+        if (p.id === winnerId) {
+          state.scores[p.id] += payment * (numActive - 1);
+        } else {
+          state.scores[p.id] -= payment;
+        }
+      });
+    }
   });
 
   const fullWinnerId = detectFullBoard();
@@ -2428,7 +2672,11 @@ function validateManche() {
     numActive: numActive,
     participantIds: actives.map(p => p.id),
     linePrice: price,
-    boards: state.currentManche.map(b => ({ winnerId: b.winnerId, multi: b.multi })),
+    boards: state.currentManche.map(b => ({
+      winnerIds: (b.winnerIds || []).slice(),
+      multi: b.multi,
+      tiebreak: b.tiebreak ? { winnerId: b.tiebreak.winnerId, multi: b.tiebreak.multi } : null,
+    })),
     fullBoard: fullBoardPayload,
   });
 
@@ -2462,14 +2710,40 @@ function undoLast() {
   const price = last.linePrice || state.linePrice;
 
   last.boards.forEach(b => {
-    const payment = price * b.multi;
-    participantIds.forEach(pid => {
-      if (pid === b.winnerId) {
-        state.scores[pid] -= payment * (numActive - 1);
-      } else {
-        state.scores[pid] += payment;
-      }
-    });
+    // Compat ancien format : winnerId scalaire → winnerIds[0]
+    const winnerIds = b.winnerIds || (b.winnerId ? [b.winnerId] : []);
+    const tiebreak = b.tiebreak || null;
+    const isSplit = winnerIds.length > 1;
+    if (isSplit && tiebreak) {
+      // Reverse split scoring
+      const finalWinner = tiebreak.winnerId;
+      const finalMulti = tiebreak.multi;
+      const splitterSet = new Set(winnerIds);
+      const paymentSplit = price * finalMulti;
+      const paymentBase = price * 1;
+      let winnerLoss = 0;
+      participantIds.forEach(pid => {
+        if (pid === finalWinner) return;
+        if (splitterSet.has(pid)) {
+          state.scores[pid] += paymentSplit;
+          winnerLoss += paymentSplit;
+        } else {
+          state.scores[pid] += paymentBase;
+          winnerLoss += paymentBase;
+        }
+      });
+      state.scores[finalWinner] -= winnerLoss;
+    } else {
+      const winnerId = winnerIds[0] || b.winnerId;
+      const payment = price * b.multi;
+      participantIds.forEach(pid => {
+        if (pid === winnerId) {
+          state.scores[pid] -= payment * (numActive - 1);
+        } else {
+          state.scores[pid] += payment;
+        }
+      });
+    }
   });
   if (last.fullBoard) {
     const bonus = price;
@@ -3003,6 +3277,11 @@ function onlineGuestStart() {
 
     conn.on('close', () => {
       clearTimeout(connectTimeout);
+      // Si on était en partie, on tente la reprise/passation de host
+      if (connectedOK && online.status === 'in-game' && game) {
+        handleHostDisconnect();
+        return;
+      }
       if (connectedOK) showToast('Connexion perdue avec l\'hôte', true);
       onlineCleanup();
       online.status = 'entry';
@@ -3012,6 +3291,11 @@ function onlineGuestStart() {
     conn.on('error', (err) => {
       clearTimeout(connectTimeout);
       console.error('Conn error', err);
+      // Same logic for in-game errors
+      if (connectedOK && online.status === 'in-game' && game) {
+        handleHostDisconnect();
+        return;
+      }
       showToast('Connexion impossible : ' + (err.type || 'erreur inconnue'), true);
       onlineCleanup();
       online.status = 'entry';
@@ -3031,6 +3315,182 @@ function onlineGuestStart() {
     onlineCleanup();
     online.status = 'entry';
     renderOnline();
+  });
+}
+
+// ========== Host disconnect / handoff ==========
+// Si l'hôte se déconnecte, le 1er joueur (par ordre game.players) non-hôte
+// tente de claim le room code et devient nouveau hôte. Les autres se reconnectent à lui.
+
+function handleHostDisconnect() {
+  if (!game || !game.players || !online.roomCode) {
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+    return;
+  }
+  const myEntry = game.players.find(p => p.name && online.myName && p.name.toLowerCase() === online.myName.toLowerCase());
+  if (!myEntry) {
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+    return;
+  }
+  // Position parmi les non-hôtes (le 1er essaie d'abord, les autres en backup)
+  const nonHosts = game.players.filter(p => !p.isHost);
+  const myIdx = nonHosts.findIndex(p => p.name.toLowerCase() === online.myName.toLowerCase());
+  if (myIdx < 0) { onlineCleanup(); online.status = 'entry'; renderOnline(); return; }
+
+  if (myIdx === 0) {
+    showToast('Hôte déconnecté — tentative de reprise du rôle d\'hôte...', false);
+    setTimeout(() => tryBecomeNewHost(), 3000);
+  } else {
+    showToast('Hôte déconnecté — reconnexion à la partie...', false);
+    setTimeout(() => fallbackToGuest(), 4000 + myIdx * 2000);
+  }
+}
+
+function tryBecomeNewHost() {
+  if (!game || !online.roomCode) return;
+  try { if (online.peer) online.peer.destroy(); } catch(e) {}
+  online.peer = null;
+  online.hostConn = null;
+  online.guestConns = {};
+  online.role = 'host';
+
+  let peer;
+  try { peer = new Peer(roomCodeToPeerId(online.roomCode), PEER_OPTIONS); }
+  catch (e) { console.error('newhost create fail', e); fallbackToGuest(); return; }
+  online.peer = peer;
+
+  let opened = false;
+  const t = setTimeout(() => { if (!opened) { console.warn('newhost open timeout'); fallbackToGuest(); } }, 12000);
+
+  peer.on('open', (id) => {
+    opened = true;
+    clearTimeout(t);
+    online.myPeerId = id;
+
+    // Maj game.players : je suis hôte, l'ancien hôte est déconnecté
+    if (game && game.players) {
+      const myNameLower = online.myName.toLowerCase();
+      game.players.forEach(p => {
+        if (p.name && p.name.toLowerCase() === myNameLower) {
+          p.peerId = id;
+          p.isHost = true;
+          p.connected = true;
+        } else if (p.isHost) {
+          p.connected = false;
+          p.isHost = false;
+        }
+      });
+    }
+
+    // Manche en cours interrompue : pas de cartes des autres → on saute à manche-end
+    if (game.phase && game.phase !== 'manche-end') {
+      game.phase = 'manche-end';
+      game.submissions = {};
+      stopTimer();
+    }
+
+    online.status = 'in-game';
+    showToast('✓ Tu es désormais l\'hôte. Manche en cours annulée — clique pour démarrer la suivante.', false);
+    broadcastGameState();
+  });
+
+  peer.on('connection', (conn) => {
+    conn.on('data', (data) => handleHostMessage(conn, data));
+    conn.on('close', () => handleGuestDisconnect(conn.peer));
+    conn.on('error', (err) => console.error('newhost conn err', err));
+  });
+
+  peer.on('error', (err) => {
+    if (err.type === 'unavailable-id') {
+      console.log('Quelqu\'un d\'autre a pris le rôle, je deviens guest');
+      fallbackToGuest();
+    } else {
+      console.error('newhost peer err', err);
+      fallbackToGuest();
+    }
+  });
+}
+
+function fallbackToGuest() {
+  try { if (online.peer) online.peer.destroy(); } catch(e) {}
+  online.peer = null;
+  online.hostConn = null;
+  online.role = 'guest';
+  showToast('Reconnexion en cours...', false);
+
+  let peer;
+  try { peer = new Peer(PEER_OPTIONS); }
+  catch (e) { onlineCleanup(); online.status = 'entry'; renderOnline(); return; }
+  online.peer = peer;
+
+  let opened = false;
+  const t = setTimeout(() => {
+    if (opened) return;
+    showToast('Reconnexion échouée — retour à l\'écran d\'accueil', true);
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+  }, 12000);
+
+  peer.on('open', (myId) => {
+    opened = true;
+    clearTimeout(t);
+    online.myPeerId = myId;
+    attemptReconnectAsGuest(0);
+  });
+  peer.on('error', (err) => console.error('fallback peer err', err));
+}
+
+function attemptReconnectAsGuest(retries) {
+  if (!online.peer) return;
+  if (retries > 6) {
+    showToast('Reconnexion impossible après plusieurs tentatives', true);
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+    return;
+  }
+  const conn = online.peer.connect(roomCodeToPeerId(online.roomCode), {
+    reliable: true,
+    metadata: { name: online.myName },
+  });
+  online.hostConn = conn;
+  let ok = false;
+  const t = setTimeout(() => {
+    if (ok) return;
+    try { conn.close(); } catch(e) {}
+    setTimeout(() => attemptReconnectAsGuest(retries + 1), 2500);
+  }, 6000);
+
+  conn.on('open', () => {
+    ok = true;
+    clearTimeout(t);
+    conn.send({ type: 'hello', name: online.myName });
+    showToast('✓ Reconnecté au nouveau hôte', false);
+  });
+  conn.on('data', (data) => handleGuestMessage(data));
+  conn.on('close', () => {
+    clearTimeout(t);
+    if (ok && online.status === 'in-game' && game) { handleHostDisconnect(); return; }
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+  });
+  conn.on('error', (err) => {
+    clearTimeout(t);
+    if (err.type === 'peer-unavailable') {
+      // Nouveau hôte pas encore prêt, on retente
+      setTimeout(() => attemptReconnectAsGuest(retries + 1), 2500);
+    } else {
+      console.error('reconnect conn err', err);
+      onlineCleanup();
+      online.status = 'entry';
+      renderOnline();
+    }
   });
 }
 
