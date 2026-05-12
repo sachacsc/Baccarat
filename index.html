@@ -3972,49 +3972,35 @@ function validateAnnounce(announcedCat, holeCards, boardCards) {
   return !!best && CAT_RANK[best.cat] >= CAT_RANK[announcedCat];
 }
 
-// Calcule la "nuts" : meilleure main RÉELLEMENT atteignable par un des joueurs
-// (en utilisant 2 cartes parmi sa propre main + les 5 du board).
-// Évite d'afficher comme nuts une combinaison impossible — par exemple un carré dont
-// les 2 cartes manquantes sont réparties entre 2 joueurs différents (donc inaccessible).
-// Appelé côté hôte uniquement (a accès à toutes les mains via game.hands).
-function computeNuts(boardCards, allCommunityCards, allHands, inManchePlayers) {
+// Calcule la "nuts" THÉORIQUE du board, du point de vue d'un observateur précis.
+// Le nuts représente la meilleure main qu'un adversaire POURRAIT avoir, étant donné
+// ce qu'on voit (les 3 boards) et ce qu'on tient en main (nos cartes ne sont pas dispo
+// pour quelqu'un d'autre). Ça reste théorique : on ne sait pas où sont les cartes
+// non visibles (autres mains, brûlées, deck non distribué) — toutes y sont candidates.
+//
+// Pool = deck (52) − 15 cartes des 3 boards − cartes de la main du viewer (4-6).
+// Pour chaque paire du pool, on évalue (paire + 5 cartes du board courant).
+// Coût : pool ≈ 31-37 cartes → C(n,2) ≈ 465-666 paires × evaluateBest sur 7 cartes.
+//
+// Appelée côté client à chaque render — chaque joueur voit sa propre nuts.
+function computeNuts(boardCards, allCommunityCards, viewerHand) {
   if (!boardCards || boardCards.length < 5) return null;
-  // Si on n'a pas les mains (appel legacy), on tombe sur l'ancien comportement : pool = deck − community
-  if (!allHands || !inManchePlayers) {
-    const used = new Set();
-    for (const cs of (allCommunityCards || [])) {
-      if (Array.isArray(cs)) for (const c of cs) used.add(c);
-    }
-    const pool = buildDeck().filter(c => !used.has(c));
-    let best = null;
-    for (let i = 0; i < pool.length; i++) {
-      for (let j = i + 1; j < pool.length; j++) {
-        const ev = evaluateBest([pool[i], pool[j], ...boardCards]);
-        if (!best || compareHands(ev, best.ev) > 0) {
-          best = { cards: [pool[i], pool[j]], ev };
-        }
-      }
-    }
-    return best ? { cat: best.ev.cat, ranks: best.ev.ranks, cards: best.cards } : null;
+  const used = new Set();
+  for (const cs of (allCommunityCards || [])) {
+    if (Array.isArray(cs)) for (const c of cs) used.add(c);
   }
-  // Nuts "réelle" : on itère sur les mains de chaque joueur encore en manche.
-  // Pour chaque joueur, on cherche les 2 cartes (parmi les siennes) qui maximisent.
-  // On garde le meilleur global sur l'ensemble des joueurs.
-  let bestOverall = null;
-  for (const p of inManchePlayers) {
-    const hand = allHands[p.peerId];
-    if (!hand || hand.length < 2) continue;
-    for (let i = 0; i < hand.length; i++) {
-      for (let j = i + 1; j < hand.length; j++) {
-        const cards = [hand[i], hand[j]];
-        const ev = evaluateBest([...cards, ...boardCards]);
-        if (ev && (!bestOverall || compareHands(ev, bestOverall.ev) > 0)) {
-          bestOverall = { cards, ev };
-        }
+  for (const c of (viewerHand || [])) used.add(c);
+  const pool = buildDeck().filter(c => !used.has(c));
+  let best = null;
+  for (let i = 0; i < pool.length; i++) {
+    for (let j = i + 1; j < pool.length; j++) {
+      const ev = evaluateBest([pool[i], pool[j], ...boardCards]);
+      if (!best || compareHands(ev, best.ev) > 0) {
+        best = { cards: [pool[i], pool[j]], ev };
       }
     }
   }
-  return bestOverall ? { cat: bestOverall.ev.cat, ranks: bestOverall.ev.ranks, cards: bestOverall.cards } : null;
+  return best ? { cat: best.ev.cat, ranks: best.ev.ranks, cards: best.cards } : null;
 }
 
 // Trouve les 2 cartes optimales (parmi la main) qui satisfont l'annonce et maximisent la force
@@ -4699,11 +4685,8 @@ function resolveBoardReveal() {
     }
   }
 
-  // Nuts réelle : on prend en compte les mains des joueurs encore en manche
-  // (un carré impossible parce que les 2 cartes manquantes sont chez 2 joueurs distincts n'apparaîtra pas)
-  const inManchePlayers = game.players.filter(p => p.inManche);
-  const nutsResult = computeNuts(boardCards, game.communityCards, game.hands, inManchePlayers);
-
+  // Nuts : plus calculée côté hôte. Chaque client la recalcule au render à partir de
+  // son propre point de vue (sa main + les 3 boards visibles).
   if (splitters) {
     // SPLIT : on ne paie pas maintenant, on résoudra en tie-break après les 3 boards
     // Les splitters re-annonceront avec leur main complète sur un nouveau board.
@@ -4720,7 +4703,6 @@ function resolveBoardReveal() {
       splitters: splitters.map(s => ({ peerId: s.peerId })),
       tieBreakResolved: false,
       tiebreakIterations: [],
-      nuts: nutsResult,
     };
     game.phase = 'board-reveal';
     showToast(`Split détecté sur le Board ${boardIdx + 1} — tie-break à la fin de la manche`, false);
@@ -4734,7 +4716,6 @@ function resolveBoardReveal() {
       winnerPeerId: winner.peerId,
       winningCategory: winner.category,
       rebidRound: game.rebidRound,
-      nuts: nutsResult,
     };
     game.phase = 'board-reveal';
     broadcastGameState();
@@ -4754,7 +4735,6 @@ function resolveBoardReveal() {
         winningCategory: null,
         rebidRound: game.rebidRound,
         abandoned: true,
-        nuts: nutsResult,
       };
       game.phase = 'board-reveal';
       showToast('Board abandonné — aucun gagnant possible', true);
@@ -5138,10 +5118,14 @@ function renderGame() {
           : '<div class="board-cell-cards"></div>';
         winnerCellHTML = `<div class="board-cell winner-cell"><div class="board-cell-label">🏆 ${escapeHTML(winnerPlayer ? winnerPlayer.name : '?')} · ${catLabel}${multi > 1 ? ' ×' + multi : ''}${tbTag}</div>${winCardsHTML}</div>`;
       }
-      if (result.nuts) {
-        const nutsCatLabel = CAT_BY_ID[result.nuts.cat] ? CAT_BY_ID[result.nuts.cat].label : '?';
-        const nutsCardsHTML = result.nuts.cards && result.nuts.cards.length >= 1
-          ? `<div class="board-cell-cards">${result.nuts.cards.map(c => renderCardHTML(c)).join('')}</div>`
+      // Nuts du point de vue du viewer : pool = deck − 15 communautaires − ma main
+      // (spectateurs : main vide → pool de 37 cartes). Recalculé à chaque render.
+      const viewerHand = (game.hands && game.hands[online.myPeerId]) || [];
+      const myNuts = (cards && cards.length === 5) ? computeNuts(cards, game.communityCards, viewerHand) : null;
+      if (myNuts) {
+        const nutsCatLabel = CAT_BY_ID[myNuts.cat] ? CAT_BY_ID[myNuts.cat].label : '?';
+        const nutsCardsHTML = myNuts.cards && myNuts.cards.length >= 1
+          ? `<div class="board-cell-cards">${myNuts.cards.map(c => renderCardHTML(c)).join('')}</div>`
           : '<div class="board-cell-cards"></div>';
         nutsCellHTML = `<div class="board-cell nuts-cell"><div class="board-cell-label">💎 Nuts · ${nutsCatLabel}</div>${nutsCardsHTML}</div>`;
       }
