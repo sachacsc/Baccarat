@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Baccarat 3 Boards</title>
+<title>Baccarat</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -556,16 +558,791 @@
     gap: 8px;
     margin-top: 8px;
   }
+
+  /* ===== Landing (sélecteur de mode) ===== */
+  .landing-card {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+  .landing-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    text-align: center;
+  }
+  .landing-sub {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .landing-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .landing-btn {
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 18px 16px;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: opacity 0.15s;
+  }
+  .landing-btn:active { background: var(--bg-soft); border-color: var(--primary); }
+  .landing-btn.primary {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+  .landing-btn.primary:active { opacity: 0.88; }
+  .landing-btn-icon {
+    font-size: 30px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .landing-btn-body { flex: 1; min-width: 0; }
+  .landing-btn-title { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+  .landing-btn-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .landing-btn.primary .landing-btn-desc { color: rgba(255,255,255,0.78); }
+  .landing-btn-arrow {
+    font-size: 22px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+  .landing-btn.primary .landing-btn-arrow { color: rgba(255,255,255,0.7); }
+
+  /* ===== Placeholder mode en ligne ===== */
+  .online-placeholder {
+    background: var(--bg);
+    border: 1.5px dashed var(--border-strong);
+    border-radius: 12px;
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--text-dim);
+  }
+  .online-placeholder .big {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .online-placeholder .small {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* ===== Lobby ===== */
+  .lobby-code-box {
+    background: var(--primary);
+    color: white;
+    border-radius: 14px;
+    padding: 20px 16px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .lobby-code-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.6);
+    font-weight: 700;
+  }
+  .lobby-code {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    margin-top: 6px;
+    margin-bottom: 10px;
+    line-height: 1;
+  }
+  .lobby-code-copy-btn {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .lobby-code-copy-btn:active { background: rgba(255,255,255,0.28); }
+
+  .code-input {
+    text-transform: uppercase;
+    letter-spacing: 0.25em !important;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace !important;
+    font-size: 22px !important;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .me-pill {
+    background: var(--blue);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== Lobby settings (host) ===== */
+  .lobby-settings {
+    background: var(--bg-soft);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+  .lobby-settings .ls-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+  .lobby-settings .field { margin-bottom: 10px; }
+  .lobby-settings .field:last-child { margin-bottom: 0; }
+  .lobby-settings input[type=number],
+  .lobby-settings select {
+    width: 100%;
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .lobby-settings .readonly-val {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    color: var(--text-dim);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+
+  /* ===== Cartes à jouer ===== */
+  .card {
+    display: inline-block;
+    position: relative;
+    background: white;
+    border: 1px solid #c8c8c8;
+    border-radius: 7px;
+    width: 58px;
+    height: 82px;
+    user-select: none;
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
+    font-family: "Georgia", "Times New Roman", serif;
+    line-height: 1;
+    overflow: hidden;
+    transition: transform 0.12s, box-shadow 0.12s;
+  }
+  .card.red { color: #c81818; }
+  .card.black { color: #111; }
+  .card.back {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08) 0, transparent 40%),
+      repeating-linear-gradient(45deg, #14375e 0, #14375e 6px, #1d4d83 6px, #1d4d83 12px);
+    border-color: #0a253f;
+    color: transparent;
+  }
+  .card.back::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 4px;
+  }
+  .card.placeholder {
+    background: transparent;
+    border: 1.5px dashed var(--border-strong);
+    box-shadow: none;
+  }
+
+  .card .card-corner {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .card .card-corner-tl { top: 5px; left: 6px; }
+  .card .card-corner-br { bottom: 5px; right: 6px; transform: rotate(180deg); }
+  .card .card-corner .card-rank { font-size: 15px; letter-spacing: -0.5px; }
+  .card .card-corner .card-suit { font-size: 13px; margin-top: 2px; }
+
+  .card .card-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 34px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 0.9;
+  }
+  .card .card-center.face {
+    font-size: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .card .card-center.face .face-suit { font-size: 15px; margin-top: 3px; }
+
+  .card.selectable { cursor: pointer; }
+  .card.selectable:active { transform: scale(0.96); }
+  .card.selected {
+    border-color: var(--accent);
+    border-width: 2px;
+    transform: translateY(-8px);
+    box-shadow: 0 8px 18px rgba(179,133,0,0.35);
+  }
+  .card.disabled { opacity: 0.45; pointer-events: none; }
+  .card.sortable-ghost { opacity: 0.25; }
+  .card.sortable-chosen { box-shadow: 0 10px 24px rgba(0,0,0,0.28); cursor: grabbing; z-index: 10; }
+
+  .cards-row { display: flex; gap: 5px; flex-wrap: wrap; }
+  .cards-row.center { justify-content: center; }
+
+  @keyframes card-flip-in {
+    from {
+      transform: perspective(500px) rotateY(-90deg) scale(0.92);
+      opacity: 0;
+    }
+    to {
+      transform: perspective(500px) rotateY(0) scale(1);
+      opacity: 1;
+    }
+  }
+  .card.anim-in {
+    animation: card-flip-in 0.45s cubic-bezier(0.18, 0.89, 0.45, 1.1) both;
+    transform-origin: center;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card.anim-in { animation: none; }
+  }
+
+  /* Image overlay (style Bicycle PNG) — couvre le rendu CSS si elle charge */
+  .card .card-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: white;
+    border-radius: 5px;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  .card.back .card-img { background: transparent; }
+
+  /* ===== Boards ===== */
+  .game-section-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .game-status-bar {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .game-status-bar .left { color: var(--text-dim); }
+  .game-status-bar .left strong { color: var(--text); }
+
+  .timer-pill {
+    background: var(--text);
+    color: white;
+    padding: 4px 11px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .timer-pill.warning { background: var(--red); animation: tpulse 0.6s ease infinite alternate; }
+  @keyframes tpulse { from { opacity: 1; } to { opacity: 0.55; } }
+
+  .game-code-pill {
+    background: var(--primary);
+    color: white;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    padding: 4px 10px;
+    border-radius: 7px;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+    transition: opacity 0.12s;
+  }
+  .game-code-pill:active { opacity: 0.75; }
+  .game-code-pill .lbl {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.75;
+    font-weight: 700;
+  }
+
+  .game-scores {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .game-score-chip {
+    flex-shrink: 0;
+    background: var(--bg-soft);
+    padding: 6px 11px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 70px;
+  }
+  .game-score-chip.dealer { border: 1.5px solid var(--accent); background: rgba(179,133,0,0.06); }
+  .game-score-chip.disconnected,
+  .game-score-chip.spectator { opacity: 0.55; }
+  .game-score-chip.forfeit { border: 1.5px solid var(--red); background: rgba(198,40,40,0.05); }
+  .game-score-chip .name { font-weight: 700; font-size: 12px; }
+  .game-score-chip .val { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; margin-top: 2px; }
+  .game-score-chip .val.positive { color: var(--green); }
+  .game-score-chip .val.negative { color: var(--red); }
+  .game-score-chip .val.zero { color: var(--text-faint); }
+  .tiny-tag {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 7px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-left: 4px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .tiny-tag.dc { background: var(--text-faint); color: white; }
+  .tiny-tag.sp { background: var(--blue); color: white; }
+  .tiny-tag.ff { background: var(--red); color: white; }
+
+  .game-board {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .game-board.current { border-color: var(--accent); border-width: 2px; }
+  .game-board.done { opacity: 0.85; }
+  .game-board-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .game-board-title { font-weight: 700; font-size: 14px; }
+  .game-board-title .b-current { color: var(--accent); margin-left: 6px; font-size: 11px; }
+  .game-board-status {
+    font-size: 12px;
+    color: var(--text-faint);
+    font-weight: 600;
+  }
+  .game-board-status.win { color: var(--green); }
+  .game-board-cards { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; }
+
+  .my-hand-zone {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 12px;
+  }
+  .my-hand-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  .my-hand-cards {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 4px;
+    margin: -8px -4px;
+  }
+  .my-hand-cards .card { touch-action: none; }
+  .my-hand-hint {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-top: 10px;
+  }
+
+  /* ===== Announce panel ===== */
+  .announce-panel {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .announce-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+  .announce-cats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .announce-quick {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .announce-cat-btn {
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text);
+    padding: 10px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 7px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .announce-cat-btn:active { background: var(--bg-soft); }
+  .announce-cat-btn.selected {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+  }
+  .announce-cat-btn.skip {
+    background: var(--bg-soft);
+    color: var(--text-dim);
+    font-style: italic;
+    border-style: dashed;
+  }
+  .announce-cat-btn.skip.selected {
+    background: var(--text-faint);
+    border-color: var(--text-faint);
+    border-style: solid;
+    color: white;
+    font-style: normal;
+  }
+  .announce-cat-btn .multi-tag {
+    font-size: 10px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .announce-cat-btn.selected .multi-tag { color: rgba(255,255,255,0.85); }
+
+  /* ===== Player submission status ===== */
+  .submit-status {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .submit-status-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+  .submit-status-item.confirmed { background: rgba(31,122,63,0.08); border-color: var(--green); }
+  .submit-status-item.excluded { background: var(--bg-inactive); border-color: var(--border); opacity: 0.6; }
+  .submit-status-item .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .submit-status-item .ic { font-size: 13px; }
+  .submit-status-item .ic.ok { color: var(--green); font-weight: 800; }
+  .submit-status-item .ic.pending { color: var(--text-faint); }
+
+  /* ===== Reveal cards ===== */
+  .reveal-list { display: flex; flex-direction: column; gap: 8px; }
+  .reveal-row {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .reveal-row.winner { border-color: var(--green); background: rgba(31,122,63,0.06); }
+  .reveal-row.invalid { border-color: var(--red); background: rgba(198,40,40,0.05); }
+  .reveal-row.excluded { background: var(--bg-inactive); opacity: 0.7; }
+  .reveal-row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+  .reveal-row-name { font-weight: 700; font-size: 14px; }
+  .reveal-row-tag {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .reveal-row-tag.winner { background: var(--green); color: white; }
+  .reveal-row-tag.split { background: var(--accent); color: white; }
+  .reveal-row-tag.invalid { background: var(--red); color: white; }
+  .reveal-row-tag.excluded { background: var(--text-faint); color: white; }
+  .reveal-row-tag.valid { background: var(--bg-soft); color: var(--text-dim); }
+  .reveal-row.split { border-color: var(--accent); background: rgba(179,133,0,0.06); }
+  .reveal-row-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .reveal-row-cards { display: flex; gap: 3px; flex-shrink: 0; }
+  .reveal-row-cards .card { width: 36px; height: 50px; box-shadow: none; }
+  .reveal-row-cards .card .card-corner-tl { top: 3px; left: 3px; }
+  .reveal-row-cards .card .card-corner-br { bottom: 3px; right: 3px; }
+  .reveal-row-cards .card .card-corner .card-rank { font-size: 10px; }
+  .reveal-row-cards .card .card-corner .card-suit { font-size: 9px; }
+  .reveal-row-cards .card .card-center { font-size: 18px; }
+  .reveal-row-cards .card .card-center.face { font-size: 14px; }
+  .reveal-row-cards .card .card-center.face .face-suit { font-size: 9px; margin-top: 1px; }
+  .reveal-row-info { flex: 1; min-width: 0; }
+  .reveal-row-info .announce {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .reveal-row-info .actual {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* ===== Manche end recap ===== */
+  .manche-recap {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .manche-recap-title { font-weight: 700; font-size: 16px; margin-bottom: 10px; text-align: center; }
+  .manche-recap-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .manche-recap-row:last-child { border: none; }
+  .manche-recap-row .name { font-weight: 600; }
+  .manche-recap-row .delta { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .manche-recap-row .delta.positive { color: var(--green); }
+  .manche-recap-row .delta.negative { color: var(--red); }
+  .manche-recap-row .delta.zero { color: var(--text-faint); }
+
+  .full-board-bonus-alert {
+    background: linear-gradient(135deg, #fff8e1, #fff3c4);
+    border: 1.5px solid var(--accent);
+    color: #5d4400;
+    padding: 12px 14px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .rebid-alert {
+    background: rgba(198,40,40,0.08);
+    border: 1.5px solid var(--red);
+    color: var(--red);
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* ===== Layout responsive (sidebar desktop / modal mobile) ===== */
+  .game-with-sidebar {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .game-sidebar {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .stats-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    margin-top: 18px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .stats-section-title:first-child { margin-top: 0; }
+  .stats-score-list { display: flex; flex-direction: column; gap: 4px; }
+  .stats-score-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--bg-soft);
+    border-radius: 6px;
+    font-size: 14px;
+    gap: 6px;
+    min-width: 0;
+  }
+  .stats-score-item.dealer { background: rgba(179,133,0,0.08); border-left: 3px solid var(--accent); }
+  .stats-score-item.disconnected,
+  .stats-score-item.spectator { opacity: 0.55; }
+  .stats-score-item.forfeit { border-left: 3px solid var(--red); }
+  .stats-score-item .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .stats-score-item .val { font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .stats-score-item .val.positive { color: var(--green); }
+  .stats-score-item .val.negative { color: var(--red); }
+  .stats-history-item {
+    background: var(--bg-soft);
+    border-radius: 7px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .stats-history-item .h-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .stats-history-item .h-line { font-size: 12px; color: var(--text-dim); margin: 2px 0; }
+  .stats-history-item .h-fb { color: var(--accent); font-weight: 700; font-size: 12px; margin-top: 4px; }
+  .stats-history-empty {
+    font-size: 12px;
+    color: var(--text-faint);
+    text-align: center;
+    padding: 12px;
+  }
+
+  .mobile-stats-toggle { display: inline-flex; }
+  .game-sidebar { display: none; }
+  @media (min-width: 900px) {
+    .container { max-width: 1000px; }
+    .game-with-sidebar { grid-template-columns: 1fr 300px; align-items: start; }
+    .game-sidebar {
+      display: block;
+      position: sticky;
+      top: 20px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+    .mobile-stats-toggle { display: none; }
+    /* En desktop, la rangée horizontale de scores devient redondante avec le sidebar */
+    #online-game-view .game-scores { display: none; }
+  }
 </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <div class="title">Baccarat 3 Boards</div>
+      <div class="title">Baccarat</div>
       <div class="subtitle" id="header-subtitle">Compteur de partie</div>
     </header>
 
-    <section id="setup-section">
+    <section id="landing-section" style="display:none;">
+      <div class="landing-card">
+        <div class="landing-title">Comment veux-tu jouer ?</div>
+        <div class="landing-sub">Choisis un mode pour démarrer.</div>
+        <div class="landing-options">
+          <button class="landing-btn primary" id="mode-counter-btn">
+            <span class="landing-btn-icon">📓</span>
+            <div class="landing-btn-body">
+              <div class="landing-btn-title">Compteur seulement</div>
+              <div class="landing-btn-desc">Vous jouez avec de vraies cartes — l'app gère uniquement les comptes.</div>
+            </div>
+            <span class="landing-btn-arrow">›</span>
+          </button>
+          <button class="landing-btn" id="mode-online-btn">
+            <span class="landing-btn-icon">📱</span>
+            <div class="landing-btn-body">
+              <div class="landing-btn-title">Partie en ligne</div>
+              <div class="landing-btn-desc">Chacun sur son tél, cartes distribuées par l'app, tirage digital.</div>
+            </div>
+            <span class="landing-btn-arrow">›</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section id="setup-section" style="display:none;">
       <div class="section-title">
         <span>Configuration</span>
         <button class="section-title-action" id="setup-import-btn">↓ Reprendre une partie</button>
@@ -623,9 +1400,180 @@
       <div id="history-list"></div>
     </section>
 
+    <section id="online-section" style="display:none;">
+
+      <!-- Vue ENTRY : créer ou rejoindre -->
+      <div id="online-entry">
+        <div class="section-title">Partie en ligne</div>
+        <div class="landing-card">
+          <div class="landing-title">Créer ou rejoindre</div>
+          <div class="landing-sub">Le mode en ligne est en cours de développement. Le lobby fonctionne — la partie elle-même arrive aux étapes suivantes.</div>
+          <div class="landing-options">
+            <button class="landing-btn primary" id="online-create-btn">
+              <span class="landing-btn-icon">＋</span>
+              <div class="landing-btn-body">
+                <div class="landing-btn-title">Créer une partie</div>
+                <div class="landing-btn-desc">Tu deviens l'hôte. Les autres rejoignent avec ton code.</div>
+              </div>
+              <span class="landing-btn-arrow">›</span>
+            </button>
+            <button class="landing-btn" id="online-join-btn">
+              <span class="landing-btn-icon">→</span>
+              <div class="landing-btn-body">
+                <div class="landing-btn-title">Rejoindre une partie</div>
+                <div class="landing-btn-desc">Entre le code à 4 caractères donné par l'hôte.</div>
+              </div>
+              <span class="landing-btn-arrow">›</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vue NAME : saisie pseudo (et code si guest) -->
+      <div id="online-name-view" style="display:none;">
+        <div class="section-title">
+          <span id="online-name-title">Ton pseudo</span>
+          <button class="section-title-action" id="online-name-back-btn">← Retour</button>
+        </div>
+        <div class="field">
+          <label>Ton pseudo</label>
+          <input type="text" id="online-pseudo-input" maxlength="20" placeholder="Pseudo">
+        </div>
+        <div class="field" id="online-code-input-wrap" style="display:none;">
+          <label>Code de la partie</label>
+          <input type="text" id="online-code-input" maxlength="4" placeholder="ABCD" class="code-input">
+        </div>
+        <button class="btn" id="online-name-confirm-btn">Continuer</button>
+      </div>
+
+      <!-- Vue CONNECTING : spinner -->
+      <div id="online-connecting-view" style="display:none;">
+        <div class="section-title">Connexion</div>
+        <div class="online-placeholder">
+          <div class="spinner"></div>
+          <div class="big" id="online-connecting-msg">Connexion en cours...</div>
+          <div class="small">Patiente quelques secondes.</div>
+        </div>
+      </div>
+
+      <!-- Vue LOBBY : code + liste joueurs + paramètres + bouton start -->
+      <div id="online-lobby-view" style="display:none;">
+        <div class="section-title">
+          <span>Salon d'attente</span>
+          <button class="section-title-action" id="online-lobby-leave-btn">× Quitter</button>
+        </div>
+        <div class="lobby-code-box">
+          <div class="lobby-code-label">Code de la partie</div>
+          <div class="lobby-code" id="lobby-code-display">----</div>
+          <button class="lobby-code-copy-btn" id="lobby-code-copy-btn">Copier le code</button>
+        </div>
+        <div class="section-title" style="border:none; margin-top: 20px;">
+          <span>Joueurs (<span id="lobby-player-count">0</span>)</span>
+        </div>
+        <div class="scoreboard" id="lobby-players-list"></div>
+
+        <div class="lobby-settings" id="lobby-settings" style="margin-top: 16px;">
+          <div class="ls-title">Paramètres de la partie</div>
+          <div class="field">
+            <label>Prix de la ligne (€)</label>
+            <input type="number" id="lobby-price-input" min="0" step="0.5" value="2.5" inputmode="decimal">
+            <div class="readonly-val" id="lobby-price-readonly" style="display:none;">2.50 €</div>
+          </div>
+          <div class="field">
+            <label>Timer par phase d'annonce</label>
+            <select id="lobby-timer-input">
+              <option value="0">Désactivé</option>
+              <option value="20">20 secondes</option>
+              <option value="30">30 secondes</option>
+              <option value="45">45 secondes</option>
+              <option value="60">60 secondes</option>
+              <option value="90">90 secondes</option>
+            </select>
+            <div class="readonly-val" id="lobby-timer-readonly" style="display:none;">Désactivé</div>
+          </div>
+        </div>
+
+        <button class="btn btn-validate" id="lobby-start-btn" style="display:none;">Démarrer la partie</button>
+        <div id="lobby-waiting-msg" class="online-placeholder" style="margin-top: 16px; display:none;">
+          <div class="small">En attente que l'hôte démarre la partie...</div>
+        </div>
+      </div>
+
+      <!-- Vue GAME : la partie en cours -->
+      <div id="online-game-view" style="display:none;">
+        <div class="section-title">
+          <span id="game-section-title">Manche 1</span>
+          <div style="display:flex; gap:6px;">
+            <button class="section-title-action mobile-stats-toggle" id="open-stats-btn">📊 Soldes</button>
+            <button class="section-title-action" id="game-leave-btn">× Quitter</button>
+          </div>
+        </div>
+
+        <div class="game-with-sidebar">
+          <div class="game-main">
+            <div class="game-section-wrap">
+              <div class="game-status-bar" id="game-status-bar">
+                <div class="left" id="game-status-text">—</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="game-code-pill" id="game-code-pill" title="Cliquer pour copier le code">
+                    <span class="lbl">Code</span>
+                    <span id="game-code-value">----</span>
+                  </span>
+                  <div id="game-timer-wrap" style="display:none;">
+                    <span class="timer-pill" id="game-timer-pill">--s</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="game-scores" id="game-scores-row"></div>
+
+              <div id="game-rebid-alert" class="rebid-alert" style="display:none;"></div>
+              <div id="game-fullboard-alert" class="full-board-bonus-alert" style="display:none;"></div>
+
+              <div id="game-boards-container"></div>
+
+              <div class="my-hand-zone" id="my-hand-zone" style="display:none;">
+                <div class="my-hand-title">Tes cartes <span style="font-weight:400; color:var(--text-faint); text-transform:none; letter-spacing:0;">(drag pour réorganiser)</span></div>
+                <div class="my-hand-cards" id="my-hand-cards"></div>
+                <div class="my-hand-hint" id="my-hand-hint">—</div>
+              </div>
+
+              <div class="announce-panel" id="announce-panel" style="display:none;">
+                <div class="announce-title" id="announce-panel-title">Choisis ton annonce</div>
+                <div class="announce-cats" id="announce-cats"></div>
+                <div class="announce-quick" id="announce-quick"></div>
+                <button class="btn btn-validate" id="announce-confirm-btn" disabled style="opacity:0.5;">Confirmer ma main</button>
+                <div class="submit-status" id="submit-status"></div>
+              </div>
+
+              <div id="reveal-zone" style="display:none;">
+                <div class="reveal-list" id="reveal-list"></div>
+              </div>
+
+              <div id="manche-recap-zone" style="display:none;"></div>
+
+              <div id="game-host-actions" style="display:none; margin-top: 8px;"></div>
+            </div>
+          </div>
+          <aside class="game-sidebar" id="game-sidebar"></aside>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- MODAL stats (mobile) -->
+    <div class="modal-overlay" id="stats-modal">
+      <div class="modal">
+        <div class="modal-title">Soldes & historique</div>
+        <div id="stats-modal-content"></div>
+        <button class="btn btn-secondary" id="stats-modal-close" style="margin-top:14px;">Fermer</button>
+      </div>
+    </div>
+
     <section id="footer-actions" style="display:none;">
       <div class="footer-divider"></div>
-      <button class="btn btn-secondary" id="new-game-btn">Nouvelle partie (réinitialiser)</button>
+      <button class="btn btn-secondary" id="change-mode-btn">↩ Changer de mode</button>
+      <button class="btn btn-secondary" id="new-game-btn" style="margin-top:8px; display:none;">Nouvelle partie (réinitialiser)</button>
     </section>
   </div>
 
@@ -692,6 +1640,7 @@
 
 const STORAGE_KEY = 'baccarat3boards_v4';
 let state = {
+  mode: null,           // null = landing | 'counter' | 'online'
   linePrice: 2.5,
   players: [],          // [{id, name, active}]  ordre = ordre de jeu
   scores: {},
@@ -723,6 +1672,10 @@ function load() {
       if (typeof state.dealerIdx !== 'number') state.dealerIdx = 0;
       state.players.forEach(p => { if (typeof p.active !== 'boolean') p.active = true; });
       state.history.forEach(h => { if (typeof h.linePrice !== 'number') h.linePrice = state.linePrice; });
+      // Compat : partie sauvegardée avant l'ajout du sélecteur de mode = mode compteur
+      if (state.configured && !state.mode) state.mode = 'counter';
+      // Mode online non restaurable au reload (la connexion WebRTC est perdue) → retour landing
+      if (state.mode === 'online') state.mode = null;
     }
   } catch(e) {}
 }
@@ -1081,30 +2034,105 @@ function renderHistory() {
   });
 }
 
+function showSection(id, visible) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = visible ? 'block' : 'none';
+}
+
 function renderAll() {
+  const sub = document.getElementById('header-subtitle');
+
+  // Aucun mode choisi → landing
+  if (!state.mode) {
+    showSection('landing-section', true);
+    showSection('setup-section', false);
+    showSection('dealer-section', false);
+    showSection('game-section', false);
+    showSection('manche-section', false);
+    showSection('history-section', false);
+    showSection('online-section', false);
+    showSection('footer-actions', false);
+    sub.textContent = 'Choisis ton mode de jeu';
+    return;
+  }
+
+  showSection('landing-section', false);
+  showSection('footer-actions', true);
+  const showNewGame = (state.mode === 'counter' && state.configured);
+  document.getElementById('new-game-btn').style.display = showNewGame ? '' : 'none';
+
+  // Mode en ligne
+  if (state.mode === 'online') {
+    showSection('online-section', true);
+    showSection('setup-section', false);
+    showSection('dealer-section', false);
+    showSection('game-section', false);
+    showSection('manche-section', false);
+    showSection('history-section', false);
+    sub.textContent = 'Partie en ligne';
+    renderOnline();
+    return;
+  }
+
+  // Mode compteur
+  showSection('online-section', false);
   if (state.configured) {
-    document.getElementById('setup-section').style.display = 'none';
-    document.getElementById('dealer-section').style.display = 'block';
-    document.getElementById('game-section').style.display = 'block';
-    document.getElementById('manche-section').style.display = 'block';
-    document.getElementById('history-section').style.display = 'block';
-    document.getElementById('footer-actions').style.display = 'block';
-    document.getElementById('header-subtitle').textContent = `${activePlayers().length} actifs · ${state.linePrice.toFixed(2)}€/ligne`;
+    showSection('setup-section', false);
+    showSection('dealer-section', true);
+    showSection('game-section', true);
+    showSection('manche-section', true);
+    showSection('history-section', true);
+    sub.textContent = `${activePlayers().length} actifs · ${state.linePrice.toFixed(2)}€/ligne`;
     renderDealer();
     renderScoreboard();
     renderManche();
     renderFullBoardAlert();
     renderHistory();
   } else {
-    document.getElementById('setup-section').style.display = 'block';
-    document.getElementById('dealer-section').style.display = 'none';
-    document.getElementById('game-section').style.display = 'none';
-    document.getElementById('manche-section').style.display = 'none';
-    document.getElementById('history-section').style.display = 'none';
-    document.getElementById('footer-actions').style.display = 'none';
-    document.getElementById('header-subtitle').textContent = 'Compteur de partie';
+    showSection('setup-section', true);
+    showSection('dealer-section', false);
+    showSection('game-section', false);
+    showSection('manche-section', false);
+    showSection('history-section', false);
+    sub.textContent = 'Compteur de partie';
     renderSetup();
   }
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  if (mode === 'counter' && state.players.length === 0) {
+    for (let i = 0; i < 4; i++) state.players.push({ id: uid(), name: '', active: true });
+  }
+  if (mode === 'online') preloadCardImages();
+  save();
+  renderAll();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function backToLanding() {
+  if (state.configured && state.mode === 'counter') {
+    if (!confirm('Retourner à la sélection de mode ?\n\nLa partie en cours est conservée — tu pourras y revenir en re-choisissant Compteur.')) return;
+  } else if (state.mode === 'online' && online.peer) {
+    if (!confirm('Quitter la partie en ligne et retourner au menu ?')) return;
+    if (isHost()) {
+      Object.values(online.guestConns || {}).forEach(conn => {
+        if (conn && conn.open) {
+          try { conn.send({ type: 'kicked', reason: 'L\'hôte a quitté' }); } catch(e) {}
+        }
+      });
+    }
+    stopTimer();
+    game = null;
+    selectedCards = [];
+    selectedCategory = null;
+    lastBoardKey = '';
+    onlineCleanup();
+  }
+  state.mode = null;
+  save();
+  renderAll();
+  window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
 function addPlayer() {
@@ -1241,7 +2269,9 @@ function undoLast() {
 
 function newGame() {
   if (!confirm('Démarrer une nouvelle partie ?\n\nLes scores et l\'historique actuels seront perdus.')) return;
+  const keptMode = state.mode;
   state = {
+    mode: keptMode,
     linePrice: 2.5,
     players: [],
     scores: {},
@@ -1250,6 +2280,9 @@ function newGame() {
     configured: false,
     dealerIdx: 0,
   };
+  if (state.mode === 'counter') {
+    for (let i = 0; i < 4; i++) state.players.push({ id: uid(), name: '', active: true });
+  }
   save();
   renderAll();
 }
@@ -1399,6 +2432,7 @@ function confirmImport() {
   }
   const d = result.data;
   state = {
+    mode: 'counter',
     linePrice: d.linePrice,
     players: d.players,
     scores: d.scores,
@@ -1438,11 +2472,2190 @@ function confirmPriceChange() {
   showToast(`Nouveau prix : ${v.toFixed(2)}€/ligne`);
 }
 
+// ========== ONLINE (PeerJS) ==========
+// État runtime non persisté (la connexion WebRTC n'est pas restaurable au reload).
+let online = {
+  peer: null,           // instance PeerJS
+  role: null,           // 'host' | 'guest'
+  status: 'entry',      // 'entry' | 'name-create' | 'name-join' | 'connecting' | 'lobby'
+  roomCode: null,
+  myName: '',
+  myPeerId: null,
+  hostConn: null,       // guest -> host
+  guestConns: {},       // host -> guests, keyé par peerId
+  players: [],          // [{peerId, name, isHost}]
+};
+
+const ONLINE_PEER_PREFIX = 'baccarat-app-';
+
+function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans 0/O/1/I/L pour éviter confusion
+  let s = '';
+  for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+
+function roomCodeToPeerId(code) {
+  return ONLINE_PEER_PREFIX + code.toUpperCase();
+}
+
+function renderOnline() {
+  ['online-entry','online-name-view','online-connecting-view','online-lobby-view','online-game-view'].forEach(id => {
+    showSection(id, false);
+  });
+  const map = {
+    'entry': 'online-entry',
+    'name-create': 'online-name-view',
+    'name-join': 'online-name-view',
+    'connecting': 'online-connecting-view',
+    'lobby': 'online-lobby-view',
+    'in-game': 'online-game-view',
+  };
+  const target = map[online.status] || 'online-entry';
+  showSection(target, true);
+
+  if (online.status === 'name-create' || online.status === 'name-join') {
+    document.getElementById('online-name-title').textContent =
+      online.status === 'name-create' ? 'Créer une partie' : 'Rejoindre une partie';
+    document.getElementById('online-code-input-wrap').style.display =
+      online.status === 'name-join' ? 'block' : 'none';
+  }
+
+  if (online.status === 'lobby') {
+    renderLobby();
+  } else if (online.status === 'in-game') {
+    renderGame();
+  }
+}
+
+function renderLobby() {
+  document.getElementById('lobby-code-display').textContent = online.roomCode || '----';
+  document.getElementById('lobby-player-count').textContent = online.players.length;
+
+  const list = document.getElementById('lobby-players-list');
+  list.innerHTML = '';
+  online.players.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'score-row';
+    const hostPill = p.isHost ? '<span class="dealer-pill">Hôte</span>' : '';
+    const mePill = p.peerId === online.myPeerId ? '<span class="me-pill">Toi</span>' : '';
+    row.innerHTML = `
+      <div class="score-name-wrap">
+        <span class="score-name">${escapeHTML(p.name)}</span>
+        ${hostPill}
+        ${mePill}
+      </div>
+    `;
+    list.appendChild(row);
+  });
+
+  const isHostRole = online.role === 'host';
+  const startBtn = document.getElementById('lobby-start-btn');
+  const waitingMsg = document.getElementById('lobby-waiting-msg');
+  const settings = document.getElementById('lobby-settings');
+  if (isHostRole) {
+    startBtn.style.display = 'block';
+    waitingMsg.style.display = 'none';
+    settings.style.display = 'block';
+    document.getElementById('lobby-price-input').style.display = '';
+    document.getElementById('lobby-price-readonly').style.display = 'none';
+    document.getElementById('lobby-timer-input').style.display = '';
+    document.getElementById('lobby-timer-readonly').style.display = 'none';
+    const N = online.players.length;
+    const enough = N >= 2;
+    startBtn.disabled = !enough;
+    startBtn.style.opacity = enough ? '1' : '0.55';
+    if (!enough) {
+      startBtn.textContent = 'En attente d\'au moins 2 joueurs...';
+    } else if (N > 8) {
+      startBtn.textContent = `Démarrer (8 actifs, ${N - 8} spectateur(s))`;
+    } else {
+      const target = N <= 6 ? 6 : 4;
+      const cardsHint = (N <= 5) ? `${target} cartes/joueur` : (N === 6 ? '6 ou 5 cartes' : '4 cartes/joueur');
+      startBtn.textContent = `Démarrer (${N} joueurs · ${cardsHint})`;
+    }
+  } else {
+    startBtn.style.display = 'none';
+    waitingMsg.style.display = 'block';
+    settings.style.display = 'none';
+  }
+}
+
+function onlineGoToEntry() {
+  online.status = 'entry';
+  online.role = null;
+  renderOnline();
+}
+
+function onlineCreateStart() {
+  online.role = 'host';
+  online.status = 'name-create';
+  renderOnline();
+  setTimeout(() => document.getElementById('online-pseudo-input').focus(), 50);
+}
+
+function onlineJoinStart() {
+  online.role = 'guest';
+  online.status = 'name-join';
+  renderOnline();
+  setTimeout(() => document.getElementById('online-pseudo-input').focus(), 50);
+}
+
+function onlineConfirmName() {
+  const name = (document.getElementById('online-pseudo-input').value || '').trim();
+  if (!name) { showToast('Pseudo vide', true); return; }
+  if (name.length > 20) { showToast('Pseudo trop long (20 max)', true); return; }
+  online.myName = name;
+
+  if (online.role === 'host') {
+    onlineHostStart();
+  } else {
+    const code = (document.getElementById('online-code-input').value || '').trim().toUpperCase();
+    if (!/^[A-Z2-9]{4}$/.test(code)) { showToast('Code invalide (4 caractères)', true); return; }
+    online.roomCode = code;
+    onlineGuestStart();
+  }
+}
+
+function onlineHostStart() {
+  online.roomCode = generateRoomCode();
+  online.status = 'connecting';
+  document.getElementById('online-connecting-msg').textContent = 'Création de la partie...';
+  renderOnline();
+
+  if (typeof Peer === 'undefined') {
+    showToast('PeerJS non chargé — vérifie ta connexion', true);
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+    return;
+  }
+
+  try {
+    online.peer = new Peer(roomCodeToPeerId(online.roomCode), { debug: 1 });
+  } catch (e) {
+    showToast('Impossible d\'initialiser PeerJS', true);
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+    return;
+  }
+
+  online.peer.on('open', (id) => {
+    online.myPeerId = id;
+    online.players = [{
+      peerId: id,
+      name: online.myName,
+      isHost: true,
+    }];
+    online.status = 'lobby';
+    renderOnline();
+    showToast('✓ Partie créée');
+  });
+
+  online.peer.on('connection', (conn) => {
+    conn.on('data', (data) => handleHostMessage(conn, data));
+    conn.on('close', () => handleGuestDisconnect(conn.peer));
+    conn.on('error', (err) => console.error('Conn error', err));
+  });
+
+  online.peer.on('error', (err) => {
+    console.error('Peer error', err);
+    if (err.type === 'unavailable-id') {
+      showToast('Code déjà pris, réessaie', true);
+    } else if (err.type === 'network' || err.type === 'server-error') {
+      showToast('Erreur réseau PeerJS', true);
+    } else {
+      showToast('Erreur PeerJS: ' + err.type, true);
+    }
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+  });
+}
+
+function onlineGuestStart() {
+  online.status = 'connecting';
+  document.getElementById('online-connecting-msg').textContent = `Connexion à ${online.roomCode}...`;
+  renderOnline();
+
+  if (typeof Peer === 'undefined') {
+    showToast('PeerJS non chargé — vérifie ta connexion', true);
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+    return;
+  }
+
+  try {
+    online.peer = new Peer({ debug: 1 });
+  } catch (e) {
+    showToast('Impossible d\'initialiser PeerJS', true);
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+    return;
+  }
+
+  online.peer.on('open', (myId) => {
+    online.myPeerId = myId;
+    const conn = online.peer.connect(roomCodeToPeerId(online.roomCode), {
+      reliable: true,
+      metadata: { name: online.myName },
+    });
+    online.hostConn = conn;
+
+    let connectedOK = false;
+
+    conn.on('open', () => {
+      connectedOK = true;
+      conn.send({ type: 'hello', name: online.myName });
+    });
+
+    conn.on('data', (data) => handleGuestMessage(data));
+
+    conn.on('close', () => {
+      if (connectedOK) {
+        showToast('Connexion perdue avec l\'hôte', true);
+      }
+      onlineCleanup();
+      online.status = 'entry';
+      renderOnline();
+    });
+
+    conn.on('error', (err) => {
+      console.error('Conn error', err);
+      showToast('Connexion impossible', true);
+      onlineCleanup();
+      online.status = 'entry';
+      renderOnline();
+    });
+  });
+
+  online.peer.on('error', (err) => {
+    console.error('Peer error', err);
+    if (err.type === 'peer-unavailable') {
+      showToast('Code introuvable — vérifie qu\'il est correct', true);
+    } else if (err.type === 'network' || err.type === 'server-error') {
+      showToast('Erreur réseau PeerJS', true);
+    } else {
+      showToast('Erreur PeerJS: ' + err.type, true);
+    }
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+  });
+}
+
+function handleHostMessage(conn, msg) {
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'submit-announce') {
+    if (game && game.phase === 'tiebreak-announcing') {
+      hostReceiveTiebreakSubmission(conn.peer, msg);
+    } else {
+      hostReceiveSubmission(conn.peer, msg);
+    }
+    return;
+  }
+  if (msg.type === 'hello') {
+    const name = (msg.name || '').trim();
+    if (!name) {
+      try { conn.send({ type: 'kicked', reason: 'Pseudo vide' }); } catch(e) {}
+      setTimeout(() => { try { conn.close(); } catch(e) {} }, 200);
+      return;
+    }
+
+    // ===== Cas in-game : reconnect (même pseudo déconnecté) ou spectateur (nouveau pseudo) =====
+    if (online.status === 'in-game' && game) {
+      const existing = game.players.find(p => p.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        if (existing.connected) {
+          // Conflit : pseudo déjà actif
+          try { conn.send({ type: 'kicked', reason: 'Ce pseudo est déjà utilisé' }); } catch(e) {}
+          setTimeout(() => { try { conn.close(); } catch(e) {} }, 200);
+          return;
+        }
+        // Reconnexion : migration de l'ancien peerId vers le nouveau
+        const oldPeerId = existing.peerId;
+        delete online.guestConns[oldPeerId];
+        existing.peerId = conn.peer;
+        existing.connected = true;
+        online.guestConns[conn.peer] = conn;
+        // Migrer la main et la soumission éventuellement attachées à l'ancien peerId
+        if (game.hands && game.hands[oldPeerId]) {
+          game.hands[conn.peer] = game.hands[oldPeerId];
+          delete game.hands[oldPeerId];
+        }
+        if (game.submissions && game.submissions[oldPeerId]) {
+          game.submissions[conn.peer] = game.submissions[oldPeerId];
+          delete game.submissions[oldPeerId];
+        }
+        // Migrer aussi excludedThisBoard
+        if (game.excludedThisBoard) {
+          game.excludedThisBoard = game.excludedThisBoard.map(pid => pid === oldPeerId ? conn.peer : pid);
+        }
+        if (game.mancheStartScores && game.mancheStartScores[oldPeerId] !== undefined) {
+          game.mancheStartScores[conn.peer] = game.mancheStartScores[oldPeerId];
+          delete game.mancheStartScores[oldPeerId];
+        }
+        showToast(`${existing.name} s'est reconnecté`);
+        broadcastGameState();
+        renderGame();
+        return;
+      }
+      // Nouveau pseudo : spectateur jusqu'à la prochaine manche
+      const newPlayer = {
+        peerId: conn.peer,
+        name,
+        isHost: false,
+        score: 0,
+        connected: true,
+        inManche: false,
+        forfeitFromBoard: null,
+      };
+      game.players.push(newPlayer);
+      online.guestConns[conn.peer] = conn;
+      showToast(`${name} rejoint en spectateur`);
+      broadcastGameState();
+      renderGame();
+      return;
+    }
+
+    // ===== Cas lobby : ajout normal =====
+    const nameTaken = online.players.some(p => p.name.toLowerCase() === name.toLowerCase());
+    if (nameTaken) {
+      try { conn.send({ type: 'kicked', reason: 'Ce pseudo est déjà utilisé' }); } catch(e) {}
+      setTimeout(() => { try { conn.close(); } catch(e) {} }, 200);
+      return;
+    }
+    const guestPlayer = { peerId: conn.peer, name, isHost: false };
+    online.players.push(guestPlayer);
+    online.guestConns[conn.peer] = conn;
+    broadcastPlayerList();
+    renderLobby();
+    showToast(`${name} a rejoint`);
+  }
+}
+
+function handleGuestMessage(msg) {
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'lobby-update') {
+    online.players = msg.players || [];
+    if (online.status !== 'lobby' && online.status !== 'in-game') {
+      online.status = 'lobby';
+    }
+    if (online.status !== 'in-game') renderOnline();
+  } else if (msg.type === 'kicked') {
+    showToast(msg.reason || 'Vous avez été déconnecté', true);
+    stopTimer();
+    game = null;
+    selectedCards = [];
+    selectedCategory = null;
+    lastBoardKey = '';
+    onlineCleanup();
+    online.status = 'entry';
+    renderOnline();
+  } else if (msg.type === 'game-state') {
+    handleGameMessageGuest(msg);
+  }
+}
+
+function broadcastPlayerList() {
+  const msg = { type: 'lobby-update', players: online.players };
+  Object.values(online.guestConns).forEach(conn => {
+    if (conn && conn.open) {
+      try { conn.send(msg); } catch(e) { console.error('broadcast fail', e); }
+    }
+  });
+}
+
+function handleGuestDisconnect(peerId) {
+  // Cas lobby : on retire purement
+  if (online.status === 'lobby') {
+    const p = online.players.find(p => p.peerId === peerId);
+    online.players = online.players.filter(p => p.peerId !== peerId);
+    delete online.guestConns[peerId];
+    broadcastPlayerList();
+    renderLobby();
+    if (p) showToast(`${p.name} a quitté`);
+    return;
+  }
+  // Cas in-game : forfait si manche en cours, sinon juste marqué déconnecté
+  if (online.status === 'in-game' && game) {
+    const player = game.players.find(p => p.peerId === peerId);
+    delete online.guestConns[peerId];
+    if (!player) return;
+    player.connected = false;
+    const inActivePhase = ['flop','turn','river','announcing','board-reveal'].includes(game.phase);
+    if (player.inManche && player.forfeitFromBoard === null && inActivePhase) {
+      // S'ils ont déjà soumis pour le board courant OU si la phase reveal de ce board est en cours,
+      // ils ont "joué" ce board → forfait à partir du board suivant
+      let from = game.currentBoard;
+      const alreadyPlayedCurrent = (game.phase === 'board-reveal') ||
+        (game.phase === 'announcing' && game.submissions && game.submissions[player.peerId]);
+      if (alreadyPlayedCurrent) from = game.currentBoard + 1;
+      player.forfeitFromBoard = from;
+      if (from > 2) {
+        showToast(`${player.name} s'est déconnecté (manche déjà jouée)`);
+      } else {
+        showToast(`${player.name} s'est déconnecté — forfait à partir du Board ${from + 1}`);
+      }
+    } else {
+      showToast(`${player.name} s'est déconnecté`);
+    }
+    maybeResolveAfterDisconnect();
+    broadcastGameState();
+    renderGame();
+  }
+}
+
+function maybeResolveAfterDisconnect() {
+  if (!isHost() || !game) return;
+  if (game.phase !== 'announcing') return;
+  const eligible = game.players.filter(p => isEligibleForCurrentBoard(p));
+  if (eligible.length === 0) return;  // edge case : personne ne peut soumettre, on laisse en l'état
+  if (Object.keys(game.submissions).length >= eligible.length) {
+    resolveBoardReveal();
+  }
+}
+
+function onlineLeaveLobby() {
+  if (!confirm('Quitter la partie ?')) return;
+  onlineCleanup();
+  online.status = 'entry';
+  renderOnline();
+}
+
+function onlineCleanup() {
+  try {
+    if (online.peer) online.peer.destroy();
+  } catch(e) {}
+  online = {
+    peer: null,
+    role: null,
+    status: 'entry',
+    roomCode: null,
+    myName: '',
+    myPeerId: null,
+    hostConn: null,
+    guestConns: {},
+    players: [],
+  };
+}
+
+async function copyRoomCode() {
+  const code = online.roomCode || '';
+  if (!code) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(code);
+      showToast('✓ Code copié');
+    } else {
+      showToast('Code: ' + code);
+    }
+  } catch(e) {
+    showToast('Code: ' + code);
+  }
+}
+
+// ========== GAME (cartes + logique de poker + rendu + réseau) ==========
+
+const SUITS = ['c','d','h','s'];
+const SUIT_SYMBOLS = { c:'♣', d:'♦', h:'♥', s:'♠' };
+const SUIT_COLORS = { c:'black', d:'red', h:'red', s:'black' };
+const RANKS = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+const RANK_VALUE = Object.fromEntries(RANKS.map((r,i) => [r, i+2]));
+const RANK_DISPLAY = { '2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9', T:'10', J:'V', Q:'D', K:'R', A:'A' };
+
+const CATEGORIES = [
+  { id: 'highcard',  label: 'Hauteur',       multi: 1 },
+  { id: 'pair',      label: 'Paire',         multi: 1 },
+  { id: 'twopair',   label: 'Double paire',  multi: 1 },
+  { id: 'trips',     label: 'Brelan',        multi: 1 },
+  { id: 'straight',  label: 'Suite',         multi: 1 },
+  { id: 'flush',     label: 'Couleur',       multi: 1 },
+  { id: 'fullhouse', label: 'Full',          multi: 1 },
+  { id: 'quads',     label: 'Carré',         multi: 8 },
+  { id: 'sflush',    label: 'Quinte flush',  multi: 16 },
+  { id: 'royal',     label: 'Royale',        multi: 20 },
+];
+const CAT_RANK = Object.fromEntries(CATEGORIES.map((c,i) => [c.id, i]));
+const CAT_BY_ID = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
+
+function buildDeck() {
+  const d = [];
+  for (const r of RANKS) for (const s of SUITS) d.push(r + s);
+  return d;
+}
+function shuffleDeck(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function cardRankVal(c) { return RANK_VALUE[c[0]]; }
+function cardSuit(c) { return c[1]; }
+
+function evaluate5(cards) {
+  const ranks = cards.map(cardRankVal).sort((a,b) => b - a);
+  const suits = cards.map(cardSuit);
+  const isFlush = suits.every(s => s === suits[0]);
+  const counts = {};
+  for (const r of ranks) counts[r] = (counts[r]||0) + 1;
+  const countArr = Object.entries(counts).map(([r,c]) => ({r:parseInt(r), c})).sort((a,b) => b.c - a.c || b.r - a.r);
+  const uniq = [...new Set(ranks)].sort((a,b) => b - a);
+  let straightHigh = 0;
+  if (uniq.length === 5) {
+    if (uniq[0] - uniq[4] === 4) straightHigh = uniq[0];
+    if (uniq[0] === 14 && uniq[1] === 5 && uniq[2] === 4 && uniq[3] === 3 && uniq[4] === 2) straightHigh = 5;
+  }
+  const isStraight = straightHigh > 0;
+  if (isStraight && isFlush) {
+    if (straightHigh === 14) return { cat: 'royal', ranks: [14] };
+    return { cat: 'sflush', ranks: [straightHigh] };
+  }
+  if (countArr[0].c === 4) return { cat: 'quads', ranks: [countArr[0].r, countArr[1].r] };
+  if (countArr[0].c === 3 && countArr[1].c === 2) return { cat: 'fullhouse', ranks: [countArr[0].r, countArr[1].r] };
+  if (isFlush) return { cat: 'flush', ranks };
+  if (isStraight) return { cat: 'straight', ranks: [straightHigh] };
+  if (countArr[0].c === 3) return { cat: 'trips', ranks: [countArr[0].r, countArr[1].r, countArr[2].r] };
+  if (countArr[0].c === 2 && countArr[1].c === 2) return { cat: 'twopair', ranks: [countArr[0].r, countArr[1].r, countArr[2].r] };
+  if (countArr[0].c === 2) return { cat: 'pair', ranks: [countArr[0].r, countArr[1].r, countArr[2].r, countArr[3].r] };
+  return { cat: 'highcard', ranks };
+}
+
+function evaluateBest(cards) {
+  if (!cards || cards.length < 5) return null;
+  if (cards.length === 5) return evaluate5(cards);
+  let best = null;
+  const n = cards.length;
+  for (let a = 0; a < n-4; a++)
+    for (let b = a+1; b < n-3; b++)
+      for (let c = b+1; c < n-2; c++)
+        for (let d = c+1; d < n-1; d++)
+          for (let e = d+1; e < n; e++) {
+            const ev = evaluate5([cards[a],cards[b],cards[c],cards[d],cards[e]]);
+            if (!best || compareHands(ev, best) > 0) best = ev;
+          }
+  return best;
+}
+
+function compareHands(a, b) {
+  const ar = CAT_RANK[a.cat], br = CAT_RANK[b.cat];
+  if (ar !== br) return ar - br;
+  const len = Math.max(a.ranks.length, b.ranks.length);
+  for (let i = 0; i < len; i++) {
+    const av = a.ranks[i] || 0, bv = b.ranks[i] || 0;
+    if (av !== bv) return av - bv;
+  }
+  return 0;
+}
+
+function validateAnnounce(announcedCat, holeCards, boardCards) {
+  if (announcedCat === 'skip') return false;
+  if (!CAT_BY_ID[announcedCat]) return false;
+  const best = evaluateBest([...holeCards, ...boardCards]);
+  return !!best && CAT_RANK[best.cat] >= CAT_RANK[announcedCat];
+}
+
+// Trouve les 2 cartes optimales (parmi la main) qui satisfont l'annonce et maximisent la force
+function autoPickCards(holeCards, boardCards, announcedCat) {
+  if (announcedCat === 'skip') return [];
+  if (!CAT_BY_ID[announcedCat]) return null;
+  if (holeCards.length < 2) return null;
+  let best = null;
+  for (let i = 0; i < holeCards.length; i++) {
+    for (let j = i + 1; j < holeCards.length; j++) {
+      const cards = [holeCards[i], holeCards[j]];
+      const ev = evaluateBest([...cards, ...boardCards]);
+      if (ev && CAT_RANK[ev.cat] >= CAT_RANK[announcedCat]) {
+        if (!best || compareHands(ev, best.ev) > 0) best = { cards, ev };
+      }
+    }
+  }
+  return best ? best.cards : null;
+}
+
+// CDN pour les images Bicycle-style (deck Vector Playing Cards rendu PNG)
+const CARDS_CDN_BASE = 'https://cdn.jsdelivr.net/gh/hayeah/playing-cards-assets@master/png';
+const RANK_NAME = { '2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9','T':'10','J':'jack','Q':'queen','K':'king','A':'ace' };
+const SUIT_NAME = { c:'clubs', d:'diamonds', h:'hearts', s:'spades' };
+function cardImgURL(c) {
+  return `${CARDS_CDN_BASE}/${RANK_NAME[c[0]]}_of_${SUIT_NAME[c[1]]}.png`;
+}
+function cardBackURL() {
+  return `${CARDS_CDN_BASE}/back.png`;
+}
+
+let cardsPreloaded = false;
+function preloadCardImages() {
+  if (cardsPreloaded) return;
+  cardsPreloaded = true;
+  buildDeck().forEach(c => { const img = new Image(); img.src = cardImgURL(c); });
+  const back = new Image(); back.src = cardBackURL();
+}
+
+function renderCardHTML(c, opts) {
+  opts = opts || {};
+  if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
+  if (opts.faceDown) {
+    return `<div class="card back"><img class="card-img" src="${cardBackURL()}" onerror="this.style.display='none'" alt=""></div>`;
+  }
+  const r = c[0], s = c[1];
+  const color = SUIT_COLORS[s];
+  const rd = RANK_DISPLAY[r];
+  const sd = SUIT_SYMBOLS[s];
+  const sel = opts.selected ? ' selected' : '';
+  const sct = opts.selectable ? ' selectable' : '';
+  const dis = opts.disabled ? ' disabled' : '';
+  const anim = opts.animate ? ' anim-in' : '';
+  const styleAttr = (opts.animate && opts.delay) ? ` style="animation-delay:${opts.delay}ms;"` : '';
+  const dataAttr = opts.data ? ` data-card="${c}"` : '';
+  const isFace = (r === 'J' || r === 'Q' || r === 'K' || r === 'A');
+  const centerHTML = isFace
+    ? `<div class="card-center face">${rd}<span class="face-suit">${sd}</span></div>`
+    : `<div class="card-center">${sd}</div>`;
+  // CSS fallback en dessous + image Bicycle en overlay (cachée si onerror)
+  return `<div class="card ${color}${sel}${sct}${dis}${anim}"${styleAttr}${dataAttr}><div class="card-corner card-corner-tl"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div>${centerHTML}<div class="card-corner card-corner-br"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div><img class="card-img" src="${cardImgURL(c)}" onerror="this.style.display='none'" alt=""></div>`;
+}
+
+// ===== Game state =====
+
+let game = null;
+let selectedCards = [];
+let selectedCategory = null;
+let timerInterval = null;
+let lastBoardKey = '';
+let seenCards = new Set();  // cartes déjà animées (pour éviter de re-jouer l'anim à chaque render)
+let animOrderIdx = 0;       // index séquentiel pour staggered delay
+let myHandOrder = null;     // ordre visuel choisi par drag&drop (null = ordre par défaut)
+let myHandSortable = null;  // instance SortableJS
+
+function isHost() { return online.role === 'host'; }
+
+function onlineStartGame() {
+  if (!isHost()) return;
+  if (online.players.length < 2) {
+    showToast('Au moins 2 joueurs requis', true);
+    return;
+  }
+  const price = parseFloat(document.getElementById('lobby-price-input').value);
+  if (isNaN(price) || price <= 0) {
+    showToast('Prix invalide', true);
+    return;
+  }
+  const timerSec = parseInt(document.getElementById('lobby-timer-input').value || '0');
+  game = {
+    manche: 0,
+    players: online.players.map(p => ({
+      peerId: p.peerId,
+      name: p.name,
+      isHost: p.isHost,
+      score: 0,
+      connected: true,
+      inManche: false,         // sera fixé par startNewManche
+      forfeitFromBoard: null,  // null si pas de forfait
+    })),
+    dealerIdx: 0,
+    linePrice: price,
+    timer: { enabled: timerSec > 0, seconds: timerSec },
+    history: [],
+    phase: null,
+  };
+  startNewManche();
+}
+
+// ===== Distribution des cartes (52 = 18 community/burns + 34 hole) =====
+const CARDS_FOR_HOLE = 34;
+const CARDS_FOR_COMMUNITY = 18;
+
+function determineCardTarget(N) {
+  // Retourne le nombre de cartes "cible" par joueur ; 0 = trop de joueurs
+  if (N <= 6) return 6;   // ≤5 : tout le monde 6 ; 6 joueurs : 4 reçoivent 6, 2 reçoivent 5 (par round-robin)
+  if (N <= 8) return 4;
+  return 0;
+}
+
+function dealHoleCards(deck, orderedPlayers) {
+  // Mute deck.shift() en respectant la réserve community.
+  // orderedPlayers = liste ordonnée à partir du joueur après le donneur ; le donneur est en dernier.
+  const N = orderedPlayers.length;
+  const target = determineCardTarget(N);
+  if (target === 0) return null;
+  const hands = {};
+  orderedPlayers.forEach(p => hands[p.peerId] = []);
+  for (let round = 0; round < target; round++) {
+    for (const p of orderedPlayers) {
+      if (deck.length <= CARDS_FOR_COMMUNITY) return hands;  // réserve respectée
+      hands[p.peerId].push(deck.shift());
+    }
+  }
+  return hands;
+}
+
+function startNewManche() {
+  if (!isHost()) return;
+  seenCards.clear();
+  myHandOrder = null;
+
+  // Reset flags par-manche
+  game.players.forEach(p => {
+    p.inManche = false;
+    p.forfeitFromBoard = null;
+  });
+
+  // Promouvoir jusqu'à 8 connectés en actifs pour cette manche (les autres sont spectateurs)
+  const connected = game.players.filter(p => p.connected);
+  const activeCount = Math.min(connected.length, 8);
+  for (let i = 0; i < activeCount; i++) connected[i].inManche = true;
+
+  if (activeCount < 2) {
+    showToast('Au moins 2 joueurs connectés requis', true);
+    return;
+  }
+
+  // Avancer le donneur jusqu'au prochain inManche
+  const N = game.players.length;
+  if (game.manche === 0) {
+    // Première manche : donneur = 1er inManche
+    game.dealerIdx = game.players.findIndex(p => p.inManche);
+    if (game.dealerIdx < 0) game.dealerIdx = 0;
+  } else {
+    // Manche suivante : avancer en cercle jusqu'au prochain inManche
+    for (let off = 1; off <= N; off++) {
+      const idx = (game.dealerIdx + off) % N;
+      if (game.players[idx].inManche) { game.dealerIdx = idx; break; }
+    }
+  }
+
+  // Ordre de distribution : joueurs inManche dans l'ordre, en commençant après le donneur ; donneur servi en dernier
+  const inManche = game.players.filter(p => p.inManche);
+  const dealerInManIdx = inManche.findIndex(p => p.peerId === game.players[game.dealerIdx].peerId);
+  const dealOrder = [...inManche.slice(dealerInManIdx + 1), ...inManche.slice(0, dealerInManIdx + 1)];
+
+  // Shuffle + distribution avec réserve community
+  const deck = shuffleDeck(buildDeck());
+  const hands = dealHoleCards(deck, dealOrder);
+  if (!hands) {
+    showToast('Trop de joueurs actifs', true);
+    return;
+  }
+
+  // Community : burn + 9 flops + burn + 3 turns + burn + 3 rivers
+  const burn1 = deck.shift();
+  const flop = [
+    [deck.shift(), deck.shift(), deck.shift()],
+    [deck.shift(), deck.shift(), deck.shift()],
+    [deck.shift(), deck.shift(), deck.shift()],
+  ];
+  const burn2 = deck.shift();
+  const turns = [deck.shift(), deck.shift(), deck.shift()];
+  const burn3 = deck.shift();
+  const rivers = [deck.shift(), deck.shift(), deck.shift()];
+
+  // Pool pour boards de tie-break : cartes non utilisées + 3 brûlages, mélangées
+  const tiebreakPool = shuffleDeck([burn1, burn2, burn3, ...deck]);
+
+  game.manche += 1;
+  game.phase = 'flop';
+  game.currentBoard = 0;
+  game.rebidRound = 0;
+  game.excludedThisBoard = [];
+  game.hands = hands;
+  game.burns = [burn1, burn2, burn3];
+  game.pendingTurns = turns;
+  game.pendingRivers = rivers;
+  game.communityCards = [flop[0].slice(), flop[1].slice(), flop[2].slice()];
+  game.submissions = {};
+  game.boardResults = [null, null, null];
+  game.fullBoardWinner = null;
+  game.tiebreakPool = tiebreakPool;
+  game.currentTiebreakIdx = null;
+  game.tiebreakIteration = 0;
+  game.mancheStartScores = Object.fromEntries(game.players.map(p => [p.peerId, p.score]));
+
+  broadcastGameState();
+  renderGame();
+}
+
+function hostAdvancePhase() {
+  if (!isHost()) return;
+  if (game.phase === 'flop') {
+    for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingTurns[b]);
+    game.phase = 'turn';
+  } else if (game.phase === 'turn') {
+    for (let b = 0; b < 3; b++) game.communityCards[b].push(game.pendingRivers[b]);
+    game.phase = 'river';
+  } else if (game.phase === 'river') {
+    game.phase = 'announcing';
+    game.currentBoard = 0;
+    game.rebidRound = 0;
+    game.submissions = {};
+    game.excludedThisBoard = [];
+    startTimerIfEnabled();
+  } else if (game.phase === 'board-reveal') {
+    if (game.currentBoard < 2) {
+      game.currentBoard += 1;
+      game.phase = 'announcing';
+      game.rebidRound = 0;
+      game.submissions = {};
+      game.excludedThisBoard = [];
+      startTimerIfEnabled();
+    } else {
+      // Tous les 3 boards joués : check splits pendants
+      const pendingIdx = game.boardResults.findIndex(br => br && br.isSplit && !br.tieBreakResolved);
+      if (pendingIdx >= 0) {
+        enterTiebreakAnnouncing(pendingIdx);
+        return;
+      } else {
+        finalizeManche();
+      }
+    }
+  } else if (game.phase === 'tiebreak-reveal') {
+    advanceTiebreakOrFinalize();
+    return;
+  } else if (game.phase === 'manche-end') {
+    startNewManche();
+    return;
+  }
+  broadcastGameState();
+  renderGame();
+}
+
+function finalizeManche() {
+  const w0 = game.boardResults[0] && game.boardResults[0].winnerPeerId;
+  const w1 = game.boardResults[1] && game.boardResults[1].winnerPeerId;
+  const w2 = game.boardResults[2] && game.boardResults[2].winnerPeerId;
+  if (w0 && w0 === w1 && w1 === w2) {
+    game.fullBoardWinner = w0;
+    const winner = game.players.find(p => p.peerId === w0);
+    const losers = game.players.filter(p => p.inManche && p.peerId !== w0);
+    if (winner) {
+      winner.score += game.linePrice * losers.length;
+      losers.forEach(p => p.score -= game.linePrice);
+    }
+  }
+  game.phase = 'manche-end';
+  game.history.push({
+    manche: game.manche,
+    boardResults: game.boardResults,
+    fullBoardWinner: game.fullBoardWinner,
+    ts: Date.now(),
+  });
+  stopTimer();
+}
+
+function applyBoardScoring(winner, multi) {
+  const payment = game.linePrice * multi;
+  const winnerP = game.players.find(p => p.peerId === winner.peerId);
+  if (!winnerP) return;
+  // Perdants = tous les inManche (y compris ceux en forfait) sauf le gagnant
+  const losers = game.players.filter(p => p.inManche && p.peerId !== winner.peerId);
+  winnerP.score += payment * losers.length;
+  losers.forEach(p => p.score -= payment);
+}
+
+function catMulti(catId) {
+  const c = CAT_BY_ID[catId];
+  return c ? c.multi : 1;
+}
+
+// Paiement après résolution d'un tie-break :
+// - les autres splitters paient au multi de la catégorie
+// - les non-splitters (toujours inManche) paient au base ×1
+function applySplitScoring(splitters, winnerPeerId, category) {
+  const winnerP = game.players.find(p => p.peerId === winnerPeerId);
+  if (!winnerP) return;
+  const multi = catMulti(category);
+  const lp = game.linePrice;
+  const splitterIds = new Set(splitters.map(s => s.peerId));
+  let gain = 0;
+  splitters.forEach(s => {
+    if (s.peerId === winnerPeerId) return;
+    const p = game.players.find(pp => pp.peerId === s.peerId);
+    if (!p) return;
+    const pay = lp * multi;
+    p.score -= pay;
+    gain += pay;
+  });
+  game.players.forEach(p => {
+    if (!p.inManche) return;
+    if (splitterIds.has(p.peerId)) return;
+    if (p.peerId === winnerPeerId) return;
+    const pay = lp * 1;
+    p.score -= pay;
+    gain += pay;
+  });
+  winnerP.score += gain;
+}
+
+// ===== Tie-break avec re-annonce =====
+
+function enterTiebreakAnnouncing(idx) {
+  if (!isHost()) return;
+  const br = game.boardResults[idx];
+  if (!br || !br.isSplit || br.tieBreakResolved) return;
+
+  // Tirer 5 cartes du pool pour le nouveau board de tie-break
+  if (!game.tiebreakPool || game.tiebreakPool.length < 5) {
+    // Pool insuffisant — gagnant attribué par défaut (1er splitter encore en lice)
+    const winnerPeerId = br.splitters[0].peerId;
+    applySplitScoring(br.originalSplitters, winnerPeerId, br.winningCategory);
+    br.winnerPeerId = winnerPeerId;
+    br.tieBreakResolved = true;
+    showToast('Pool de cartes vide — gagnant par défaut', true);
+    game.phase = 'tiebreak-reveal';
+    broadcastGameState();
+    renderGame();
+    return;
+  }
+  const newBoard = [
+    game.tiebreakPool.shift(),
+    game.tiebreakPool.shift(),
+    game.tiebreakPool.shift(),
+    game.tiebreakPool.shift(),
+    game.tiebreakPool.shift(),
+  ];
+
+  game.currentTiebreakIdx = idx;
+  game.tbBoard = newBoard;
+  game.tbSubmissions = {};
+  game.tbExcluded = [];
+  game.tbIteration = (br.tiebreakIterations || []).length + 1;
+  game.phase = 'tiebreak-announcing';
+  broadcastGameState();
+  renderGame();
+}
+
+function isEligibleForCurrentTiebreak(p) {
+  if (!p) return false;
+  if (!p.connected) return false;
+  const br = game.boardResults[game.currentTiebreakIdx];
+  if (!br || !br.splitters) return false;
+  if (!br.splitters.some(s => s.peerId === p.peerId)) return false;
+  if ((game.tbExcluded || []).includes(p.peerId)) return false;
+  return true;
+}
+
+function hostReceiveTiebreakSubmission(fromPeerId, payload) {
+  if (!isHost()) return;
+  if (game.phase !== 'tiebreak-announcing') return;
+  const player = game.players.find(p => p.peerId === fromPeerId);
+  if (!player) return;
+  if (!isEligibleForCurrentTiebreak(player)) return;
+  if (game.tbSubmissions[fromPeerId]) return;
+  const { category, cards } = payload;
+  if (!category) return;
+  if (category === 'skip') {
+    // OK
+  } else {
+    if (!cards || cards.length !== 2 || cards[0] === cards[1]) return;
+    if (!CAT_BY_ID[category]) return;
+    const myCards = game.hands[fromPeerId] || [];
+    if (!cards.every(c => myCards.includes(c))) return;
+  }
+  game.tbSubmissions[fromPeerId] = { category, cards: cards || [] };
+
+  const br = game.boardResults[game.currentTiebreakIdx];
+  const eligible = br.splitters.filter(s => !(game.tbExcluded || []).includes(s.peerId));
+  if (Object.keys(game.tbSubmissions).length >= eligible.length) {
+    resolveTiebreakReveal();
+  } else {
+    broadcastGameState();
+    renderGame();
+  }
+}
+
+function resolveTiebreakReveal() {
+  if (!isHost()) return;
+  const br = game.boardResults[game.currentTiebreakIdx];
+  const tbBoard = game.tbBoard;
+
+  const results = [];
+  for (const [pid, sub] of Object.entries(game.tbSubmissions)) {
+    const isSkip = sub.category === 'skip';
+    const isTimeout = sub.category === '__timeout__';
+    const valid = !isSkip && !isTimeout && validateAnnounce(sub.category, sub.cards, tbBoard);
+    const strength = valid ? evaluateBest([...sub.cards, ...tbBoard]) : null;
+    results.push({
+      peerId: pid,
+      category: (isSkip || isTimeout) ? null : sub.category,
+      cards: sub.cards || [],
+      valid,
+      strength,
+      timeout: isTimeout,
+      skip: isSkip,
+    });
+  }
+  // Bluffeurs des itérations précédentes (déjà exclus du tie-break courant)
+  for (const pid of (game.tbExcluded || [])) {
+    if (!results.find(r => r.peerId === pid)) {
+      results.push({ peerId: pid, excluded: true, valid: false, cards: [], category: null });
+    }
+  }
+
+  // Mémoriser cette itération
+  if (!br.tiebreakIterations) br.tiebreakIterations = [];
+  br.tiebreakIterations.push({
+    iteration: game.tbIteration,
+    board: tbBoard.slice(),
+    results,
+  });
+
+  const valids = results.filter(r => r.valid);
+  if (valids.length === 0) {
+    // 0 valide : bluffeurs exclus, passifs (skip/timeout) restent éligibles
+    const blufferIds = results.filter(r => !r.skip && !r.timeout && !r.excluded && !r.valid).map(r => r.peerId);
+    game.tbExcluded = [...(game.tbExcluded || []), ...blufferIds];
+    const remaining = br.splitters.filter(s => !game.tbExcluded.includes(s.peerId));
+    if (remaining.length === 0) {
+      // Tous bluffés → gagnant arbitraire (1er splitter d'origine)
+      const winnerPeerId = br.originalSplitters[0].peerId;
+      applySplitScoring(br.originalSplitters, winnerPeerId, br.winningCategory);
+      br.winnerPeerId = winnerPeerId;
+      br.tieBreakResolved = true;
+      showToast('Tous les splitters ont bluffé — gagnant par défaut', true);
+      game.phase = 'tiebreak-reveal';
+    } else if (remaining.length === 1) {
+      // Un seul reste → gagne par défaut
+      const winnerPeerId = remaining[0].peerId;
+      applySplitScoring(br.originalSplitters, winnerPeerId, br.winningCategory);
+      br.winnerPeerId = winnerPeerId;
+      br.tieBreakResolved = true;
+      br.splitters = remaining;
+      showToast(`${(game.players.find(p => p.peerId === winnerPeerId)||{}).name} gagne par défaut`, false);
+      game.phase = 'tiebreak-reveal';
+    } else {
+      // Reste plusieurs splitters non-bluffeurs : ré-itération avec eux
+      br.splitters = remaining;
+      enterTiebreakAnnouncing(game.currentTiebreakIdx);
+      return;
+    }
+  } else {
+    valids.sort((a, b) => {
+      const ar = CAT_RANK[a.category], br2 = CAT_RANK[b.category];
+      if (ar !== br2) return br2 - ar;
+      return compareHands(b.strength, a.strength);
+    });
+    const top = valids[0];
+    const tied = valids.filter(v =>
+      CAT_RANK[v.category] === CAT_RANK[top.category] &&
+      compareHands(v.strength, top.strength) === 0
+    );
+    if (tied.length === 1) {
+      // Gagnant !
+      applySplitScoring(br.originalSplitters, top.peerId, br.winningCategory);
+      br.winnerPeerId = top.peerId;
+      br.tieBreakResolved = true;
+      showToast(`Gagnant du Board ${br.board + 1} : ${(game.players.find(p => p.peerId === top.peerId)||{}).name}`, false);
+      game.phase = 'tiebreak-reveal';
+    } else {
+      // Encore tied → re-itération avec les tied
+      br.splitters = tied.map(t => ({ peerId: t.peerId }));
+      enterTiebreakAnnouncing(game.currentTiebreakIdx);
+      return;
+    }
+  }
+  broadcastGameState();
+  renderGame();
+}
+
+function advanceTiebreakOrFinalize() {
+  const nextIdx = game.boardResults.findIndex(br => br && br.isSplit && !br.tieBreakResolved);
+  if (nextIdx >= 0) {
+    enterTiebreakAnnouncing(nextIdx);
+  } else {
+    finalizeManche();
+    broadcastGameState();
+    renderGame();
+  }
+}
+
+function isEligibleForCurrentBoard(p) {
+  if (!p.connected) return false;
+  if (!p.inManche) return false;
+  if (game.excludedThisBoard.includes(p.peerId)) return false;
+  if (p.forfeitFromBoard !== null && p.forfeitFromBoard <= game.currentBoard) return false;
+  return true;
+}
+
+function hostReceiveSubmission(fromPeerId, payload) {
+  if (!isHost()) return;
+  if (game.phase !== 'announcing') return;
+  const player = game.players.find(p => p.peerId === fromPeerId);
+  if (!player) return;
+  if (!isEligibleForCurrentBoard(player)) return;
+  if (game.submissions[fromPeerId]) return;
+  const { category, cards } = payload;
+  if (!category) return;
+  if (category === 'skip') {
+    // Skip : pas de cartes nécessaires
+  } else {
+    if (!cards || cards.length !== 2 || cards[0] === cards[1]) return;
+    if (!CAT_BY_ID[category]) return;
+    const myCards = game.hands[fromPeerId] || [];
+    if (!cards.every(c => myCards.includes(c))) return;
+  }
+
+  game.submissions[fromPeerId] = { category, cards: cards || [] };
+
+  const eligible = game.players.filter(p => isEligibleForCurrentBoard(p));
+  if (Object.keys(game.submissions).length >= eligible.length) {
+    resolveBoardReveal();
+  } else {
+    broadcastGameState();
+    renderGame();
+  }
+}
+
+function resolveBoardReveal() {
+  stopTimer();
+  const boardIdx = game.currentBoard;
+  const boardCards = game.communityCards[boardIdx];
+
+  const results = [];
+  for (const [pid, sub] of Object.entries(game.submissions)) {
+    const isSkip = sub.category === 'skip';
+    const isTimeout = sub.category === '__timeout__';
+    const valid = !isSkip && !isTimeout && validateAnnounce(sub.category, sub.cards, boardCards);
+    const strength = valid ? evaluateBest([...sub.cards, ...boardCards]) : null;
+    results.push({
+      peerId: pid,
+      category: (isSkip || isTimeout) ? null : sub.category,
+      cards: sub.cards || [],
+      valid,
+      strength,
+      timeout: isTimeout,
+      skip: isSkip,
+    });
+  }
+  for (const pid of game.excludedThisBoard) {
+    if (!results.find(r => r.peerId === pid)) {
+      results.push({ peerId: pid, excluded: true, valid: false, cards: [], category: null });
+    }
+  }
+  // Joueurs en forfait pour ce board (déconnectés)
+  for (const p of game.players) {
+    if (p.inManche && p.forfeitFromBoard !== null && p.forfeitFromBoard <= boardIdx && !results.find(r => r.peerId === p.peerId)) {
+      results.push({ peerId: p.peerId, forfeit: true, valid: false, cards: [], category: null });
+    }
+  }
+
+  const valids = results.filter(r => r.valid);
+  let winner = null;
+  let splitters = null;
+  if (valids.length > 0) {
+    valids.sort((a, b) => {
+      const ar = CAT_RANK[a.category], br = CAT_RANK[b.category];
+      if (ar !== br) return br - ar;
+      return compareHands(b.strength, a.strength);
+    });
+    const top = valids[0];
+    // Détection de split : mêmes catégorie + force réelle identique au top
+    const tied = valids.filter(v =>
+      CAT_RANK[v.category] === CAT_RANK[top.category] &&
+      compareHands(v.strength, top.strength) === 0
+    );
+    if (tied.length >= 2) {
+      splitters = tied.map(t => ({ peerId: t.peerId, category: t.category, cards: t.cards, strength: t.strength }));
+    } else {
+      winner = top;
+    }
+  }
+
+  if (splitters) {
+    // SPLIT : on ne paie pas maintenant, on résoudra en tie-break après les 3 boards
+    // Les splitters re-annonceront avec leur main complète sur un nouveau board.
+    game.boardResults[boardIdx] = {
+      board: boardIdx,
+      results,
+      winnerPeerId: null,
+      winningCategory: splitters[0].category,  // catégorie d'origine (sert au multi)
+      rebidRound: game.rebidRound,
+      isSplit: true,
+      // originalSplitters = ceux qui étaient à égalité au reveal de ce board (figé)
+      originalSplitters: splitters.map(s => ({ peerId: s.peerId, category: s.category, cards: s.cards })),
+      // splitters = encore en lice pendant le tie-break (peut se réduire à chaque itération)
+      splitters: splitters.map(s => ({ peerId: s.peerId })),
+      tieBreakResolved: false,
+      tiebreakIterations: [],
+    };
+    game.phase = 'board-reveal';
+    showToast(`Split détecté sur le Board ${boardIdx + 1} — tie-break à la fin de la manche`, false);
+    broadcastGameState();
+    renderGame();
+  } else if (winner) {
+    applyBoardScoring(winner, CAT_BY_ID[winner.category].multi);
+    game.boardResults[boardIdx] = {
+      board: boardIdx,
+      results,
+      winnerPeerId: winner.peerId,
+      winningCategory: winner.category,
+      rebidRound: game.rebidRound,
+    };
+    game.phase = 'board-reveal';
+    broadcastGameState();
+    renderGame();
+  } else {
+    // Bluffeurs : annonce active invalide → exclus définitivement du board (jamais de rebid)
+    // Passifs (skip + timeout) : pas de réponse → restent éligibles pour rebid si la phase rouvre
+    const blufferIds = results.filter(r => !r.skip && !r.timeout && !r.excluded && !r.forfeit && !r.valid).map(r => r.peerId);
+    game.excludedThisBoard = [...game.excludedThisBoard, ...blufferIds];
+    const stillCanRebid = game.players.filter(p => isEligibleForCurrentBoard(p));
+    if (stillCanRebid.length === 0) {
+      // Personne ne peut rebid → board abandonné, pas de gagnant, pas de paiement
+      game.boardResults[boardIdx] = {
+        board: boardIdx,
+        results,
+        winnerPeerId: null,
+        winningCategory: null,
+        rebidRound: game.rebidRound,
+        abandoned: true,
+      };
+      game.phase = 'board-reveal';
+      showToast('Board abandonné — aucun gagnant possible', true);
+      broadcastGameState();
+      renderGame();
+    } else {
+      game.rebidRound += 1;
+      game.submissions = {};
+      showToast('Aucune annonce valide — nouveau tour', true);
+      broadcastGameState();
+      renderGame();
+      startTimerIfEnabled();
+    }
+  }
+}
+
+// ===== Timer =====
+
+function startTimerIfEnabled() {
+  stopTimer();
+  if (!isHost()) return;
+  if (!game.timer || !game.timer.enabled) return;
+  game.timerDeadline = Date.now() + game.timer.seconds * 1000;
+  game.timerRemain = game.timer.seconds;
+  broadcastGameState();
+  timerInterval = setInterval(() => {
+    if (!game) return;
+    const remain = Math.max(0, Math.ceil((game.timerDeadline - Date.now()) / 1000));
+    const changed = remain !== game.timerRemain;
+    game.timerRemain = remain;
+    if (changed) {
+      broadcastGameState();
+      renderGame();
+    }
+    if (remain <= 0) {
+      stopTimer();
+      const eligible = game.players.filter(p => isEligibleForCurrentBoard(p));
+      eligible.forEach(p => {
+        if (!game.submissions[p.peerId]) {
+          game.submissions[p.peerId] = { category: '__timeout__', cards: [] };
+        }
+      });
+      resolveBoardReveal();
+    }
+  }, 250);
+}
+
+function stopTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  if (game) { game.timerDeadline = null; }
+}
+
+// ===== Réseau =====
+
+function gameSnapshotFor(forPeerId) {
+  if (!game) return null;
+  return {
+    type: 'game-state',
+    manche: game.manche,
+    phase: game.phase,
+    currentBoard: game.currentBoard,
+    rebidRound: game.rebidRound,
+    excludedThisBoard: game.excludedThisBoard,
+    communityCards: game.communityCards,
+    myHand: game.hands ? (game.hands[forPeerId] || []) : [],
+    players: game.players,
+    dealerIdx: game.dealerIdx,
+    linePrice: game.linePrice,
+    timer: game.timer,
+    timerRemain: game.timerRemain,
+    submissionsStatus: maskSubmissions(),
+    submissionsFull: game.phase === 'board-reveal' ? game.submissions : null,
+    boardResults: game.boardResults,
+    fullBoardWinner: game.fullBoardWinner,
+    mancheStartScores: game.mancheStartScores,
+    currentTiebreakIdx: game.currentTiebreakIdx,
+    tbBoard: game.tbBoard,
+    tbSubmissionsStatus: maskTbSubmissions(),
+    tbSubmissionsFull: game.phase === 'tiebreak-reveal' ? game.tbSubmissions : null,
+    tbExcluded: game.tbExcluded,
+    tbIteration: game.tbIteration,
+  };
+}
+
+function maskTbSubmissions() {
+  if (!game || !game.tbSubmissions) return {};
+  const m = {};
+  for (const pid of Object.keys(game.tbSubmissions)) m[pid] = true;
+  return m;
+}
+
+function maskSubmissions() {
+  if (!game || !game.submissions) return {};
+  const m = {};
+  for (const pid of Object.keys(game.submissions)) m[pid] = true;
+  return m;
+}
+
+function broadcastGameState() {
+  if (!isHost() || !game) return;
+  for (const p of game.players) {
+    if (p.peerId === online.myPeerId) continue;
+    const snap = gameSnapshotFor(p.peerId);
+    const conn = online.guestConns[p.peerId];
+    if (conn && conn.open) {
+      try { conn.send(snap); } catch(e) { console.error('broadcast game-state fail', e); }
+    }
+  }
+  if (online.status !== 'in-game') {
+    online.status = 'in-game';
+    renderOnline();
+  }
+}
+
+function handleGameMessageGuest(msg) {
+  const prevManche = game ? game.manche : -1;
+  if (msg.manche !== prevManche) {
+    seenCards.clear();
+    myHandOrder = null;
+  }
+  game = {
+    manche: msg.manche,
+    phase: msg.phase,
+    currentBoard: msg.currentBoard,
+    rebidRound: msg.rebidRound,
+    excludedThisBoard: msg.excludedThisBoard || [],
+    communityCards: msg.communityCards || [[],[],[]],
+    hands: { [online.myPeerId]: msg.myHand || [] },
+    players: msg.players || [],
+    dealerIdx: msg.dealerIdx || 0,
+    linePrice: msg.linePrice || 0,
+    timer: msg.timer || { enabled: false, seconds: 0 },
+    timerRemain: msg.timerRemain,
+    submissions: msg.submissionsFull || {},
+    submissionsStatus: msg.submissionsStatus || {},
+    boardResults: msg.boardResults || [null,null,null],
+    fullBoardWinner: msg.fullBoardWinner,
+    mancheStartScores: msg.mancheStartScores || {},
+    currentTiebreakIdx: msg.currentTiebreakIdx,
+    tbBoard: msg.tbBoard,
+    tbSubmissions: msg.tbSubmissionsFull || {},
+    tbSubmissionsStatus: msg.tbSubmissionsStatus || {},
+    tbExcluded: msg.tbExcluded || [],
+    tbIteration: msg.tbIteration || 0,
+  };
+  if (online.status !== 'in-game') {
+    online.status = 'in-game';
+    renderOnline();
+  } else {
+    renderGame();
+  }
+}
+
+// ===== Render =====
+
+function maybeResetSelection() {
+  if (!game) return;
+  const tbPart = game.phase && game.phase.startsWith('tiebreak') ? `-tb${game.currentTiebreakIdx}-i${game.tbIteration}` : '';
+  const key = `m${game.manche}-b${game.currentBoard}-r${game.rebidRound}-${game.phase}${tbPart}`;
+  if (key !== lastBoardKey) {
+    if (game.phase === 'announcing' || game.phase === 'tiebreak-announcing') {
+      selectedCards = [];
+      selectedCategory = 'highcard';
+    }
+    lastBoardKey = key;
+  }
+}
+
+function meAsPlayer() {
+  if (!game || !online.myPeerId) return null;
+  return game.players.find(p => p.peerId === online.myPeerId) || null;
+}
+function meIsSpectator() {
+  const me = meAsPlayer();
+  return !me || !me.inManche;
+}
+function meIsForfeit() {
+  const me = meAsPlayer();
+  return !!(me && me.forfeitFromBoard !== null && me.forfeitFromBoard <= (game.currentBoard || 0));
+}
+
+function renderGame() {
+  if (!game) return;
+  maybeResetSelection();
+  animOrderIdx = 0;  // reset stagger pour cette frame
+
+  document.getElementById('game-section-title').textContent = `Manche ${game.manche}`;
+  document.getElementById('game-code-value').textContent = online.roomCode || '----';
+
+  const phase = game.phase;
+  const dealer = game.players[game.dealerIdx];
+  const dealerLabel = dealer ? `Donneur : <strong>${escapeHTML(dealer.name)}</strong>` : '';
+  let statusText = '';
+  if (phase === 'flop') statusText = `${dealerLabel} · Flop révélé`;
+  else if (phase === 'turn') statusText = `${dealerLabel} · Turn révélé`;
+  else if (phase === 'river') statusText = `${dealerLabel} · River révélée — place aux annonces`;
+  else if (phase === 'announcing') statusText = `${dealerLabel} · Board ${game.currentBoard + 1}${game.rebidRound > 0 ? ` (tour ${game.rebidRound + 1})` : ''}`;
+  else if (phase === 'board-reveal') statusText = `${dealerLabel} · Résultat Board ${game.currentBoard + 1}`;
+  else if (phase === 'tiebreak-announcing') {
+    const br = game.boardResults[game.currentTiebreakIdx];
+    statusText = `⚡ Tie-break Board ${br ? br.board + 1 : '?'} — annonces · itération ${game.tbIteration || 1}`;
+  }
+  else if (phase === 'tiebreak-reveal') {
+    const br = game.boardResults[game.currentTiebreakIdx];
+    statusText = `⚡ Tie-break Board ${br ? br.board + 1 : '?'} — résultat`;
+  }
+  else if (phase === 'manche-end') statusText = `Fin de la manche ${game.manche}`;
+  document.getElementById('game-status-text').innerHTML = statusText;
+
+  const timerWrap = document.getElementById('game-timer-wrap');
+  const timerPill = document.getElementById('game-timer-pill');
+  if (game.timer && game.timer.enabled && phase === 'announcing' && typeof game.timerRemain === 'number') {
+    timerWrap.style.display = 'block';
+    timerPill.textContent = `${game.timerRemain}s`;
+    timerPill.classList.toggle('warning', game.timerRemain <= 5);
+  } else {
+    timerWrap.style.display = 'none';
+  }
+
+  // Sidebar desktop (et contenu du modal stats mobile si ouvert)
+  renderGameStats(document.getElementById('game-sidebar'));
+  if (document.getElementById('stats-modal').classList.contains('show')) {
+    renderGameStats(document.getElementById('stats-modal-content'));
+  }
+
+  const scoresRow = document.getElementById('game-scores-row');
+  scoresRow.innerHTML = '';
+  game.players.forEach((p, idx) => {
+    const isDealerP = idx === game.dealerIdx;
+    const score = p.score || 0;
+    const cls = score > 0.001 ? 'positive' : (score < -0.001 ? 'negative' : 'zero');
+    const chip = document.createElement('div');
+    let extraCls = '';
+    let tag = '';
+    if (!p.connected) { extraCls = ' disconnected'; tag = '<span class="tiny-tag dc">DC</span>'; }
+    else if (!p.inManche) { extraCls = ' spectator'; tag = '<span class="tiny-tag sp">Spect</span>'; }
+    else if (p.forfeitFromBoard !== null) { extraCls = ' forfeit'; tag = '<span class="tiny-tag ff">Forfait</span>'; }
+    chip.className = `game-score-chip${isDealerP && p.inManche ? ' dealer' : ''}${extraCls}`;
+    chip.innerHTML = `<span class="name">${escapeHTML(p.name)}${isDealerP && p.inManche ? ' ♦' : ''}${tag}</span><span class="val ${cls}">${fmtMoney(score)}</span>`;
+    scoresRow.appendChild(chip);
+  });
+
+  const rebidAlert = document.getElementById('game-rebid-alert');
+  if (phase === 'announcing' && game.rebidRound > 0) {
+    rebidAlert.style.display = 'block';
+    rebidAlert.textContent = `⟳ Nouveau tour d'annonce (tentative ${game.rebidRound + 1})${game.excludedThisBoard.length > 0 ? ` — ${game.excludedThisBoard.length} joueur(s) hors-jeu pour ce board` : ''}`;
+  } else {
+    rebidAlert.style.display = 'none';
+  }
+
+  const fbAlert = document.getElementById('game-fullboard-alert');
+  if (phase === 'manche-end' && game.fullBoardWinner) {
+    const w = game.players.find(p => p.peerId === game.fullBoardWinner);
+    fbAlert.style.display = 'block';
+    fbAlert.innerHTML = `★ <strong>FULL BOARD</strong> pour ${escapeHTML(w ? w.name : '?')} ! Bonus de ${game.linePrice.toFixed(2)}€ par perdant.`;
+  } else {
+    fbAlert.style.display = 'none';
+  }
+
+  // Boards
+  const boardsContainer = document.getElementById('game-boards-container');
+  boardsContainer.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const cards = game.communityCards[i] || [];
+    const isCurrent = (phase === 'announcing' || phase === 'board-reveal') && game.currentBoard === i;
+    const result = game.boardResults[i];
+    const winnerName = result ? (game.players.find(p => p.peerId === result.winnerPeerId) || {}).name : null;
+    const block = document.createElement('div');
+    block.className = `game-board${isCurrent ? ' current' : ''}${result ? ' done' : ''}`;
+    let statusHTML = '';
+    if (result) {
+      const catLabel = CAT_BY_ID[result.winningCategory] ? CAT_BY_ID[result.winningCategory].label : '';
+      if (result.abandoned) {
+        statusHTML = `<div class="game-board-status">Abandonné</div>`;
+      } else if (result.isSplit && !result.tieBreakResolved) {
+        statusHTML = `<div class="game-board-status" style="color:var(--accent); font-weight:700;">⚡ SPLIT — tie-break à venir</div>`;
+      } else if (result.isSplit && result.tieBreakResolved) {
+        statusHTML = `<div class="game-board-status win">✓ ${escapeHTML(winnerName||'?')} · ${catLabel} (tie-break)</div>`;
+      } else {
+        statusHTML = `<div class="game-board-status win">✓ ${escapeHTML(winnerName||'?')} (${catLabel})</div>`;
+      }
+    } else if (isCurrent) {
+      statusHTML = `<div class="game-board-status">En cours</div>`;
+    }
+    let cardsHTML = '<div class="game-board-cards">';
+    for (let k = 0; k < 5; k++) {
+      const cc = cards[k];
+      if (cc) {
+        const animate = !seenCards.has(cc);
+        if (animate) seenCards.add(cc);
+        const delay = animate ? (animOrderIdx++) * 70 : 0;
+        cardsHTML += renderCardHTML(cc, { animate, delay });
+      } else {
+        cardsHTML += renderCardHTML(null, { placeholder: true });
+      }
+    }
+    cardsHTML += '</div>';
+    block.innerHTML = `
+      <div class="game-board-header">
+        <div class="game-board-title">Board ${i+1}${isCurrent ? '<span class="b-current">en cours</span>' : ''}</div>
+        ${statusHTML}
+      </div>
+      ${cardsHTML}
+    `;
+    boardsContainer.appendChild(block);
+  }
+
+  const myHandZone = document.getElementById('my-hand-zone');
+  const announcePanel = document.getElementById('announce-panel');
+  const revealZone = document.getElementById('reveal-zone');
+  const mancheRecap = document.getElementById('manche-recap-zone');
+  const hostActions = document.getElementById('game-host-actions');
+  myHandZone.style.display = 'none';
+  announcePanel.style.display = 'none';
+  revealZone.style.display = 'none';
+  mancheRecap.style.display = 'none';
+  hostActions.style.display = 'none';
+  hostActions.innerHTML = '';
+
+  const myHand = (game.hands && game.hands[online.myPeerId]) || [];
+
+  if (phase === 'flop' || phase === 'turn' || phase === 'river') {
+    if (myHand.length > 0) {
+      myHandZone.style.display = 'block';
+      renderMyHand(false);
+      let hint;
+      if (meIsForfeit()) hint = 'Forfait — tu paies les boards manqués.';
+      else if (isHost()) hint = 'Clique sur "Suivant" pour révéler la prochaine carte.';
+      else hint = 'En attente de la suite par l\'hôte...';
+      document.getElementById('my-hand-hint').textContent = hint;
+    }
+    if (isHost()) {
+      hostActions.style.display = 'block';
+      let btnLabel = '';
+      if (phase === 'flop') btnLabel = '→ Brûler + Turn';
+      else if (phase === 'turn') btnLabel = '→ Brûler + River';
+      else if (phase === 'river') btnLabel = '→ Passer aux annonces';
+      hostActions.innerHTML = `<button class="btn btn-validate" id="host-advance-btn">${btnLabel}</button>`;
+      document.getElementById('host-advance-btn').addEventListener('click', hostAdvancePhase);
+    }
+  } else if (phase === 'announcing') {
+    const meSpec = meIsSpectator();
+    const meForfeit = meIsForfeit();
+    const meBluffExcluded = game.excludedThisBoard.includes(online.myPeerId);
+    const meCantPlay = meSpec || meForfeit || meBluffExcluded;
+    const alreadySubmitted = !!(game.submissions && game.submissions[online.myPeerId]) || !!(game.submissionsStatus && game.submissionsStatus[online.myPeerId]);
+
+    if (myHand.length > 0) {
+      myHandZone.style.display = 'block';
+      renderMyHand(!meCantPlay && !alreadySubmitted);
+      let hint = '';
+      if (meSpec) hint = 'Spectateur — tu joueras à la prochaine manche.';
+      else if (meForfeit) hint = 'Forfait — tu paies les boards manqués.';
+      else if (meBluffExcluded) hint = 'Tu es éliminé de ce board (annonce précédente invalide).';
+      else if (alreadySubmitted) hint = '✓ Annonce envoyée — en attente des autres...';
+      else hint = `Choisis 2 cartes pour le Board ${game.currentBoard + 1}.`;
+      document.getElementById('my-hand-hint').textContent = hint;
+    }
+
+    announcePanel.style.display = 'block';
+    const cats = document.getElementById('announce-cats');
+    const quick = document.getElementById('announce-quick');
+    const confirmBtn = document.getElementById('announce-confirm-btn');
+    function clearAnnounce() {
+      cats.innerHTML = '';
+      quick.innerHTML = '';
+      confirmBtn.style.display = 'none';
+    }
+    if (meSpec) {
+      document.getElementById('announce-panel-title').textContent = 'Tu es spectateur — la manche se joue sans toi';
+      clearAnnounce();
+    } else if (meForfeit) {
+      document.getElementById('announce-panel-title').textContent = 'Tu as forfait pour cette manche';
+      clearAnnounce();
+    } else if (meBluffExcluded) {
+      document.getElementById('announce-panel-title').textContent = 'Tu es éliminé pour ce board (bluff précédent)';
+      clearAnnounce();
+    } else if (alreadySubmitted) {
+      document.getElementById('announce-panel-title').textContent = '✓ Annonce envoyée';
+      clearAnnounce();
+    } else {
+      document.getElementById('announce-panel-title').textContent = `Ton annonce pour le Board ${game.currentBoard + 1}`;
+      renderAnnounceCats();
+      renderAnnounceQuick();
+      renderConfirmBtn();
+    }
+    renderSubmitStatus();
+  } else if (phase === 'board-reveal') {
+    if (myHand.length > 0) {
+      myHandZone.style.display = 'block';
+      renderMyHand(false);
+      document.getElementById('my-hand-hint').textContent = '—';
+    }
+    revealZone.style.display = 'block';
+    renderRevealList();
+    if (isHost()) {
+      hostActions.style.display = 'block';
+      const btnLabel = game.currentBoard < 2 ? `→ Board ${game.currentBoard + 2}` : '→ Fin de la manche';
+      hostActions.innerHTML = `<button class="btn btn-validate" id="host-advance-btn">${btnLabel}</button>`;
+      document.getElementById('host-advance-btn').addEventListener('click', hostAdvancePhase);
+    }
+  } else if (phase === 'tiebreak-announcing') {
+    const br = game.boardResults[game.currentTiebreakIdx];
+    const meIsSplitter = br && br.splitters && br.splitters.some(s => s.peerId === online.myPeerId);
+    const meTbExcluded = (game.tbExcluded || []).includes(online.myPeerId);
+    const alreadySubmitted = !!(game.tbSubmissions && game.tbSubmissions[online.myPeerId]) || !!(game.tbSubmissionsStatus && game.tbSubmissionsStatus[online.myPeerId]);
+
+    if (myHand.length > 0) {
+      myHandZone.style.display = 'block';
+      renderMyHand(meIsSplitter && !alreadySubmitted && !meTbExcluded);
+      let hint;
+      if (!meIsSplitter) hint = 'Tu n\'es pas dans ce tie-break — observation.';
+      else if (meTbExcluded) hint = 'Tu as bluffé sur le tie-break — éliminé.';
+      else if (alreadySubmitted) hint = '✓ Annonce envoyée — en attente des autres splitters...';
+      else hint = `Choisis 2 cartes pour le tie-break (itération ${game.tbIteration}).`;
+      document.getElementById('my-hand-hint').textContent = hint;
+    }
+
+    announcePanel.style.display = 'block';
+    const cats = document.getElementById('announce-cats');
+    const quick = document.getElementById('announce-quick');
+    const confirmBtn = document.getElementById('announce-confirm-btn');
+    function clearTbAnnounce() { cats.innerHTML = ''; quick.innerHTML = ''; confirmBtn.style.display = 'none'; }
+    if (!meIsSplitter) {
+      document.getElementById('announce-panel-title').textContent = 'Tu n\'es pas dans ce tie-break';
+      clearTbAnnounce();
+    } else if (meTbExcluded) {
+      document.getElementById('announce-panel-title').textContent = 'Tu es éliminé du tie-break (bluff)';
+      clearTbAnnounce();
+    } else if (alreadySubmitted) {
+      document.getElementById('announce-panel-title').textContent = '✓ Annonce envoyée';
+      clearTbAnnounce();
+    } else {
+      document.getElementById('announce-panel-title').textContent = `Ton annonce — Tie-break Board ${br.board + 1} (itération ${game.tbIteration})`;
+      renderAnnounceCats();
+      renderAnnounceQuick();
+      renderConfirmBtn();
+    }
+    renderSubmitStatusTiebreak();
+
+    revealZone.style.display = 'block';
+    renderTiebreakUI();
+  } else if (phase === 'tiebreak-reveal') {
+    if (myHand.length > 0) {
+      myHandZone.style.display = 'block';
+      renderMyHand(false);
+      document.getElementById('my-hand-hint').textContent = '—';
+    }
+    revealZone.style.display = 'block';
+    renderTiebreakUI();
+    if (isHost()) {
+      hostActions.style.display = 'block';
+      const idx = game.currentTiebreakIdx;
+      const nextIdx = game.boardResults.findIndex((b, i) => i > idx && b && b.isSplit && !b.tieBreakResolved);
+      const btnLabel = nextIdx >= 0 ? '→ Tie-break suivant' : '→ Fin de manche';
+      hostActions.innerHTML = `<button class="btn btn-validate" id="host-advance-btn">${btnLabel}</button>`;
+      document.getElementById('host-advance-btn').addEventListener('click', hostAdvancePhase);
+    }
+  } else if (phase === 'manche-end') {
+    mancheRecap.style.display = 'block';
+    renderMancheRecap();
+    if (isHost()) {
+      hostActions.style.display = 'block';
+      hostActions.innerHTML = `<button class="btn btn-validate" id="host-advance-btn">→ Manche suivante</button>`;
+      document.getElementById('host-advance-btn').addEventListener('click', hostAdvancePhase);
+    }
+  }
+}
+
+function renderTiebreakUI() {
+  const list = document.getElementById('reveal-list');
+  list.innerHTML = '';
+  const idx = game.currentTiebreakIdx;
+  const br = game.boardResults[idx];
+  if (!br) return;
+
+  const catLabel = CAT_BY_ID[br.winningCategory] ? CAT_BY_ID[br.winningCategory].label : '?';
+  let html = `<div style="font-weight:700; font-size:15px; margin-bottom:12px;">⚡ Tie-break du Board ${br.board + 1} <span style="color:var(--text-dim); font-weight:400;">(catégorie d'origine : ${catLabel}, ×${catMulti(br.winningCategory)})</span></div>`;
+
+  // Splitters d'origine (avec leurs cartes du board original)
+  html += '<div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">Splitters (cartes annoncées sur Board ' + (br.board + 1) + ') :</div>';
+  (br.originalSplitters || []).forEach(s => {
+    const p = game.players.find(pp => pp.peerId === s.peerId);
+    const name = p ? p.name : '?';
+    const stillIn = br.splitters && br.splitters.some(sp => sp.peerId === s.peerId);
+    const cardsHTML = (s.cards || []).map(c => renderCardHTML(c)).join('');
+    html += `<div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; padding:8px 12px; background:${stillIn ? 'var(--bg-soft)' : 'var(--bg-inactive)'}; border-radius:8px; opacity:${stillIn ? '1' : '0.5'};">
+      <div style="font-weight:600; flex:1;">${escapeHTML(name)}${!stillIn ? ' <span style="font-weight:400; color:var(--text-faint);">(éliminé)</span>' : ''}</div>
+      <div style="display:flex; gap:3px;">${cardsHTML}</div>
+    </div>`;
+  });
+
+  // Itérations passées (board + résultats annonces)
+  (br.tiebreakIterations || []).forEach((it, i) => {
+    const lastIt = (i === br.tiebreakIterations.length - 1);
+    html += `<div style="margin-top:12px; padding:12px; border:1.5px solid ${lastIt ? 'var(--accent)' : 'var(--border)'}; border-radius:10px;">
+      <div style="font-weight:700; font-size:13px; margin-bottom:8px;">Itération ${it.iteration} — board servi</div>
+      <div style="display:flex; gap:5px; justify-content:center; flex-wrap:wrap; margin-bottom:10px;">${it.board.map(c => renderCardHTML(c)).join('')}</div>`;
+    if (it.results && it.results.length > 0) {
+      html += '<div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">Annonces :</div>';
+      it.results.forEach(r => {
+        const p = game.players.find(pp => pp.peerId === r.peerId);
+        const name = p ? p.name : '?';
+        const isWinner = lastIt && br.tieBreakResolved && br.winnerPeerId === r.peerId;
+        let label = isWinner ? 'Gagnant' : (r.skip ? 'Skip' : (r.timeout ? 'Pas de réponse' : (r.excluded ? 'Hors-jeu' : (r.valid ? 'Valide' : 'Bluff'))));
+        const announceCat = r.category && CAT_BY_ID[r.category] ? CAT_BY_ID[r.category].label : '—';
+        const cardsRow = (r.cards && r.cards.length === 2) ? `<div style="display:flex; gap:3px;">${r.cards.map(c => renderCardHTML(c)).join('')}</div>` : '';
+        html += `<div style="display:flex; gap:8px; align-items:center; padding:6px 10px; background:${isWinner ? 'rgba(31,122,63,0.12)' : 'var(--bg-soft)'}; border:1px solid ${isWinner ? 'var(--green)' : 'var(--border)'}; border-radius:6px; margin-bottom:4px; font-size:13px;">
+          <div style="font-weight:600; min-width:60px;">${isWinner ? '★ ' : ''}${escapeHTML(name)}</div>
+          ${cardsRow}
+          <div style="flex:1; color:${isWinner ? 'var(--green)' : 'var(--text-dim)'};">${announceCat} <span style="color:var(--text-faint);">(${label})</span></div>
+        </div>`;
+      });
+    }
+    html += '</div>';
+  });
+
+  // Board en cours d'annonce
+  if (game.phase === 'tiebreak-announcing' && game.tbBoard) {
+    html += `<div style="margin-top:12px; padding:12px; border:2px solid var(--accent); background:rgba(179,133,0,0.04); border-radius:10px;">
+      <div style="font-weight:700; font-size:13px; margin-bottom:8px;">Board servi — itération ${game.tbIteration} (annonces en cours)</div>
+      <div style="display:flex; gap:5px; justify-content:center; flex-wrap:wrap;">${game.tbBoard.map(c => renderCardHTML(c)).join('')}</div>
+    </div>`;
+  }
+
+  // Bandeau gagnant
+  if (br.tieBreakResolved && br.winnerPeerId) {
+    const winner = game.players.find(p => p.peerId === br.winnerPeerId);
+    html += `<div style="margin-top:14px; padding:14px; background:rgba(31,122,63,0.12); border:1.5px solid var(--green); border-radius:10px; text-align:center;">
+      <div style="font-weight:700; color:var(--green); font-size:15px;">✓ Gagnant du Board ${br.board + 1} : ${escapeHTML(winner ? winner.name : '?')}</div>
+    </div>`;
+  }
+
+  list.innerHTML = html;
+}
+
+function renderSubmitStatusTiebreak() {
+  const container = document.getElementById('submit-status');
+  container.innerHTML = '';
+  const br = game.boardResults[game.currentTiebreakIdx];
+  if (!br || !br.splitters) return;
+  const submittedMap = {};
+  if (game.tbSubmissionsStatus) for (const k of Object.keys(game.tbSubmissionsStatus)) submittedMap[k] = true;
+  if (game.tbSubmissions) for (const k of Object.keys(game.tbSubmissions)) submittedMap[k] = true;
+  br.splitters.forEach(s => {
+    const p = game.players.find(pp => pp.peerId === s.peerId);
+    const submitted = !!submittedMap[s.peerId];
+    const excluded = (game.tbExcluded || []).includes(s.peerId);
+    const stateCls = submitted ? 'confirmed' : (excluded ? 'excluded' : '');
+    const item = document.createElement('div');
+    item.className = `submit-status-item ${stateCls}`;
+    let icHTML = '<span class="ic pending">…</span>';
+    if (excluded) icHTML = '<span class="ic pending">✕</span>';
+    else if (submitted) icHTML = '<span class="ic ok">✓</span>';
+    item.innerHTML = `<span class="name">${escapeHTML(p ? p.name : '?')}</span>${icHTML}`;
+    container.appendChild(item);
+  });
+}
+
+function getMyHandDisplay() {
+  const realHand = (game.hands && game.hands[online.myPeerId]) || [];
+  // Reset l'ordre si désync (manche changée, reconnect, etc.)
+  if (!myHandOrder || myHandOrder.length !== realHand.length || !myHandOrder.every(c => realHand.includes(c))) {
+    myHandOrder = realHand.slice();
+  }
+  return myHandOrder;
+}
+
+function renderMyHand(interactive) {
+  const myHand = getMyHandDisplay();
+  const container = document.getElementById('my-hand-cards');
+  // Détruire l'instance Sortable existante avant de re-render
+  if (myHandSortable) {
+    try { myHandSortable.destroy(); } catch(e) {}
+    myHandSortable = null;
+  }
+  container.innerHTML = '';
+  myHand.forEach(c => {
+    const isSel = selectedCards.includes(c);
+    const animate = !isSel && !seenCards.has(c);
+    if (animate) seenCards.add(c);
+    const delay = animate ? (animOrderIdx++) * 70 : 0;
+    container.innerHTML += renderCardHTML(c, {
+      selectable: interactive,
+      selected: isSel,
+      data: true,
+      animate,
+      delay,
+    });
+  });
+  // Clic pour sélection manuelle (override de l'auto-pick)
+  container.querySelectorAll('.card[data-card]').forEach(el => {
+    el.addEventListener('click', () => {
+      if (!interactive) return;
+      const c = el.getAttribute('data-card');
+      const idx = selectedCards.indexOf(c);
+      if (idx >= 0) selectedCards.splice(idx, 1);
+      else {
+        if (selectedCards.length >= 2) selectedCards.shift();
+        selectedCards.push(c);
+      }
+      renderMyHand(interactive);
+      renderConfirmBtn();
+    });
+  });
+  // Drag&drop : réorganisation visuelle (toujours actif quand on a une main)
+  if (window.Sortable && myHand.length > 1) {
+    myHandSortable = Sortable.create(container, {
+      animation: 180,
+      delay: 120,
+      delayOnTouchOnly: true,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      onEnd: () => {
+        myHandOrder = Array.from(container.querySelectorAll('.card[data-card]'))
+          .map(el => el.getAttribute('data-card'));
+      },
+    });
+  }
+}
+
+function renderAnnounceCats() {
+  // Grille principale : Paire → Royale (Hauteur et Skip sont dans .announce-quick)
+  const container = document.getElementById('announce-cats');
+  container.innerHTML = '';
+  CATEGORIES.slice(1).forEach(c => {
+    const sel = selectedCategory === c.id ? 'selected' : '';
+    const multiTag = c.multi > 1 ? `<span class="multi-tag">×${c.multi}</span>` : '';
+    const btn = document.createElement('button');
+    btn.className = `announce-cat-btn ${sel}`;
+    btn.dataset.cat = c.id;
+    btn.innerHTML = `<span>${c.label}</span>${multiTag}`;
+    btn.addEventListener('click', () => {
+      selectedCategory = c.id;
+      renderAnnounceCats();
+      renderAnnounceQuick();
+      renderConfirmBtn();
+    });
+    container.appendChild(btn);
+  });
+}
+
+function renderAnnounceQuick() {
+  // Boutons rapides : Hauteur (auto-pick) et Skip, juste au-dessus de Confirmer
+  const container = document.getElementById('announce-quick');
+  container.innerHTML = '';
+  const items = [
+    { id: 'highcard', label: 'Hauteur (auto)', isSkip: false },
+    { id: 'skip',     label: 'Skip (ne pas jouer)', isSkip: true },
+  ];
+  items.forEach(c => {
+    const sel = selectedCategory === c.id ? 'selected' : '';
+    const isSkipCls = c.isSkip ? ' skip' : '';
+    const btn = document.createElement('button');
+    btn.className = `announce-cat-btn${isSkipCls} ${sel}`;
+    btn.dataset.cat = c.id;
+    btn.innerHTML = `<span>${c.label}</span>`;
+    btn.addEventListener('click', () => {
+      selectedCategory = c.id;
+      if (c.id === 'skip') selectedCards = [];
+      renderAnnounceCats();
+      renderAnnounceQuick();
+      renderConfirmBtn();
+    });
+    container.appendChild(btn);
+  });
+}
+
+function renderConfirmBtn() {
+  const btn = document.getElementById('announce-confirm-btn');
+  btn.style.display = '';
+  btn.disabled = !selectedCategory;
+  btn.style.opacity = selectedCategory ? '1' : '0.5';
+  if (!selectedCategory) {
+    btn.textContent = 'Choisis une annonce';
+    return;
+  }
+  if (selectedCategory === 'skip') {
+    btn.textContent = 'Confirmer : Skip (ne pas jouer ce board)';
+    return;
+  }
+  const catLabel = CAT_BY_ID[selectedCategory].label;
+  if (selectedCards.length === 2) {
+    btn.textContent = `Confirmer : ${catLabel} (cartes choisies)`;
+  } else {
+    btn.textContent = `Confirmer : ${catLabel} (cartes auto)`;
+  }
+}
+
+function submitMyAnnounce() {
+  if (!selectedCategory) return;
+  let cards;
+  if (selectedCategory === 'skip') {
+    cards = [];
+  } else if (selectedCards.length === 2) {
+    cards = selectedCards.slice();
+  } else {
+    // Auto-pick basé sur la catégorie annoncée et le board courant
+    const myHand = (game.hands && game.hands[online.myPeerId]) || [];
+    const boardCards = game.phase === 'tiebreak-announcing'
+      ? (game.tbBoard || [])
+      : (game.communityCards[game.currentBoard] || []);
+    cards = autoPickCards(myHand, boardCards, selectedCategory);
+    if (!cards) {
+      // Annonce non réalisable : envoie quand même les 2 premières cartes (sera comptée comme bluff)
+      showToast('Annonce non réalisable avec tes cartes — comptée comme bluff', true);
+      cards = myHand.slice(0, 2);
+    }
+  }
+  const payload = { type: 'submit-announce', category: selectedCategory, cards };
+  if (isHost()) {
+    if (game.phase === 'tiebreak-announcing') {
+      hostReceiveTiebreakSubmission(online.myPeerId, payload);
+    } else {
+      hostReceiveSubmission(online.myPeerId, payload);
+    }
+  } else if (online.hostConn && online.hostConn.open) {
+    try { online.hostConn.send(payload); } catch(e) { showToast('Échec d\'envoi', true); return; }
+    if (game.phase === 'tiebreak-announcing') {
+      if (!game.tbSubmissionsStatus) game.tbSubmissionsStatus = {};
+      game.tbSubmissionsStatus[online.myPeerId] = true;
+    } else {
+      if (!game.submissionsStatus) game.submissionsStatus = {};
+      game.submissionsStatus[online.myPeerId] = true;
+    }
+    renderGame();
+  }
+}
+
+function renderSubmitStatus() {
+  const container = document.getElementById('submit-status');
+  container.innerHTML = '';
+  const submittedMap = {};
+  if (game.submissionsStatus) for (const k of Object.keys(game.submissionsStatus)) submittedMap[k] = true;
+  if (game.submissions) for (const k of Object.keys(game.submissions)) submittedMap[k] = true;
+  // N'affiche que les joueurs actifs (inManche) ; les spectateurs sont visibles dans les chips en haut
+  game.players.filter(p => p.inManche).forEach(p => {
+    const submitted = !!submittedMap[p.peerId];
+    const excluded = game.excludedThisBoard.includes(p.peerId);
+    const forfeit = p.forfeitFromBoard !== null && p.forfeitFromBoard <= game.currentBoard;
+    const stateCls = submitted ? 'confirmed' : ((excluded || forfeit) ? 'excluded' : '');
+    const item = document.createElement('div');
+    item.className = `submit-status-item ${stateCls}`;
+    let icHTML = '<span class="ic pending">…</span>';
+    if (forfeit) icHTML = '<span class="ic pending">⊘</span>';
+    else if (excluded) icHTML = '<span class="ic pending">✕</span>';
+    else if (submitted) icHTML = '<span class="ic ok">✓</span>';
+    item.innerHTML = `<span class="name">${escapeHTML(p.name)}</span>${icHTML}`;
+    container.appendChild(item);
+  });
+}
+
+function renderRevealList() {
+  const list = document.getElementById('reveal-list');
+  list.innerHTML = '';
+  const result = game.boardResults[game.currentBoard];
+  if (!result || !result.results) return;
+  const splitterIds = result.isSplit && result.splitters
+    ? new Set(result.splitters.map(s => s.peerId))
+    : null;
+  const sorted = result.results.slice().sort((a, b) => {
+    if (a.peerId === result.winnerPeerId) return -1;
+    if (b.peerId === result.winnerPeerId) return 1;
+    if (splitterIds) {
+      const aS = splitterIds.has(a.peerId), bS = splitterIds.has(b.peerId);
+      if (aS !== bS) return aS ? -1 : 1;
+    }
+    if (a.valid !== b.valid) return a.valid ? -1 : 1;
+    if (a.excluded !== b.excluded) return a.excluded ? 1 : -1;
+    return 0;
+  });
+  const boardCards = game.communityCards[game.currentBoard];
+  sorted.forEach(r => {
+    const player = game.players.find(p => p.peerId === r.peerId);
+    const name = player ? player.name : '?';
+    let tagClass = 'valid';
+    let tagLabel = 'Valide';
+    let rowCls = '';
+    if (r.peerId === result.winnerPeerId) { tagClass = 'winner'; tagLabel = 'Gagnant'; rowCls = 'winner'; }
+    else if (splitterIds && splitterIds.has(r.peerId)) { tagClass = 'split'; tagLabel = 'Split'; rowCls = 'split'; }
+    else if (r.forfeit) { tagClass = 'excluded'; tagLabel = 'Forfait'; rowCls = 'excluded'; }
+    else if (r.skip) { tagClass = 'excluded'; tagLabel = 'Skip'; rowCls = 'excluded'; }
+    else if (r.excluded) { tagClass = 'excluded'; tagLabel = 'Hors-jeu'; rowCls = 'excluded'; }
+    else if (r.timeout) { tagClass = 'excluded'; tagLabel = 'Pas de réponse'; rowCls = 'excluded'; }
+    else if (!r.valid) { tagClass = 'invalid'; tagLabel = 'Bluff'; rowCls = 'invalid'; }
+
+    const announceCat = r.category && CAT_BY_ID[r.category] ? CAT_BY_ID[r.category].label : (r.excluded ? '—' : (r.timeout ? '—' : 'Aucune'));
+    const actualEv = r.cards && r.cards.length === 2 ? evaluateBest([...r.cards, ...boardCards]) : null;
+    const actualLabel = actualEv ? CAT_BY_ID[actualEv.cat].label : '';
+
+    let cardsHTML = '';
+    if (r.cards && r.cards.length === 2) {
+      cardsHTML = `<div class="reveal-row-cards">${r.cards.map(c => renderCardHTML(c)).join('')}</div>`;
+    }
+
+    const row = document.createElement('div');
+    row.className = `reveal-row ${rowCls}`;
+    row.innerHTML = `
+      <div class="reveal-row-header">
+        <div class="reveal-row-name">${escapeHTML(name)}</div>
+        <div class="reveal-row-tag ${tagClass}">${tagLabel}</div>
+      </div>
+      <div class="reveal-row-body">
+        ${cardsHTML}
+        <div class="reveal-row-info">
+          <div class="announce">Annoncé : ${announceCat}</div>
+          ${actualLabel ? `<div class="actual">Réel : ${actualLabel}</div>` : ''}
+        </div>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function renderGameStats(targetEl) {
+  if (!targetEl) return;
+  if (!game) { targetEl.innerHTML = ''; return; }
+  let html = '<div class="stats-section-title">Soldes</div>';
+  html += '<div class="stats-score-list">';
+  game.players.forEach((p, idx) => {
+    const isDealerP = idx === game.dealerIdx && p.inManche;
+    const score = p.score || 0;
+    const cls = score > 0.001 ? 'positive' : (score < -0.001 ? 'negative' : '');
+    let extraCls = '';
+    let tag = '';
+    if (!p.connected) { extraCls = ' disconnected'; tag = '<span class="tiny-tag dc">DC</span>'; }
+    else if (!p.inManche) { extraCls = ' spectator'; tag = '<span class="tiny-tag sp">Spect</span>'; }
+    else if (p.forfeitFromBoard !== null) { extraCls = ' forfeit'; tag = '<span class="tiny-tag ff">FFT</span>'; }
+    html += `<div class="stats-score-item${isDealerP ? ' dealer' : ''}${extraCls}"><span class="name">${escapeHTML(p.name)}${isDealerP ? ' ♦' : ''}${tag}</span><span class="val ${cls}">${fmtMoney(score)}</span></div>`;
+  });
+  html += '</div>';
+
+  html += '<div class="stats-section-title">Historique</div>';
+  if (!game.history || game.history.length === 0) {
+    html += '<div class="stats-history-empty">Aucune manche jouée pour l\'instant</div>';
+  } else {
+    const recent = game.history.slice(-10).reverse();
+    recent.forEach(h => {
+      const lines = (h.boardResults || []).map((br, i) => {
+        if (!br) return '';
+        if (br.abandoned) return `<div class="h-line">B${i+1} : abandonné</div>`;
+        const winPlayer = game.players.find(p => p.peerId === br.winnerPeerId);
+        const wname = winPlayer ? winPlayer.name : '?';
+        const cat = CAT_BY_ID[br.winningCategory] ? CAT_BY_ID[br.winningCategory].label : '?';
+        return `<div class="h-line">B${i+1} : <strong>${escapeHTML(wname)}</strong> · ${cat}</div>`;
+      }).join('');
+      let fbHTML = '';
+      if (h.fullBoardWinner) {
+        const fbP = game.players.find(p => p.peerId === h.fullBoardWinner);
+        fbHTML = `<div class="h-fb">★ Full Board : ${escapeHTML(fbP ? fbP.name : '?')}</div>`;
+      }
+      html += `<div class="stats-history-item"><div class="h-title">Manche ${h.manche}</div>${lines}${fbHTML}</div>`;
+    });
+  }
+  targetEl.innerHTML = html;
+}
+
+function openStatsModal() {
+  renderGameStats(document.getElementById('stats-modal-content'));
+  document.getElementById('stats-modal').classList.add('show');
+}
+function closeStatsModal() {
+  document.getElementById('stats-modal').classList.remove('show');
+}
+
+function renderMancheRecap() {
+  const zone = document.getElementById('manche-recap-zone');
+  const startScores = game.mancheStartScores || {};
+  let rowsHTML = '';
+  game.players.forEach(p => {
+    const delta = p.score - (startScores[p.peerId] || 0);
+    const cls = delta > 0.001 ? 'positive' : (delta < -0.001 ? 'negative' : 'zero');
+    const sign = delta > 0 ? '+' : '';
+    rowsHTML += `
+      <div class="manche-recap-row">
+        <span class="name">${escapeHTML(p.name)}</span>
+        <span class="delta ${cls}">${sign}${delta.toFixed(2)}€ <span style="color:var(--text-dim); font-weight:500; font-size:12px;">(total : ${fmtMoney(p.score)})</span></span>
+      </div>
+    `;
+  });
+  zone.innerHTML = `
+    <div class="manche-recap">
+      <div class="manche-recap-title">Manche ${game.manche} terminée</div>
+      ${rowsHTML}
+    </div>
+  `;
+}
+
+function leaveOnlineGame() {
+  if (!confirm('Quitter la partie ? Les scores seront perdus.')) return;
+  if (isHost()) {
+    Object.values(online.guestConns).forEach(conn => {
+      if (conn && conn.open) {
+        try { conn.send({ type: 'kicked', reason: 'L\'hôte a fermé la partie' }); } catch(e) {}
+      }
+    });
+  }
+  stopTimer();
+  game = null;
+  selectedCards = [];
+  selectedCategory = null;
+  lastBoardKey = '';
+  onlineCleanup();
+  online.status = 'entry';
+  renderOnline();
+}
+
 // ========== INIT ==========
 load();
-if (state.players.length === 0) {
-  for (let i = 0; i < 4; i++) state.players.push({ id: uid(), name: '', active: true });
-}
+
+document.getElementById('mode-counter-btn').addEventListener('click', () => setMode('counter'));
+document.getElementById('mode-online-btn').addEventListener('click', () => setMode('online'));
+document.getElementById('change-mode-btn').addEventListener('click', backToLanding);
+
+// Online mode
+document.getElementById('online-create-btn').addEventListener('click', onlineCreateStart);
+document.getElementById('online-join-btn').addEventListener('click', onlineJoinStart);
+document.getElementById('online-name-back-btn').addEventListener('click', onlineGoToEntry);
+document.getElementById('online-name-confirm-btn').addEventListener('click', onlineConfirmName);
+document.getElementById('online-pseudo-input').addEventListener('keypress', e => {
+  if (e.key === 'Enter') onlineConfirmName();
+});
+document.getElementById('online-code-input').addEventListener('keypress', e => {
+  if (e.key === 'Enter') onlineConfirmName();
+});
+document.getElementById('online-code-input').addEventListener('input', e => {
+  e.target.value = e.target.value.toUpperCase();
+});
+document.getElementById('online-lobby-leave-btn').addEventListener('click', onlineLeaveLobby);
+document.getElementById('lobby-code-copy-btn').addEventListener('click', copyRoomCode);
+document.getElementById('lobby-start-btn').addEventListener('click', onlineStartGame);
+document.getElementById('announce-confirm-btn').addEventListener('click', submitMyAnnounce);
+document.getElementById('game-leave-btn').addEventListener('click', leaveOnlineGame);
+document.getElementById('open-stats-btn').addEventListener('click', openStatsModal);
+document.getElementById('stats-modal-close').addEventListener('click', closeStatsModal);
+document.getElementById('stats-modal').addEventListener('click', e => {
+  if (e.target.id === 'stats-modal') closeStatsModal();
+});
+document.getElementById('game-code-pill').addEventListener('click', copyRoomCode);
+// Fermer la connexion proprement si la page se ferme
+window.addEventListener('beforeunload', () => {
+  try { if (online.peer) online.peer.destroy(); } catch(e) {}
+});
 
 document.getElementById('add-player-btn').addEventListener('click', addPlayer);
 document.getElementById('start-game-btn').addEventListener('click', startGame);
