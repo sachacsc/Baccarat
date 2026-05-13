@@ -763,40 +763,61 @@
   }
   body.signed-out .tabbar { display: none !important; }
 
-  /* ===== Tabbar (navigation principale, fixe en bas) ===== */
+  /* ===== Tabbar (navigation principale, fixe en bas) =====
+     Glassmorphism : backdrop-filter blur 24px + saturate 180% sur fond semi-transparent.
+     Approximation web de Liquid Glass iOS 26 — le vrai LG est un rendu GPU natif Apple,
+     impossible à reproduire exactement en CSS, mais on s'en rapproche fortement. */
   .tabbar {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    background: var(--bg);
-    border-top: 1.5px solid var(--border);
+    background: rgba(255, 255, 255, 0.72);
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
+    backdrop-filter: saturate(180%) blur(24px);
+    border-top: 0.5px solid rgba(0, 0, 0, 0.08);
     display: flex;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
     z-index: 100;
-    box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+  }
+  /* Fallback si backdrop-filter pas supporté (vieux navigateurs) : fond plus opaque */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .tabbar { background: rgba(255, 255, 255, 0.96); }
   }
   .tab {
     flex: 1;
     background: transparent;
     border: none;
-    padding: 9px 4px 7px;
+    padding: 8px 4px 6px;
     cursor: pointer;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    color: var(--text-faint);
+    gap: 2px;
+    color: rgba(60, 60, 67, 0.5);
     font-family: inherit;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    transition: color 0.15s;
+    transition: color 0.15s, transform 0.1s;
+    border-radius: 12px;
   }
-  .tab .tab-icon { font-size: 22px; line-height: 1; }
-  .tab .tab-label { letter-spacing: 0.02em; }
-  .tab.active { color: var(--text); }
-  .tab.active .tab-icon { transform: scale(1.08); }
-  .tab:active { transform: scale(0.96); }
+  .tab .tab-icon {
+    font-size: 24px;
+    line-height: 1;
+    filter: grayscale(0.5);
+    opacity: 0.65;
+    transition: filter 0.15s, opacity 0.15s, transform 0.15s;
+  }
+  .tab .tab-label { letter-spacing: 0.01em; }
+  .tab.active {
+    color: #7e1219;
+  }
+  .tab.active .tab-icon {
+    filter: grayscale(0);
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  .tab:active:not(.active) { transform: scale(0.94); }
 
   /* Les panes prennent toute la largeur de la container ; un seul visible à la fois */
   .tab-pane { display: none; }
@@ -804,6 +825,84 @@
 
   /* Footer-actions (nouveau-partie) visible uniquement sur l'onglet Compteur */
   body:not([data-tab="counter"]) #footer-actions { display: none !important; }
+
+  /* ===== Header de tab (titre + sous-titre, style Zmeo large title) ===== */
+  .tab-header {
+    padding: 32px 20px 20px;
+  }
+  .tab-header-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+    line-height: 1.1;
+  }
+  .tab-header-subtitle {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.35;
+  }
+
+  /* ===== Big card cliquable (créer/rejoindre, etc.) ===== */
+  .big-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--bg-soft);
+    padding: 18px 16px;
+    border-radius: 14px;
+    margin: 0 16px 12px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.15s;
+    text-align: left;
+    width: calc(100% - 32px);
+    font-family: inherit;
+    color: var(--text);
+  }
+  .big-card:active { transform: scale(0.98); }
+  .big-card.primary {
+    background: linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
+    color: white;
+    box-shadow: 0 6px 20px rgba(126,18,25,0.25);
+  }
+  .big-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(126,18,25,0.10);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #7e1219;
+    flex-shrink: 0;
+    font-weight: 700;
+  }
+  .big-card.primary .big-card-icon {
+    background: rgba(255,255,255,0.18);
+    color: white;
+  }
+  .big-card-body { flex: 1; min-width: 0; }
+  .big-card-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 3px;
+  }
+  .big-card-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.35;
+  }
+  .big-card.primary .big-card-desc { color: rgba(255,255,255,0.88); }
+  .big-card-chevron {
+    color: var(--text-faint);
+    font-size: 24px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .big-card.primary .big-card-chevron { color: rgba(255,255,255,0.7); }
 
   /* Le bouton "Se connecter" du header disparaît : login = gateway dédié */
   #auth-signin-btn { display: none !important; }
@@ -2066,29 +2165,26 @@
 
       <!-- Vue ENTRY : créer ou rejoindre -->
       <div id="online-entry">
-        <div class="section-title">Partie en ligne</div>
-        <div class="landing-card">
-          <div class="landing-title">Créer ou rejoindre</div>
-          <div class="landing-sub">Le mode en ligne est en cours de développement. Le lobby fonctionne — la partie elle-même arrive aux étapes suivantes.</div>
-          <div class="landing-options">
-            <button class="landing-btn primary" id="online-create-btn">
-              <span class="landing-btn-icon">＋</span>
-              <div class="landing-btn-body">
-                <div class="landing-btn-title">Créer une partie</div>
-                <div class="landing-btn-desc">Tu deviens l'hôte. Les autres rejoignent avec ton code.</div>
-              </div>
-              <span class="landing-btn-arrow">›</span>
-            </button>
-            <button class="landing-btn" id="online-join-btn">
-              <span class="landing-btn-icon">→</span>
-              <div class="landing-btn-body">
-                <div class="landing-btn-title">Rejoindre une partie</div>
-                <div class="landing-btn-desc">Entre le code à 4 caractères donné par l'hôte.</div>
-              </div>
-              <span class="landing-btn-arrow">›</span>
-            </button>
-          </div>
+        <div class="tab-header">
+          <div class="tab-header-title">Partie en ligne</div>
+          <div class="tab-header-subtitle">Joue avec tes amis, chacun sur son téléphone. L'app distribue les cartes et gère les annonces.</div>
         </div>
+        <button class="big-card primary" id="online-create-btn" type="button">
+          <span class="big-card-icon">＋</span>
+          <div class="big-card-body">
+            <div class="big-card-title">Créer une partie</div>
+            <div class="big-card-desc">Tu deviens l'hôte. Donne le code à 4 caractères aux autres.</div>
+          </div>
+          <span class="big-card-chevron">›</span>
+        </button>
+        <button class="big-card" id="online-join-btn" type="button">
+          <span class="big-card-icon">→</span>
+          <div class="big-card-body">
+            <div class="big-card-title">Rejoindre une partie</div>
+            <div class="big-card-desc">Entre le code à 4 caractères donné par l'hôte.</div>
+          </div>
+          <span class="big-card-chevron">›</span>
+        </button>
       </div>
 
       <!-- Vue NAME : saisie pseudo (et code si guest) -->
