@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import Combine
 import Supabase
 
 @MainActor
