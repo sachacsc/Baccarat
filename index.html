@@ -2,8 +2,20 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Baccarat</title>
+
+<!-- PWA : manifest + theme + icônes -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c1262f">
+<meta name="description" content="Compteur et partie en ligne pour le Baccarat 3-boards.">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Baccarat">
+<meta name="mobile-web-app-capable" content="yes">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -6577,6 +6589,13 @@ function leaveOnlineGame() {
 
 // ========== INIT ==========
 load();
+
+// PWA : enregistre le service worker (cache + installabilité). Silencieux si non supporté.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW registration failed', err));
+  });
+}
 
 // Auth (Supabase) : init au boot, restaure la session si présente
 initSupabase();
