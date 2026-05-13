@@ -7894,6 +7894,34 @@ function leaveOnlineGame() {
 }
 
 // ========== INIT ==========
+// Affiche toute erreur du boot en overlay pour ne pas perdre le contexte côté user.
+window.addEventListener('error', (e) => {
+  try {
+    let panel = document.getElementById('__boot_error__');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = '__boot_error__';
+      panel.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c62828;color:white;padding:10px 14px;font:13px -apple-system,system-ui;line-height:1.4;max-height:50vh;overflow:auto;';
+      document.body && document.body.appendChild(panel);
+    }
+    const msg = e.message || (e.error && e.error.message) || String(e);
+    panel.innerHTML += `<div>⚠ ${msg} <span style="opacity:.7;">(${(e.filename||'').split('/').pop()}:${e.lineno||'?'})</span></div>`;
+  } catch(_) {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try {
+    const reason = e.reason && (e.reason.message || e.reason) || 'unknown';
+    let panel = document.getElementById('__boot_error__');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = '__boot_error__';
+      panel.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c62828;color:white;padding:10px 14px;font:13px -apple-system,system-ui;line-height:1.4;max-height:50vh;overflow:auto;';
+      document.body && document.body.appendChild(panel);
+    }
+    panel.innerHTML += `<div>⚠ promise rejected: ${reason}</div>`;
+  } catch(_) {}
+});
+
 load();
 
 // Sheet UX iOS-style : drag handle + X close + swipe-down + tap outside to dismiss
