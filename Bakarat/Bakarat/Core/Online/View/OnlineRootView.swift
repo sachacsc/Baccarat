@@ -1,21 +1,24 @@
 //
 //  OnlineRootView.swift
-//  Baccarat
+//  Bakarat
 //
-//  Tab "Online" : page d'accueil avec deux cards Créer/Rejoindre.
-//  Push vers Lobby ou Join (couvre la tabbar automatiquement via NavigationStack).
+//  Tab Online : page d'accueil avec deux cards (Créer / Rejoindre). Une fois
+//  une action choisie, on push un OnlineLobbyView qui couvre la tabbar
+//  automatiquement (NavigationStack iOS-style).
 //
 
 import SwiftUI
 
 struct OnlineRootView: View {
+    @EnvironmentObject private var auth: AuthService
+    @StateObject private var service = OnlineGameService()
     @State private var path = NavigationPath()
     @State private var joinCode = ""
 
     enum Route: Hashable {
         case createLobby
         case enterCode
-        case joinedLobby(code: String)
+        case joinedLobby
     }
 
     var body: some View {
@@ -28,7 +31,7 @@ struct OnlineRootView: View {
                     description: "Tu deviens l'hôte. Donne le code à 4 caractères aux autres.",
                     systemImage: "plus",
                     primary: true,
-                    action: { path.append(Route.createLobby) }
+                    action: { Task { await createGame() } }
                 )
 
                 bigCard(
@@ -46,18 +49,41 @@ struct OnlineRootView: View {
             .navigationBarTitleDisplayMode(.large)
             .navigationDestination(for: Route.self) { route in
                 switch route {
-                case .createLobby:
-                    OnlineLobbyView(role: .host)
+                case .createLobby, .joinedLobby:
+                    OnlineLobbyView(service: service)
                 case .enterCode:
-                    OnlineJoinView(code: $joinCode) { code in
-                        path.append(Route.joinedLobby(code: code))
+                    OnlineJoinView(code: $joinCode) {
+                        Task { await joinGame() }
                     }
-                case .joinedLobby(let code):
-                    OnlineLobbyView(role: .guest(code: code))
                 }
             }
         }
     }
+
+    // MARK: - Actions
+
+    private func createGame() async {
+        guard let uid = auth.userId else { return }
+        let name = displayName()
+        await service.createRoom(myUserId: uid, myDisplayName: name)
+        path.append(Route.createLobby)
+    }
+
+    private func joinGame() async {
+        guard let uid = auth.userId else { return }
+        let name = displayName()
+        await service.joinRoom(code: joinCode, myUserId: uid, myDisplayName: name)
+        joinCode = ""
+        path.append(Route.joinedLobby)
+    }
+
+    private func displayName() -> String {
+        if let n = auth.profile?.displayName, !n.isEmpty { return n }
+        if let e = auth.userEmail, let local = e.split(separator: "@").first { return String(local) }
+        return "Joueur"
+    }
+
+    // MARK: - Components
 
     @ViewBuilder
     private func bigCard(
@@ -108,44 +134,11 @@ struct OnlineRootView: View {
     }
 }
 
-// MARK: - Placeholders (to be filled out next batches)
-
-struct OnlineLobbyView: View {
-    enum Role: Hashable {
-        case host
-        case guest(code: String)
-    }
-    let role: Role
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-            Text("Lobby — à implémenter")
-                .font(.headline)
-            Text(roleLabel)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(.top, 40)
-        .navigationTitle(roleLabel)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var roleLabel: String {
-        switch role {
-        case .host:                return "Hôte"
-        case .guest(let code):     return "Code \(code)"
-        }
-    }
-}
+// MARK: - Join code form
 
 struct OnlineJoinView: View {
     @Binding var code: String
-    var onJoined: (String) -> Void
-
+    var onSubmit: () -> Void
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -172,7 +165,7 @@ struct OnlineJoinView: View {
                 }
 
             Button {
-                onJoined(code)
+                onSubmit()
             } label: {
                 Text("Rejoindre")
             }

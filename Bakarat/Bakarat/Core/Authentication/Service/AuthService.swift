@@ -29,6 +29,8 @@ final class AuthService: ObservableObject {
     var isSignedIn: Bool { session != nil }
     /// Email du user courant, sans avoir à importer le module Auth dans les views.
     var userEmail: String? { session?.user.email }
+    /// UUID du user courant.
+    var userId: UUID? { session?.user.id }
 
     init() {
         observeAuthChanges()
