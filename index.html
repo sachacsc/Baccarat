@@ -53,7 +53,7 @@
   }
   /* Espace réservé en bas pour la tabbar flottante (+ marge bas + safe area iOS) */
   body {
-    padding-bottom: calc(86px + env(safe-area-inset-bottom));
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
   }
 
   .container {
@@ -771,18 +771,18 @@
      Fallback safe sur vieux navigateurs : fond opaque. */
   .tabbar {
     position: fixed;
-    bottom: calc(14px + env(safe-area-inset-bottom));
+    bottom: calc(6px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 32px);
-    max-width: 380px;
+    width: calc(100% - 24px);
+    max-width: 360px;
     background: rgba(255, 255, 255, 0.62);
     -webkit-backdrop-filter: saturate(180%) blur(30px);
     backdrop-filter: saturate(180%) blur(30px);
     border: 0.5px solid rgba(255, 255, 255, 0.6);
-    border-radius: 24px;
+    border-radius: 999px;  /* pill complète */
     display: flex;
-    padding: 6px;
+    padding: 5px;
     z-index: 100;
     box-shadow:
       0 10px 28px rgba(0, 0, 0, 0.14),
@@ -923,6 +923,11 @@
   body.signed-out .modal-overlay { display: none !important; }
   body.signed-out { padding-bottom: 0 !important; }
 
+  /* Quand loggué : on cache aussi le header. Le pseudo et la déconnexion vivent dans
+     le modal profil (accessible via l'avatar de l'onglet Dettes). */
+  body.signed-in header { display: none !important; }
+  body.signed-in .container { padding-top: 0; }
+
   /* Mode debts : section title + placeholder */
   .debts-empty {
     text-align: center;
@@ -930,6 +935,116 @@
     color: var(--text-faint);
     font-size: 14px;
   }
+
+  /* ===== Avatar (cercle avec image ou initiales) ===== */
+  .avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
+    color: white;
+    font-weight: 700;
+    font-size: 22px;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(126,18,25,0.22);
+    border: 2px solid white;
+    user-select: none;
+    transition: transform 0.1s;
+  }
+  .avatar:active { transform: scale(0.94); }
+  .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+  }
+  .avatar.size-md { width: 44px; height: 44px; font-size: 17px; border-width: 2px; }
+  .avatar.size-lg { width: 92px; height: 92px; font-size: 36px; border-width: 3px; }
+
+  /* En-tête du tab Dettes : titre + avatar à droite */
+  .tab-header.with-avatar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .tab-header.with-avatar .tab-header-text { flex: 1; min-width: 0; }
+
+  /* ===== Profile modal ===== */
+  .profile-modal-content { text-align: center; }
+  .profile-avatar-wrap {
+    position: relative;
+    width: 92px;
+    height: 92px;
+    margin: 0 auto 14px;
+  }
+  .profile-avatar-edit-btn {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  }
+  .profile-avatar-edit-btn:active { transform: scale(0.92); }
+  .profile-modal .field { text-align: left; }
+  .profile-modal .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .profile-modal input[type=text],
+  .profile-modal .readonly-val {
+    width: 100%;
+    background: var(--bg-soft);
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15px;
+    padding: 14px;
+    border-radius: 10px;
+    outline: none;
+  }
+  .profile-modal .readonly-val { color: var(--text-dim); }
+  .profile-modal-msg {
+    font-size: 12px;
+    text-align: center;
+    min-height: 16px;
+    margin: 8px 0 0;
+  }
+  .profile-modal-msg.error { color: var(--red); }
+  .profile-modal-msg.ok    { color: var(--green); }
+  .profile-modal .danger-btn {
+    background: rgba(198, 40, 40, 0.08);
+    color: var(--red);
+    border: none;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 12px;
+    border-radius: 10px;
+    width: 100%;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .profile-modal .danger-btn:active { background: rgba(198, 40, 40, 0.16); }
 
   /* ===== Resume banner (sauvegarde online auto) ===== */
   .resume-banner {
@@ -2343,13 +2458,48 @@
 
       </div> <!-- /tab-online -->
 
-      <!-- TAB Dettes : ledger et historique des parties (contenu rempli au prochain batch) -->
+      <!-- TAB Dettes : ledger et historique des parties + profil (avatar en haut à droite) -->
       <div class="tab-pane" id="tab-debts">
-        <div class="section-title">Dettes & gains</div>
+        <div class="tab-header with-avatar">
+          <div class="tab-header-text">
+            <div class="tab-header-title">Dettes</div>
+            <div class="tab-header-subtitle">Tes balances avec tes amis</div>
+          </div>
+          <div class="avatar" id="debts-avatar" title="Éditer le profil"></div>
+        </div>
         <div id="debts-content">
           <div class="debts-empty">Joue ta première partie compteur ou online pour voir ton ledger ici.</div>
         </div>
       </div>
+
+    <!-- MODAL Profil : édition pseudo, avatar, déconnexion (accessible via avatar tab Dettes) -->
+    <div class="modal-overlay profile-modal" id="profile-modal">
+      <div class="modal profile-modal-content">
+        <div class="modal-title">Mon profil</div>
+
+        <div class="profile-avatar-wrap">
+          <div class="avatar size-lg" id="profile-avatar"></div>
+          <button class="profile-avatar-edit-btn" id="profile-avatar-edit" type="button" title="Changer la photo">✎</button>
+          <input type="file" id="profile-avatar-input" accept="image/*" style="display:none;">
+        </div>
+
+        <div class="field">
+          <label>Pseudo</label>
+          <input type="text" id="profile-name-input" maxlength="32" placeholder="Ton pseudo">
+        </div>
+
+        <div class="field">
+          <label>Email</label>
+          <div class="readonly-val" id="profile-email">—</div>
+        </div>
+
+        <div class="profile-modal-msg" id="profile-msg"></div>
+
+        <button class="btn btn-blue" id="profile-save-btn">Enregistrer</button>
+        <button class="btn btn-secondary" id="profile-modal-close" style="margin-top:8px;">Fermer</button>
+        <button class="danger-btn" id="profile-signout-btn">Se déconnecter</button>
+      </div>
+    </div>
 
     <!-- MODAL stats (mobile) -->
     <div class="modal-overlay" id="stats-modal">
@@ -3746,6 +3896,128 @@ function switchTab(name) {
 // Placeholder pour l'onglet Dettes — sera rempli au prochain batch.
 function renderDebtsTab() {
   // À venir : charger games/manche_results/balances depuis Supabase et afficher
+  // Rafraîchit l'avatar du tab Dettes à chaque visite (au cas où le pseudo/avatar a changé)
+  renderAvatar(document.getElementById('debts-avatar'));
+}
+
+// ===== Avatar rendering =====
+// Affiche l'image si présente dans authProfile.avatar_url, sinon l'initiale du display_name
+// dans un cercle gradient rouge. Réutilisé pour le tab Dettes ET le modal profil.
+function renderAvatar(target, sizeClass) {
+  if (!target) return;
+  // Reset taille
+  target.classList.remove('size-md', 'size-lg');
+  if (sizeClass) target.classList.add(sizeClass);
+
+  const url = authProfile && authProfile.avatar_url;
+  const name = (authProfile && authProfile.display_name) || (authUser && authUser.email) || '?';
+  const initial = name.trim().charAt(0).toUpperCase() || '?';
+
+  if (url) {
+    // bust cache après update
+    const bust = url.includes('?') ? url : `${url}?v=${Date.now()}`;
+    target.innerHTML = `<img src="${bust}" alt="" onerror="this.parentNode.innerHTML='${escapeHTML(initial)}'">`;
+  } else {
+    target.textContent = initial;
+  }
+}
+
+// Quand le profil change, on rafraîchit tous les avatars rendus dans le DOM
+function refreshAllAvatars() {
+  document.querySelectorAll('.avatar').forEach(el => {
+    // Conserve la classe de taille existante
+    const sizeCls = ['size-md', 'size-lg'].find(c => el.classList.contains(c));
+    renderAvatar(el, sizeCls);
+  });
+}
+
+// ===== Profile modal =====
+function openProfileModal() {
+  if (!authUser || !authProfile) return;
+  document.getElementById('profile-name-input').value = authProfile.display_name || '';
+  document.getElementById('profile-email').textContent = authUser.email || '—';
+  document.getElementById('profile-msg').textContent = '';
+  document.getElementById('profile-msg').className = 'profile-modal-msg';
+  renderAvatar(document.getElementById('profile-avatar'), 'size-lg');
+  document.getElementById('profile-modal').classList.add('show');
+}
+function closeProfileModal() {
+  document.getElementById('profile-modal').classList.remove('show');
+}
+
+async function profileSave() {
+  if (!authUser || !sb) return;
+  const newName = document.getElementById('profile-name-input').value.trim();
+  const msg = document.getElementById('profile-msg');
+  const btn = document.getElementById('profile-save-btn');
+  msg.className = 'profile-modal-msg';
+  msg.textContent = '';
+  if (!newName) { msg.className = 'profile-modal-msg error'; msg.textContent = 'Le pseudo ne peut pas être vide.'; return; }
+  if (newName === authProfile.display_name) { closeProfileModal(); return; }
+  btn.disabled = true;
+  const lbl = btn.textContent;
+  btn.textContent = 'Enregistrement...';
+  try {
+    const { error } = await sb.from('profiles').update({ display_name: newName }).eq('user_id', authUser.id);
+    if (error) {
+      msg.className = 'profile-modal-msg error';
+      msg.textContent = error.message || 'Erreur';
+      btn.disabled = false;
+      btn.textContent = lbl;
+      return;
+    }
+    authProfile.display_name = newName;
+    refreshAllAvatars();
+    msg.className = 'profile-modal-msg ok';
+    msg.textContent = '✓ Profil enregistré';
+    setTimeout(() => { closeProfileModal(); }, 600);
+  } catch (e) {
+    console.error('profileSave error', e);
+    msg.className = 'profile-modal-msg error';
+    msg.textContent = 'Erreur réseau';
+    btn.disabled = false;
+    btn.textContent = lbl;
+  }
+}
+
+// Upload d'un avatar : path = avatars/{user_id}/avatar.{ext} (upsert)
+// → public URL → on persiste dans profiles.avatar_url + on rafraîchit les avatars affichés
+async function profileUploadAvatar(file) {
+  if (!authUser || !sb || !file) return;
+  const msg = document.getElementById('profile-msg');
+  msg.className = 'profile-modal-msg';
+  msg.textContent = 'Upload...';
+  try {
+    if (file.size > 5 * 1024 * 1024) {
+      msg.className = 'profile-modal-msg error';
+      msg.textContent = 'Image trop lourde (max 5 Mo).';
+      return;
+    }
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${authUser.id}/avatar.${ext}`;
+    const { error: upErr } = await sb.storage.from('avatars').upload(path, file, {
+      upsert: true,
+      cacheControl: '3600',
+      contentType: file.type || 'image/jpeg',
+    });
+    if (upErr) throw upErr;
+
+    const { data: pub } = sb.storage.from('avatars').getPublicUrl(path);
+    const publicUrl = pub.publicUrl;
+
+    const { error: dbErr } = await sb.from('profiles').update({ avatar_url: publicUrl }).eq('user_id', authUser.id);
+    if (dbErr) throw dbErr;
+
+    authProfile.avatar_url = publicUrl;
+    renderAvatar(document.getElementById('profile-avatar'), 'size-lg');
+    refreshAllAvatars();
+    msg.className = 'profile-modal-msg ok';
+    msg.textContent = '✓ Photo mise à jour';
+  } catch (e) {
+    console.error('avatar upload error', e);
+    msg.className = 'profile-modal-msg error';
+    msg.textContent = (e && e.message) || 'Erreur upload';
+  }
 }
 
 async function handleAuthSession(session) {
@@ -3774,6 +4046,7 @@ async function handleAuthSession(session) {
   }
   refreshAuthBar();
   applyAuthGate();
+  refreshAllAvatars();
 }
 
 function openAuthModal() {
@@ -7267,6 +7540,26 @@ document.getElementById('forgot-email').addEventListener('keydown', (e) => {
   });
 });
 document.getElementById('auth-signout-btn').addEventListener('click', authSignOut);
+
+// Profile modal (avatar tab Dettes → modal édition pseudo/photo/logout)
+document.getElementById('debts-avatar').addEventListener('click', openProfileModal);
+document.getElementById('profile-modal-close').addEventListener('click', closeProfileModal);
+document.getElementById('profile-save-btn').addEventListener('click', profileSave);
+document.getElementById('profile-signout-btn').addEventListener('click', () => {
+  closeProfileModal();
+  authSignOut();
+});
+document.getElementById('profile-avatar-edit').addEventListener('click', () => {
+  document.getElementById('profile-avatar-input').click();
+});
+document.getElementById('profile-avatar-input').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) profileUploadAvatar(file);
+  e.target.value = ''; // reset pour permettre re-sélection du même fichier
+});
+document.getElementById('profile-name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); profileSave(); }
+});
 
 // Online mode
 document.getElementById('online-create-btn').addEventListener('click', onlineCreateStart);
