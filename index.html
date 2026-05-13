@@ -644,11 +644,11 @@
 
   /* ===== Auth gate (login obligatoire avant d'entrer dans l'app) ===== */
   .auth-gate {
-    min-height: calc(100vh - 40px);
+    min-height: 100vh;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    padding: 16px 0;
+    padding: 40px 0 24px;
   }
   .auth-gate-card {
     width: 100%;
@@ -669,6 +669,13 @@
   }
   .auth-gate-title { font-size: 28px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.02em; }
   .auth-gate-sub { font-size: 14px; color: var(--text-dim); margin-bottom: 22px; line-height: 1.45; }
+  .auth-gate-mode-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 18px;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
   .auth-gate .field { margin-bottom: 12px; text-align: left; }
   .auth-gate .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
   .auth-gate input {
@@ -1830,12 +1837,14 @@
       </div>
     </div>
 
-    <!-- AUTH GATE : page de login plein écran. Bloque l'app tant qu'on n'est pas authentifié.
-         Logo + email + mot de passe uniquement. Si l'email existe → signIn, sinon → signUp
-         créé automatiquement. Le pseudo (display_name) se règle plus tard dans le profil. -->
+    <!-- AUTH GATE : 2 vues toggleables (signin / signup), logo + email + password.
+         Le pseudo (display_name) se règle plus tard dans le profil — il est dérivé
+         de l'email au signup, modifiable ensuite. -->
     <div id="auth-gate" class="auth-gate" style="display:none;">
       <div class="auth-gate-card">
         <img class="auth-gate-icon" src="icon-192.png" alt="">
+        <div class="auth-gate-mode-title" id="gate-mode-title">Connexion</div>
+
         <div class="field">
           <label>Email</label>
           <input type="email" id="gate-email" placeholder="toi@exemple.com" autocomplete="email" inputmode="email">
@@ -1844,8 +1853,14 @@
           <label>Mot de passe</label>
           <input type="password" id="gate-password" placeholder="••••••••" autocomplete="current-password" minlength="6">
         </div>
+
         <div class="auth-gate-msg" id="gate-msg"></div>
-        <button class="btn btn-blue" id="gate-submit-btn">Continuer</button>
+        <button class="btn btn-blue" id="gate-submit-btn">Se connecter</button>
+
+        <div class="auth-gate-switch">
+          <span id="gate-switch-text">Pas encore de compte ?</span>
+          <button type="button" class="auth-gate-link" id="gate-toggle-btn">Créer un compte</button>
+        </div>
       </div>
     </div>
 
@@ -3593,19 +3608,48 @@ async function authSignOut() {
 function gateErrorMessage(err) {
   const m = (err && (err.message || err.error_description) || '').toLowerCase();
   if (m.includes('invalid login credentials'))   return 'Email ou mot de passe incorrect.';
-  if (m.includes('user already registered'))     return 'Mot de passe incorrect pour ce compte.';
+  if (m.includes('user already registered'))     return 'Un compte existe déjà avec cet email — connecte-toi plutôt.';
   if (m.includes('email not confirmed'))         return 'Email pas encore confirmé (vérifie ta boîte mail).';
   if (m.includes('password should be at least')) return 'Le mot de passe doit faire au moins 6 caractères.';
   if (m.includes('network'))                     return 'Erreur réseau — vérifie ta connexion.';
   return err && err.message ? err.message : 'Erreur inconnue';
 }
 
-// Auto-détection : on essaie d'abord signIn (compte existant). Si "Invalid credentials",
-// on tente signUp pour créer le compte. Si signUp dit "user already registered", c'est
-// que le mot de passe était simplement mauvais → on remonte l'erreur signin.
-// Le display_name n'est PAS demandé ici : le trigger handle_new_user utilise la partie
-// locale de l'email comme display_name par défaut. L'utilisateur le changera plus tard
-// dans son profil.
+// Deux vues : 'signin' (par défaut) et 'signup'. Le display_name est dérivé de l'email
+// par le trigger handle_new_user — l'utilisateur le modifiera plus tard via son profil.
+let gateAuthMode = 'signin';
+
+function applyGateMode() {
+  const title      = document.getElementById('gate-mode-title');
+  const submitBtn  = document.getElementById('gate-submit-btn');
+  const switchText = document.getElementById('gate-switch-text');
+  const switchBtn  = document.getElementById('gate-toggle-btn');
+  const pw         = document.getElementById('gate-password');
+  if (gateAuthMode === 'signup') {
+    title.textContent = 'Créer un compte';
+    submitBtn.textContent = 'Créer mon compte';
+    switchText.textContent = 'Déjà inscrit ?';
+    switchBtn.textContent = 'Se connecter';
+    pw.setAttribute('autocomplete', 'new-password');
+  } else {
+    title.textContent = 'Connexion';
+    submitBtn.textContent = 'Se connecter';
+    switchText.textContent = 'Pas encore de compte ?';
+    switchBtn.textContent = 'Créer un compte';
+    pw.setAttribute('autocomplete', 'current-password');
+  }
+  const msg = document.getElementById('gate-msg');
+  if (msg) { msg.className = 'auth-gate-msg'; msg.textContent = ''; }
+  submitBtn.disabled = false;
+}
+
+function toggleGateMode() {
+  gateAuthMode = (gateAuthMode === 'signin') ? 'signup' : 'signin';
+  applyGateMode();
+  // Met le focus sur le champ email après le toggle
+  setTimeout(() => { try { document.getElementById('gate-email').focus(); } catch(e) {} }, 50);
+}
+
 async function gateSubmit() {
   const emailEl = document.getElementById('gate-email');
   const pwEl    = document.getElementById('gate-password');
@@ -3635,39 +3679,29 @@ async function gateSubmit() {
   }
 
   btn.disabled = true;
-  btn.textContent = 'Connexion...';
+  const labelInit = btn.textContent;
+  btn.textContent = (gateAuthMode === 'signup') ? 'Création...' : 'Connexion...';
 
   try {
-    // 1) Essai de signin
-    const signin = await sb.auth.signInWithPassword({ email, password });
-    if (!signin.error) {
-      msg.className = 'auth-gate-msg ok';
-      msg.textContent = '✓ Connecté, on entre…';
+    const resp = (gateAuthMode === 'signup')
+      ? await sb.auth.signUp({ email, password })
+      : await sb.auth.signInWithPassword({ email, password });
+    if (resp.error) {
+      msg.className = 'auth-gate-msg error';
+      msg.textContent = gateErrorMessage(resp.error);
+      btn.disabled = false;
+      btn.textContent = labelInit;
       return;
     }
-    // 2) signIn échoue → on tente le signup
-    if ((signin.error.message || '').toLowerCase().includes('invalid login credentials')) {
-      btn.textContent = 'Création du compte...';
-      const signup = await sb.auth.signUp({ email, password });
-      if (!signup.error) {
-        msg.className = 'auth-gate-msg ok';
-        msg.textContent = '✓ Compte créé, on entre…';
-        return;
-      }
-      // signUp échoue → si "already registered", c'est juste un mauvais password
-      msg.className = 'auth-gate-msg error';
-      msg.textContent = gateErrorMessage(signup.error);
-    } else {
-      msg.className = 'auth-gate-msg error';
-      msg.textContent = gateErrorMessage(signin.error);
-    }
+    msg.className = 'auth-gate-msg ok';
+    msg.textContent = (gateAuthMode === 'signup') ? '✓ Compte créé, on entre…' : '✓ Connecté, on entre…';
   } catch (e) {
     console.error('gateSubmit error', e);
     msg.className = 'auth-gate-msg error';
     msg.textContent = gateErrorMessage(e);
+    btn.disabled = false;
+    btn.textContent = labelInit;
   }
-  btn.disabled = false;
-  btn.textContent = 'Continuer';
 }
 
 // ===== Cloud sync (compteur) =====
@@ -6908,8 +6942,10 @@ document.getElementById('resume-discard-btn').addEventListener('click', () => {
   refreshResumeBanner();
 });
 
-// Auth gate (login/signup auto, plein écran) + déconnexion depuis le header
+// Auth gate (signin par défaut, toggle vers signup) + déconnexion depuis le header
+applyGateMode();
 document.getElementById('gate-submit-btn').addEventListener('click', gateSubmit);
+document.getElementById('gate-toggle-btn').addEventListener('click', toggleGateMode);
 ['gate-email', 'gate-password'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); gateSubmit(); }
