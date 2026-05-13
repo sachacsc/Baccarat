@@ -673,9 +673,8 @@
     display: block;
     width: 96px;
     height: 96px;
-    /* margin-bottom = champ-mb (12) + erreur-mt (14, collapse) + erreur min-h (16)
-       + cta-mt (26) → ~56 pour matcher la distance password→CTA */
-    margin: 0 auto 56px;
+    /* Match avec la distance password→CTA (erreur-mt 10 + min-h 12 + cta-mt 18 ≈ 40) */
+    margin: 0 auto 40px;
     border-radius: 22px;
     box-shadow: 0 6px 18px rgba(126,18,25,0.22);
   }
@@ -713,13 +712,13 @@
   .auth-gate-error {
     color: var(--red);
     font-size: 12px;
-    margin: 14px 30px 0;
+    margin: 10px 30px 0;
     text-align: center;
-    min-height: 16px;
+    min-height: 12px;
     line-height: 1.4;
   }
   .auth-gate-cta {
-    margin: 26px 24px 0;
+    margin: 18px 24px 0;
     display: block;
     width: calc(100% - 48px);
     height: 50px;
