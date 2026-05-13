@@ -644,35 +644,36 @@
 
   /* ===== Auth gate (login obligatoire avant d'entrer dans l'app) =====
      Inspiré du pattern Zmeo : logo en haut, champs gris arrondis, gros bouton plein,
-     barre fixe en bas qui amène à la signup (login mode) ou retour login (signup mode). */
+     lien "S'inscrire" / "Se connecter" juste en dessous du CTA (pas en bas de page). */
   .auth-gate {
     min-height: 100vh;
     width: 100%;
     max-width: 420px;
     margin: 0 auto;
-    padding: 60px 0 80px;
+    padding: 80px 0 40px;
     position: relative;
     display: flex;
     flex-direction: column;
   }
   .auth-gate-back {
     position: absolute;
-    top: 16px;
+    top: 20px;
     left: 16px;
     background: none;
     border: none;
-    padding: 6px 10px;
+    padding: 8px 14px;
     cursor: pointer;
     color: var(--text);
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 600;
+    line-height: 1;
   }
   .auth-gate-back:hover { color: var(--text-dim); }
   .auth-gate-icon {
     display: block;
     width: 96px;
     height: 96px;
-    margin: 0 auto 28px;
+    margin: 0 auto 36px;
     border-radius: 22px;
     box-shadow: 0 6px 18px rgba(126,18,25,0.22);
   }
@@ -680,17 +681,18 @@
     font-size: 22px;
     font-weight: 700;
     text-align: center;
-    margin-bottom: 6px;
+    margin-bottom: 28px;
     letter-spacing: -0.01em;
   }
   .auth-gate-section {
     font-size: 13px;
     color: var(--text-dim);
     padding: 0 30px;
-    margin: 20px 0 4px;
+    margin: 24px 0 8px;
+    line-height: 1.4;
   }
   .auth-gate-field {
-    margin: 0 24px;
+    margin: 0 24px 12px;
   }
   .auth-gate-field input {
     width: 100%;
@@ -699,52 +701,30 @@
     color: var(--text);
     font-family: inherit;
     font-size: 15px;
-    padding: 14px;
-    border-radius: 10px;
+    padding: 15px 16px;
+    border-radius: 12px;
     outline: none;
-    margin-bottom: 6px;
   }
   .auth-gate-field input:focus {
     box-shadow: 0 0 0 2px rgba(126,18,25,0.18);
   }
-  .auth-gate-forgot {
-    text-align: right;
-    margin: 6px 28px 0;
-  }
-  .auth-gate-forgot a, .auth-gate-link {
-    background: none;
-    border: none;
-    color: #7e1219;
-    font: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    padding: 0;
-  }
   .auth-gate-error {
     color: var(--red);
     font-size: 12px;
-    margin: 8px 30px 0;
+    margin: 14px 30px 0;
     text-align: center;
     min-height: 16px;
-  }
-  .auth-gate-ok {
-    color: var(--green);
-    font-size: 12px;
-    margin: 8px 30px 0;
-    text-align: center;
-    min-height: 16px;
+    line-height: 1.4;
   }
   .auth-gate-cta {
-    margin: 24px 25px 0;
+    margin: 26px 24px 0;
     display: block;
-    width: calc(100% - 50px);
-    height: 46px;
+    width: calc(100% - 48px);
+    height: 50px;
     background: linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
     color: white;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     font-family: inherit;
     font-size: 15px;
     font-weight: 700;
@@ -756,21 +736,14 @@
   .auth-gate-cta:disabled { opacity: 0.5; cursor: not-allowed; }
   .auth-gate-cta:active:not(:disabled) { transform: scale(0.98); }
 
-  /* Barre fixe en bas du gate (login → signup, signup → login) */
-  .auth-gate-bottom {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--bg);
-    border-top: 1px solid var(--border);
-    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  /* Lien de bascule (signup ↔ login), juste sous le CTA */
+  .auth-gate-switch-line {
+    margin: 22px 24px 0;
     text-align: center;
     font-size: 14px;
     color: var(--text-dim);
-    z-index: 10;
   }
-  .auth-gate-bottom-link {
+  .auth-gate-switch-link {
     background: none;
     border: none;
     color: #7e1219;
@@ -1925,9 +1898,9 @@
         <div class="auth-gate-error" id="login-err"></div>
         <button class="auth-gate-cta" id="login-submit">Se connecter</button>
 
-        <div class="auth-gate-bottom">
+        <div class="auth-gate-switch-line">
           Pas encore de compte ?
-          <button class="auth-gate-bottom-link" id="login-go-signup">S'inscrire</button>
+          <button class="auth-gate-switch-link" id="login-go-signup" type="button">S'inscrire</button>
         </div>
       </div>
 
@@ -1953,9 +1926,9 @@
         <div class="auth-gate-error" id="signup-err"></div>
         <button class="auth-gate-cta" id="signup-submit">Créer mon compte</button>
 
-        <div class="auth-gate-bottom">
+        <div class="auth-gate-switch-line">
           Déjà inscrit ?
-          <button class="auth-gate-bottom-link" id="signup-go-login">Se connecter</button>
+          <button class="auth-gate-switch-link" id="signup-go-login" type="button">Se connecter</button>
         </div>
       </div>
 
