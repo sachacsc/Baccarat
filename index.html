@@ -2815,6 +2815,9 @@ function startGame() {
   state.currentManche = [null, null, null];
   state.dealerIdx = 0;
   state.configured = true;
+  // Cloud : nouvelle session → reset le mapping ; la game sera créée à la 1ère manche
+  state.cloudGameId = null;
+  state.cloudSeatMap = null;
   save();
   renderAll();
   window.scrollTo({top: 0, behavior: 'smooth'});
@@ -2891,7 +2894,7 @@ function validateManche() {
     fullBoardPayload = { winnerId: fullWinnerId };
   }
 
-  state.history.push({
+  const mancheEntry = {
     ts: Date.now(),
     numActive: numActive,
     participantIds: actives.map(p => p.id),
@@ -2902,7 +2905,9 @@ function validateManche() {
       tiebreak: b.tiebreak ? { winnerId: b.tiebreak.winnerId, multi: b.tiebreak.multi } : null,
     })),
     fullBoard: fullBoardPayload,
-  });
+    dealerIdx: state.dealerIdx,
+  };
+  state.history.push(mancheEntry);
 
   state.currentManche = [null, null, null];
   state.dealerIdx = (state.dealerIdx + 1) % numActive;
@@ -2915,6 +2920,11 @@ function validateManche() {
   } else {
     showToast('✓ Manche enregistrée');
   }
+  // Cloud sync : fire-and-forget. Si offline ou pas loggué, no-op silencieux.
+  cloudRecordCounterManche(mancheEntry, actives).catch(err => {
+    console.warn('cloud sync failed', err);
+    showToast('⚠ Sync cloud échouée — manche conservée localement', true);
+  });
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
@@ -3356,6 +3366,147 @@ async function authSignOut() {
   if (!confirm('Se déconnecter ?')) return;
   await sb.auth.signOut();
   // L'event SIGNED_OUT fired par Supabase JS → handleAuthSession(null) → refresh UI
+}
+
+// ===== Cloud sync (compteur) =====
+// Sauvegarde chaque manche du mode compteur dans Supabase si l'utilisateur est loggué.
+// Le mapping local player.id ↔ seat_index est figé à la 1ère manche (state.cloudSeatMap)
+// pour que les manches suivantes pointent vers les mêmes participants.
+//
+// Auto-link : si un joueur compteur porte le même display_name que le user loggué,
+// il est enregistré avec user_id = authUser.id ; sinon en guest_name. L'enregistrement
+// "qui est qui" pourra se raffiner plus tard via une UI de linking explicite.
+
+async function cloudRecordCounterManche(mancheEntry, actives) {
+  if (!sb || !authUser) return;  // silencieux si pas loggué
+  if (!mancheEntry || !mancheEntry.boards) return;
+
+  let participantsPayload = null;
+  // 1ère manche → snapshot des participants (seat_index = index dans state.players)
+  if (!state.cloudGameId) {
+    const seatMap = {};
+    const meName = (authProfile && authProfile.display_name || '').trim().toLowerCase();
+    participantsPayload = state.players.map((p, idx) => {
+      seatMap[p.id] = idx;
+      const name = (p.name || '').trim();
+      const isMe = meName && name.toLowerCase() === meName;
+      return {
+        seat_index: idx,
+        user_id: isMe ? authUser.id : null,
+        guest_name: isMe ? null : (name || `Joueur ${idx + 1}`),
+      };
+    });
+    state.cloudSeatMap = seatMap;
+  }
+
+  const seatMap = state.cloudSeatMap || {};
+  const findSeat = (playerId) => {
+    if (seatMap[playerId] !== undefined) return seatMap[playerId];
+    const idx = state.players.findIndex(p => p.id === playerId);
+    return idx >= 0 ? idx : null;
+  };
+
+  const price = mancheEntry.linePrice;
+  const numActive = mancheEntry.numActive;
+
+  // Déroule la même comptabilité que validateManche (mais pour calculer les deltas locaux par siège)
+  const deltas = {};
+  const boardsWonBySeat = {};
+  mancheEntry.participantIds.forEach(pid => {
+    const seat = findSeat(pid);
+    if (seat !== null) { deltas[seat] = 0; boardsWonBySeat[seat] = []; }
+  });
+
+  const boardResultsPayload = mancheEntry.boards.map((b, bi) => {
+    const winnerIds = b.winnerIds || [];
+    const isSplit = winnerIds.length > 1;
+    const finalWinnerId = b.tiebreak ? b.tiebreak.winnerId : winnerIds[0];
+    const finalMulti = b.tiebreak ? b.tiebreak.multi : b.multi;
+    const winnerSeat = finalWinnerId ? findSeat(finalWinnerId) : null;
+
+    if (isSplit) {
+      const splitterSet = new Set(winnerIds);
+      const paymentSplit = price * finalMulti;
+      const paymentBase = price * 1;
+      let winnerGain = 0;
+      mancheEntry.participantIds.forEach(pid => {
+        if (pid === finalWinnerId) return;
+        const seat = findSeat(pid);
+        if (seat === null) return;
+        if (splitterSet.has(pid)) { deltas[seat] -= paymentSplit; winnerGain += paymentSplit; }
+        else                       { deltas[seat] -= paymentBase;  winnerGain += paymentBase; }
+      });
+      if (winnerSeat !== null) deltas[winnerSeat] += winnerGain;
+    } else {
+      const payment = price * b.multi;
+      mancheEntry.participantIds.forEach(pid => {
+        const seat = findSeat(pid);
+        if (seat === null) return;
+        if (pid === finalWinnerId) deltas[seat] += payment * (numActive - 1);
+        else                       deltas[seat] -= payment;
+      });
+    }
+    if (winnerSeat !== null) boardsWonBySeat[winnerSeat].push({ board_num: bi + 1, multi: finalMulti });
+
+    return {
+      board_num: bi + 1,
+      winner_seat: winnerSeat,
+      multi: b.multi,
+      is_split: isSplit,
+      splitter_seats: isSplit ? winnerIds.map(findSeat).filter(s => s !== null) : null,
+      final_winner_seat: winnerSeat,
+      final_multi: finalMulti,
+    };
+  });
+
+  // Full board
+  let fullBoardSeat = null;
+  if (mancheEntry.fullBoard && mancheEntry.fullBoard.winnerId) {
+    fullBoardSeat = findSeat(mancheEntry.fullBoard.winnerId);
+    const bonus = price;
+    mancheEntry.participantIds.forEach(pid => {
+      const seat = findSeat(pid);
+      if (seat === null) return;
+      if (pid === mancheEntry.fullBoard.winnerId) deltas[seat] += bonus * (numActive - 1);
+      else                                        deltas[seat] -= bonus;
+    });
+  }
+
+  const resultsPerSeat = Object.keys(deltas).map(seatStr => ({
+    seat_index: parseInt(seatStr, 10),
+    delta: deltas[seatStr],
+    boards_won_json: boardsWonBySeat[seatStr] || [],
+  }));
+
+  // Donneur : mancheEntry.dealerIdx est l'index dans actives (pas state.players)
+  let dealerSeatIndex = null;
+  const dealerActive = (mancheEntry.dealerIdx !== undefined) ? actives[mancheEntry.dealerIdx] : null;
+  if (dealerActive) dealerSeatIndex = findSeat(dealerActive.id);
+
+  const { data, error } = await sb.rpc('record_manche', {
+    p_game_id: state.cloudGameId || null,
+    p_mode: 'counter',
+    p_line_price: price,
+    p_currency: 'EUR',
+    p_settings_json: {},
+    p_participants: participantsPayload,  // null après la 1ère manche
+    p_manche_number: state.history.length,  // state.history vient juste d'être push, donc length = numéro de cette manche
+    p_dealer_seat: dealerSeatIndex,
+    p_num_active: numActive,
+    p_board_results: boardResultsPayload,
+    p_full_board_seat: fullBoardSeat,
+    p_results_per_seat: resultsPerSeat,
+  });
+
+  if (error) {
+    console.error('record_manche RPC error', error);
+    throw new Error(error.message || 'RPC failed');
+  }
+
+  if (!state.cloudGameId && data) {
+    state.cloudGameId = data;
+    save();
+  }
 }
 
 // ========== ONLINE (PeerJS) ==========
