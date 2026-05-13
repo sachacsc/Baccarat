@@ -682,9 +682,28 @@
     border-radius: 10px;
     outline: none;
   }
-  .auth-gate-msg { font-size: 13px; min-height: 18px; margin: 6px 0 12px; }
+  .auth-gate-msg { font-size: 13px; min-height: 18px; margin: 6px 0 12px; line-height: 1.4; }
   .auth-gate-msg.error { color: var(--red); }
   .auth-gate-msg.ok    { color: var(--green); }
+  .auth-gate-switch {
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    align-items: center;
+  }
+  .auth-gate-link {
+    background: none;
+    border: none;
+    color: var(--blue);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+  }
 
   /* ===== Tabbar (navigation principale, fixe en bas) ===== */
   .tabbar {
@@ -1809,17 +1828,28 @@
       <div class="auth-gate-card">
         <img class="auth-gate-icon" src="icon-192.png" alt="">
         <div class="auth-gate-title">Baccarat</div>
-        <div class="auth-gate-sub">Compteur + partie en ligne pour le Baccarat 3-boards. Crée ton compte (ou connecte-toi) avec ton email.</div>
+        <div class="auth-gate-sub" id="gate-sub">Crée ton compte ou connecte-toi pour suivre tes parties et balances.</div>
+
         <div class="field">
           <label>Email</label>
           <input type="email" id="gate-email" placeholder="toi@exemple.com" autocomplete="email" inputmode="email">
         </div>
         <div class="field">
-          <label>Pseudo (uniquement à la 1ère connexion)</label>
-          <input type="text" id="gate-display-name" placeholder="Ton prénom" maxlength="32">
+          <label>Mot de passe</label>
+          <input type="password" id="gate-password" placeholder="••••••••" autocomplete="current-password" minlength="6">
         </div>
+        <div class="field" id="gate-name-field">
+          <label>Pseudo</label>
+          <input type="text" id="gate-display-name" placeholder="Ton prénom" maxlength="32" autocomplete="username">
+        </div>
+
         <div class="auth-gate-msg" id="gate-msg"></div>
-        <button class="btn btn-blue" id="gate-send-btn">Envoyer le lien magique</button>
+        <button class="btn btn-blue" id="gate-submit-btn">Créer mon compte</button>
+
+        <div class="auth-gate-switch">
+          <span id="gate-switch-text">Déjà inscrit ?</span>
+          <button type="button" class="auth-gate-link" id="gate-toggle-btn">Se connecter</button>
+        </div>
       </div>
     </div>
 
@@ -3563,19 +3593,81 @@ async function authSignOut() {
   // L'event SIGNED_OUT fired par Supabase JS → handleAuthSession(null) → refresh UI
 }
 
-// Magic link depuis l'auth-gate (plein écran, pas le modal). Logique identique.
-async function gateSendMagicLink() {
+// Mode d'authentification dans le gate : 'signup' (création de compte) ou 'signin' (login).
+// Le pseudo n'est demandé qu'en signup ; signInWithPassword vs signUp côté Supabase.
+let gateAuthMode = 'signup';
+
+function applyGateMode() {
+  const nameField   = document.getElementById('gate-name-field');
+  const submitBtn   = document.getElementById('gate-submit-btn');
+  const switchText  = document.getElementById('gate-switch-text');
+  const switchBtn   = document.getElementById('gate-toggle-btn');
+  const sub         = document.getElementById('gate-sub');
+  const pw          = document.getElementById('gate-password');
+  if (gateAuthMode === 'signup') {
+    nameField.style.display = '';
+    submitBtn.textContent = 'Créer mon compte';
+    switchText.textContent = 'Déjà inscrit ?';
+    switchBtn.textContent = 'Se connecter';
+    sub.textContent = 'Crée ton compte pour suivre tes parties et balances.';
+    if (pw) pw.setAttribute('autocomplete', 'new-password');
+  } else {
+    nameField.style.display = 'none';
+    submitBtn.textContent = 'Se connecter';
+    switchText.textContent = 'Pas encore de compte ?';
+    switchBtn.textContent = 'Créer un compte';
+    sub.textContent = 'Connecte-toi pour retrouver tes parties et balances.';
+    if (pw) pw.setAttribute('autocomplete', 'current-password');
+  }
+  // Reset message + bouton
+  const msg = document.getElementById('gate-msg');
+  if (msg) { msg.className = 'auth-gate-msg'; msg.textContent = ''; }
+  submitBtn.disabled = false;
+}
+
+function toggleGateMode() {
+  gateAuthMode = (gateAuthMode === 'signup') ? 'signin' : 'signup';
+  applyGateMode();
+}
+
+// Traduit les codes d'erreur Supabase en messages user-friendly
+function gateErrorMessage(err) {
+  const m = (err && (err.message || err.error_description) || '').toLowerCase();
+  if (m.includes('invalid login credentials')) return 'Email ou mot de passe incorrect.';
+  if (m.includes('user already registered'))   return 'Un compte existe déjà avec cet email — passe en "Se connecter".';
+  if (m.includes('email not confirmed'))       return 'Ton email n\'est pas confirmé (vérifie ta boîte mail).';
+  if (m.includes('password should be at least')) return 'Le mot de passe doit faire au moins 6 caractères.';
+  if (m.includes('network'))                   return 'Erreur réseau — vérifie ta connexion.';
+  return err && err.message ? err.message : 'Erreur inconnue';
+}
+
+async function gateSubmit() {
   const emailEl = document.getElementById('gate-email');
+  const pwEl    = document.getElementById('gate-password');
   const nameEl  = document.getElementById('gate-display-name');
   const msg     = document.getElementById('gate-msg');
-  const btn     = document.getElementById('gate-send-btn');
-  const emailRaw = emailEl.value.trim();
+  const btn     = document.getElementById('gate-submit-btn');
+
+  const email = emailEl.value.trim();
+  const password = pwEl.value;
   const displayName = nameEl.value.trim();
+
   msg.className = 'auth-gate-msg';
   msg.textContent = '';
-  if (!emailRaw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     msg.className = 'auth-gate-msg error';
     msg.textContent = 'Email invalide';
+    return;
+  }
+  if (!password || password.length < 6) {
+    msg.className = 'auth-gate-msg error';
+    msg.textContent = 'Mot de passe : 6 caractères minimum.';
+    return;
+  }
+  if (gateAuthMode === 'signup' && !displayName) {
+    msg.className = 'auth-gate-msg error';
+    msg.textContent = 'Choisis un pseudo pour t\'identifier auprès des autres joueurs.';
     return;
   }
   if (!sb) {
@@ -3583,32 +3675,39 @@ async function gateSendMagicLink() {
     msg.textContent = 'Auth non initialisée';
     return;
   }
+
   btn.disabled = true;
-  btn.textContent = 'Envoi en cours...';
+  const labelInit = btn.textContent;
+  btn.textContent = (gateAuthMode === 'signup') ? 'Création en cours...' : 'Connexion en cours...';
+
   try {
-    const { error } = await sb.auth.signInWithOtp({
-      email: emailRaw,
-      options: {
-        emailRedirectTo: window.location.origin + window.location.pathname,
-        data: displayName ? { display_name: displayName } : undefined,
-      },
-    });
-    if (error) {
+    let resp;
+    if (gateAuthMode === 'signup') {
+      resp = await sb.auth.signUp({
+        email,
+        password,
+        options: { data: { display_name: displayName } },
+      });
+    } else {
+      resp = await sb.auth.signInWithPassword({ email, password });
+    }
+    if (resp.error) {
       msg.className = 'auth-gate-msg error';
-      msg.textContent = error.message || 'Erreur';
+      msg.textContent = gateErrorMessage(resp.error);
       btn.disabled = false;
-      btn.textContent = 'Envoyer le lien magique';
+      btn.textContent = labelInit;
       return;
     }
+    // Avec enable_confirmations=false côté Supabase, signUp crée immédiatement une session.
+    // handleAuthSession sera déclenché par l'événement SIGNED_IN → applyAuthGate ferme le gate.
     msg.className = 'auth-gate-msg ok';
-    msg.innerHTML = `✓ Lien envoyé à <strong>${escapeHTML(emailRaw)}</strong>.<br>Vérifie ta boîte mail (et les spams).`;
-    btn.textContent = 'Lien envoyé ✓';
+    msg.textContent = (gateAuthMode === 'signup') ? '✓ Compte créé, on entre…' : '✓ Connecté, on entre…';
   } catch (e) {
-    console.error(e);
+    console.error('gateSubmit error', e);
     msg.className = 'auth-gate-msg error';
-    msg.textContent = 'Erreur réseau';
+    msg.textContent = gateErrorMessage(e);
     btn.disabled = false;
-    btn.textContent = 'Envoyer le lien magique';
+    btn.textContent = labelInit;
   }
 }
 
@@ -6850,13 +6949,14 @@ document.getElementById('resume-discard-btn').addEventListener('click', () => {
   refreshResumeBanner();
 });
 
-// Auth gate (login plein écran) + déconnexion depuis le header
-document.getElementById('gate-send-btn').addEventListener('click', gateSendMagicLink);
-document.getElementById('gate-email').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); gateSendMagicLink(); }
-});
-document.getElementById('gate-display-name').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); gateSendMagicLink(); }
+// Auth gate (login/signup plein écran) + déconnexion depuis le header
+applyGateMode();  // initialise l'UI au mode signup par défaut
+document.getElementById('gate-submit-btn').addEventListener('click', gateSubmit);
+document.getElementById('gate-toggle-btn').addEventListener('click', toggleGateMode);
+['gate-email', 'gate-password', 'gate-display-name'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); gateSubmit(); }
+  });
 });
 document.getElementById('auth-signout-btn').addEventListener('click', authSignOut);
 
