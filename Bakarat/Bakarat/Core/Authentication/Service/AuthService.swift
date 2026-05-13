@@ -27,6 +27,8 @@ final class AuthService: ObservableObject {
     private var observationTask: Task<Void, Never>?
 
     var isSignedIn: Bool { session != nil }
+    /// Email du user courant, sans avoir à importer le module Auth dans les views.
+    var userEmail: String? { session?.user.email }
 
     init() {
         observeAuthChanges()

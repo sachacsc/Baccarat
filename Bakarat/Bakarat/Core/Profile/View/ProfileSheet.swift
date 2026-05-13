@@ -39,7 +39,7 @@ struct ProfileSheet: View {
                 }
 
                 Section("Email") {
-                    Text(auth.session?.user.email ?? "—")
+                    Text(auth.userEmail ?? "—")
                         .foregroundStyle(.secondary)
                 }
 

@@ -84,7 +84,7 @@ struct CounterRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(String(counter.name.first.map(Character.init(_:)) ?? "?").uppercased())
+            Text(counter.initial)
                 .font(.headline)
                 .foregroundStyle(Theme.brandRed)
                 .frame(width: 44, height: 44)
@@ -185,6 +185,11 @@ struct PlaceholderCounter: Identifiable, Hashable {
     var lastUsedAt: Date
     var playerCount: Int
     var mancheCount: Int
+
+    var initial: String {
+        guard let c = name.trimmingCharacters(in: .whitespaces).first else { return "?" }
+        return String(c).uppercased()
+    }
 
     var subtitle: String {
         var parts: [String] = []
