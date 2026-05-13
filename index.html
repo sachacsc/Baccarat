@@ -51,7 +51,10 @@
     overflow-x: hidden;
     max-width: 100vw;
   }
-  body { padding-bottom: 80px; }
+  /* Espace réservé en bas pour la tabbar fixe (+ safe area iOS) */
+  body {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
 
   .container {
     max-width: 600px;
@@ -637,6 +640,103 @@
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     margin-top: 8px;
+  }
+
+  /* ===== Auth gate (login obligatoire avant d'entrer dans l'app) ===== */
+  .auth-gate {
+    min-height: calc(100vh - 40px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 0;
+  }
+  .auth-gate-card {
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+    padding: 28px 24px;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.08);
+  }
+  .auth-gate-icon {
+    width: 84px;
+    height: 84px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 12px rgba(126,18,25,0.25);
+  }
+  .auth-gate-title { font-size: 28px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.02em; }
+  .auth-gate-sub { font-size: 14px; color: var(--text-dim); margin-bottom: 22px; line-height: 1.45; }
+  .auth-gate .field { margin-bottom: 12px; text-align: left; }
+  .auth-gate .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .auth-gate input {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    outline: none;
+  }
+  .auth-gate-msg { font-size: 13px; min-height: 18px; margin: 6px 0 12px; }
+  .auth-gate-msg.error { color: var(--red); }
+  .auth-gate-msg.ok    { color: var(--green); }
+
+  /* ===== Tabbar (navigation principale, fixe en bas) ===== */
+  .tabbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg);
+    border-top: 1.5px solid var(--border);
+    display: flex;
+    padding-bottom: env(safe-area-inset-bottom);
+    z-index: 100;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+  }
+  .tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 9px 4px 7px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-faint);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    transition: color 0.15s;
+  }
+  .tab .tab-icon { font-size: 22px; line-height: 1; }
+  .tab .tab-label { letter-spacing: 0.02em; }
+  .tab.active { color: var(--text); }
+  .tab.active .tab-icon { transform: scale(1.08); }
+  .tab:active { transform: scale(0.96); }
+
+  /* Les panes prennent toute la largeur de la container ; un seul visible à la fois */
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* Footer-actions (nouveau-partie) visible uniquement sur l'onglet Compteur */
+  body:not([data-tab="counter"]) #footer-actions { display: none !important; }
+
+  /* Le bouton "Se connecter" du header disparaît : login = gateway dédié */
+  #auth-signin-btn { display: none !important; }
+
+  /* Mode debts : section title + placeholder */
+  .debts-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-faint);
+    font-size: 14px;
   }
 
   /* ===== Resume banner (sauvegarde online auto) ===== */
@@ -1704,40 +1804,30 @@
       </div>
     </div>
 
-    <section id="landing-section" style="display:none;">
-      <div class="resume-banner" id="resume-banner" style="display:none;">
-        <div class="resume-banner-body">
-          <div class="resume-banner-title">⚠ Partie en ligne interrompue</div>
-          <div class="resume-banner-desc" id="resume-banner-desc">—</div>
+    <!-- AUTH GATE : page de login plein écran. Bloque l'app tant qu'on n'est pas authentifié. -->
+    <div id="auth-gate" class="auth-gate" style="display:none;">
+      <div class="auth-gate-card">
+        <img class="auth-gate-icon" src="icon-192.png" alt="">
+        <div class="auth-gate-title">Baccarat</div>
+        <div class="auth-gate-sub">Compteur + partie en ligne pour le Baccarat 3-boards. Crée ton compte (ou connecte-toi) avec ton email.</div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="gate-email" placeholder="toi@exemple.com" autocomplete="email" inputmode="email">
         </div>
-        <div class="resume-banner-actions">
-          <button class="btn btn-blue" id="resume-online-btn">Reprendre</button>
-          <button class="btn btn-secondary" id="resume-discard-btn">Supprimer</button>
+        <div class="field">
+          <label>Pseudo (uniquement à la 1ère connexion)</label>
+          <input type="text" id="gate-display-name" placeholder="Ton prénom" maxlength="32">
         </div>
+        <div class="auth-gate-msg" id="gate-msg"></div>
+        <button class="btn btn-blue" id="gate-send-btn">Envoyer le lien magique</button>
       </div>
-      <div class="landing-card">
-        <div class="landing-title">Comment veux-tu jouer ?</div>
-        <div class="landing-sub">Choisis un mode pour démarrer.</div>
-        <div class="landing-options">
-          <button class="landing-btn primary" id="mode-counter-btn">
-            <span class="landing-btn-icon">📓</span>
-            <div class="landing-btn-body">
-              <div class="landing-btn-title">Compteur seulement</div>
-              <div class="landing-btn-desc">Vous jouez avec de vraies cartes — l'app gère uniquement les comptes.</div>
-            </div>
-            <span class="landing-btn-arrow">›</span>
-          </button>
-          <button class="landing-btn" id="mode-online-btn">
-            <span class="landing-btn-icon">📱</span>
-            <div class="landing-btn-body">
-              <div class="landing-btn-title">Partie en ligne</div>
-              <div class="landing-btn-desc">Chacun sur son tél, cartes distribuées par l'app, tirage digital.</div>
-            </div>
-            <span class="landing-btn-arrow">›</span>
-          </button>
-        </div>
-      </div>
-    </section>
+    </div>
+
+    <!-- APP SHELL : visible après login. Contient les 3 onglets + la tabbar. -->
+    <div id="app-shell" class="app-shell" style="display:none;">
+
+      <!-- TAB Compteur : contenu existant des sections setup → history -->
+      <div class="tab-pane" id="tab-counter">
 
     <section id="setup-section" style="display:none;">
       <div class="section-title">
@@ -1797,6 +1887,22 @@
       <div class="section-title">Historique</div>
       <div id="history-list"></div>
     </section>
+
+      </div> <!-- /tab-counter -->
+
+      <!-- TAB Online : reprise + partie en ligne -->
+      <div class="tab-pane" id="tab-online">
+
+        <div class="resume-banner" id="resume-banner" style="display:none;">
+          <div class="resume-banner-body">
+            <div class="resume-banner-title">⚠ Partie en ligne interrompue</div>
+            <div class="resume-banner-desc" id="resume-banner-desc">—</div>
+          </div>
+          <div class="resume-banner-actions">
+            <button class="btn btn-blue" id="resume-online-btn">Reprendre</button>
+            <button class="btn btn-secondary" id="resume-discard-btn">Supprimer</button>
+          </div>
+        </div>
 
     <section id="online-section" style="display:none;">
 
@@ -1972,6 +2078,16 @@
 
     </section>
 
+      </div> <!-- /tab-online -->
+
+      <!-- TAB Dettes : ledger et historique des parties (contenu rempli au prochain batch) -->
+      <div class="tab-pane" id="tab-debts">
+        <div class="section-title">Dettes & gains</div>
+        <div id="debts-content">
+          <div class="debts-empty">Joue ta première partie compteur ou online pour voir ton ledger ici.</div>
+        </div>
+      </div>
+
     <!-- MODAL stats (mobile) -->
     <div class="modal-overlay" id="stats-modal">
       <div class="modal">
@@ -2026,9 +2142,26 @@
 
     <section id="footer-actions" style="display:none;">
       <div class="footer-divider"></div>
-      <button class="btn btn-secondary" id="change-mode-btn">↩ Changer de mode</button>
-      <button class="btn btn-secondary" id="new-game-btn" style="margin-top:8px; display:none;">Nouvelle partie (réinitialiser)</button>
+      <button class="btn btn-secondary" id="new-game-btn" style="display:none;">Nouvelle partie (réinitialiser)</button>
     </section>
+
+    </div> <!-- /app-shell -->
+
+    <!-- TABBAR : navigation principale (Compteur / Online / Dettes) -->
+    <nav class="tabbar" id="app-tabbar" style="display:none;">
+      <button class="tab" data-tab="counter" type="button">
+        <span class="tab-icon">📓</span>
+        <span class="tab-label">Compteur</span>
+      </button>
+      <button class="tab" data-tab="online" type="button">
+        <span class="tab-icon">🎮</span>
+        <span class="tab-label">Online</span>
+      </button>
+      <button class="tab" data-tab="debts" type="button">
+        <span class="tab-icon">💰</span>
+        <span class="tab-label">Dettes</span>
+      </button>
+    </nav>
   </div>
 
   <!-- MODAL Gérer joueurs -->
@@ -2151,8 +2284,10 @@ function load() {
       });
       // Compat : partie sauvegardée avant l'ajout du sélecteur de mode = mode compteur
       if (state.configured && !state.mode) state.mode = 'counter';
-      // Mode online non restaurable au reload (la connexion WebRTC est perdue) → retour landing
-      if (state.mode === 'online') state.mode = null;
+      // Mode online non restaurable au reload (la connexion WebRTC est perdue) → retour Compteur par défaut
+      if (state.mode === 'online') { state.mode = 'counter'; state.activeTab = state.activeTab || 'counter'; }
+      // L'onglet actif par défaut est Compteur si rien n'est défini
+      if (!state.activeTab) state.activeTab = 'counter';
     }
   } catch(e) {}
 }
@@ -2709,22 +2844,12 @@ function showSection(id, visible) {
 function renderAll() {
   const sub = document.getElementById('header-subtitle');
 
-  // Aucun mode choisi → landing
-  if (!state.mode) {
-    showSection('landing-section', true);
-    showSection('setup-section', false);
-    showSection('dealer-section', false);
-    showSection('game-section', false);
-    showSection('manche-section', false);
-    showSection('history-section', false);
-    showSection('online-section', false);
-    showSection('footer-actions', false);
-    sub.textContent = 'Choisis ton mode de jeu';
-    refreshResumeBanner();
-    return;
-  }
+  refreshResumeBanner();
 
-  showSection('landing-section', false);
+  // Plus de landing : le mode est forcément 'counter' ou 'online' après login.
+  // (sécurité : si rien n'est encore set, on tombe sur Compteur par défaut.)
+  if (!state.mode) state.mode = 'counter';
+
   showSection('footer-actions', true);
   const showNewGame = (state.mode === 'counter' && state.configured);
   document.getElementById('new-game-btn').style.display = showNewGame ? '' : 'none';
@@ -3279,18 +3404,75 @@ function initSupabase() {
 }
 
 async function refreshAuthBar() {
-  const signinBtn = document.getElementById('auth-signin-btn');
   const userBox = document.getElementById('auth-user');
   const nameEl = document.getElementById('auth-user-name');
-  if (!signinBtn || !userBox) return;
+  if (!userBox) return;
   if (authUser && authProfile) {
-    signinBtn.style.display = 'none';
     userBox.style.display = '';
     nameEl.textContent = authProfile.display_name || authUser.email || '?';
   } else {
-    signinBtn.style.display = '';
     userBox.style.display = 'none';
   }
+}
+
+// applyAuthGate : route entre l'auth-gate (login plein écran) et l'app-shell (tabbar + contenu).
+// Appelé à chaque changement de session.
+function applyAuthGate() {
+  const gate = document.getElementById('auth-gate');
+  const shell = document.getElementById('app-shell');
+  const tabbar = document.getElementById('app-tabbar');
+  const loggedIn = !!authUser;
+  if (gate)   gate.style.display   = loggedIn ? 'none' : '';
+  if (shell)  shell.style.display  = loggedIn ? '' : 'none';
+  if (tabbar) tabbar.style.display = loggedIn ? '' : 'none';
+  document.body.classList.toggle('signed-in', loggedIn);
+  document.body.classList.toggle('signed-out', !loggedIn);
+  if (loggedIn) {
+    // Active le dernier onglet utilisé, sinon Compteur par défaut
+    const initialTab = (state && state.activeTab) || 'counter';
+    switchTab(initialTab);
+  }
+}
+
+// switchTab : active le pane correspondant + met à jour state.mode pour rester compatible
+// avec le rendu existant (renderAll / showSection / etc.).
+function switchTab(name) {
+  if (!['counter', 'online', 'debts'].includes(name)) name = 'counter';
+  // Update pane visibility
+  document.querySelectorAll('.tab-pane').forEach(p => {
+    p.classList.toggle('active', p.id === `tab-${name}`);
+  });
+  // Update tab button active state
+  document.querySelectorAll('#app-tabbar .tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === name);
+  });
+  document.body.dataset.tab = name;
+  state.activeTab = name;
+  // Sync state.mode + setup (joueurs par défaut compteur, préchargement online)
+  if (name === 'counter') {
+    if (state.mode !== 'counter') {
+      state.mode = 'counter';
+      if (state.players.length === 0) {
+        for (let i = 0; i < 4; i++) state.players.push({ id: uid(), name: '', active: true });
+      }
+    }
+  } else if (name === 'online') {
+    if (state.mode !== 'online') {
+      state.mode = 'online';
+      preloadCardImages();
+    }
+  }
+  save();
+  if (name === 'counter' || name === 'online') {
+    renderAll();
+  } else if (name === 'debts') {
+    renderDebtsTab();
+  }
+}
+
+// Placeholder pour l'onglet Dettes — sera rempli au prochain batch.
+function renderDebtsTab() {
+  // À venir : charger games/manche_results/balances depuis Supabase et afficher
 }
 
 async function handleAuthSession(session) {
@@ -3298,6 +3480,7 @@ async function handleAuthSession(session) {
     authUser = null;
     authProfile = null;
     refreshAuthBar();
+    applyAuthGate();
     return;
   }
   authUser = session.user;
@@ -3310,7 +3493,6 @@ async function handleAuthSession(session) {
     } else if (data) {
       authProfile = data;
     } else {
-      // Très rare : le trigger n'a pas encore tourné. On affiche un fallback.
       authProfile = { user_id: authUser.id, display_name: authUser.email.split('@')[0] };
     }
   } catch (e) {
@@ -3318,6 +3500,7 @@ async function handleAuthSession(session) {
     authProfile = { user_id: authUser.id, display_name: authUser.email.split('@')[0] };
   }
   refreshAuthBar();
+  applyAuthGate();
 }
 
 function openAuthModal() {
@@ -3378,6 +3561,55 @@ async function authSignOut() {
   if (!confirm('Se déconnecter ?')) return;
   await sb.auth.signOut();
   // L'event SIGNED_OUT fired par Supabase JS → handleAuthSession(null) → refresh UI
+}
+
+// Magic link depuis l'auth-gate (plein écran, pas le modal). Logique identique.
+async function gateSendMagicLink() {
+  const emailEl = document.getElementById('gate-email');
+  const nameEl  = document.getElementById('gate-display-name');
+  const msg     = document.getElementById('gate-msg');
+  const btn     = document.getElementById('gate-send-btn');
+  const emailRaw = emailEl.value.trim();
+  const displayName = nameEl.value.trim();
+  msg.className = 'auth-gate-msg';
+  msg.textContent = '';
+  if (!emailRaw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+    msg.className = 'auth-gate-msg error';
+    msg.textContent = 'Email invalide';
+    return;
+  }
+  if (!sb) {
+    msg.className = 'auth-gate-msg error';
+    msg.textContent = 'Auth non initialisée';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours...';
+  try {
+    const { error } = await sb.auth.signInWithOtp({
+      email: emailRaw,
+      options: {
+        emailRedirectTo: window.location.origin + window.location.pathname,
+        data: displayName ? { display_name: displayName } : undefined,
+      },
+    });
+    if (error) {
+      msg.className = 'auth-gate-msg error';
+      msg.textContent = error.message || 'Erreur';
+      btn.disabled = false;
+      btn.textContent = 'Envoyer le lien magique';
+      return;
+    }
+    msg.className = 'auth-gate-msg ok';
+    msg.innerHTML = `✓ Lien envoyé à <strong>${escapeHTML(emailRaw)}</strong>.<br>Vérifie ta boîte mail (et les spams).`;
+    btn.textContent = 'Lien envoyé ✓';
+  } catch (e) {
+    console.error(e);
+    msg.className = 'auth-gate-msg error';
+    msg.textContent = 'Erreur réseau';
+    btn.disabled = false;
+    btn.textContent = 'Envoyer le lien magique';
+  }
 }
 
 // ===== Cloud sync (compteur) =====
@@ -3651,7 +3883,7 @@ function onlineHostResume() {
       hostP.connected = true;
     }
     online.status = 'in-game';
-    showSection('landing-section', false);
+    switchTab('online');
     showSection('online-section', true);
     showToast('Partie reprise — les joueurs peuvent rejoindre avec le code');
     broadcastGameState();
@@ -6599,14 +6831,18 @@ if ('serviceWorker' in navigator) {
 
 // Auth (Supabase) : init au boot, restaure la session si présente
 initSupabase();
+// Affiche immédiatement le gate par défaut (on bascule sur l'app dès que getSession répond avec une session valide)
+applyAuthGate();
 if (sb) {
-  // getSession sync l'état au load (le SDK gère le hash du magic link automatiquement)
   sb.auth.getSession().then(({ data }) => handleAuthSession(data.session));
 }
 
-document.getElementById('mode-counter-btn').addEventListener('click', () => setMode('counter'));
-document.getElementById('mode-online-btn').addEventListener('click', () => setMode('online'));
-document.getElementById('change-mode-btn').addEventListener('click', backToLanding);
+// Tabbar
+document.querySelectorAll('#app-tabbar .tab').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+// Resume online banner
 document.getElementById('resume-online-btn').addEventListener('click', onlineHostResume);
 document.getElementById('resume-discard-btn').addEventListener('click', () => {
   if (!confirm('Supprimer la sauvegarde de la partie ? Les comptes seront perdus.')) return;
@@ -6614,13 +6850,15 @@ document.getElementById('resume-discard-btn').addEventListener('click', () => {
   refreshResumeBanner();
 });
 
-document.getElementById('auth-signin-btn').addEventListener('click', openAuthModal);
-document.getElementById('auth-signout-btn').addEventListener('click', authSignOut);
-document.getElementById('auth-send-link-btn').addEventListener('click', authSendMagicLink);
-document.getElementById('auth-modal-close-btn').addEventListener('click', closeAuthModal);
-document.getElementById('auth-email-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); authSendMagicLink(); }
+// Auth gate (login plein écran) + déconnexion depuis le header
+document.getElementById('gate-send-btn').addEventListener('click', gateSendMagicLink);
+document.getElementById('gate-email').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); gateSendMagicLink(); }
 });
+document.getElementById('gate-display-name').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); gateSendMagicLink(); }
+});
+document.getElementById('auth-signout-btn').addEventListener('click', authSignOut);
 
 // Online mode
 document.getElementById('online-create-btn').addEventListener('click', onlineCreateStart);
