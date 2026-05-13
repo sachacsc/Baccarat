@@ -6,6 +6,8 @@
 <title>Baccarat</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -52,6 +54,7 @@
   .game-main { max-width: 100%; box-sizing: border-box; }
 
   header {
+    position: relative;
     text-align: center;
     padding: 8px 0 20px;
     border-bottom: 2px solid var(--text);
@@ -59,6 +62,29 @@
   }
   .title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
   .subtitle { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+  .auth-bar {
+    position: absolute;
+    top: 8px;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .auth-btn {
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .auth-btn:hover { background: var(--bg-soft); }
+  .auth-btn.small { font-size: 11px; padding: 4px 8px; }
+  .auth-user { display: flex; align-items: center; gap: 8px; }
+  .auth-user-name { font-size: 13px; font-weight: 600; color: var(--text); }
 
   section { margin-bottom: 28px; }
   .section-title {
@@ -1638,7 +1664,33 @@
     <header>
       <div class="title">Baccarat</div>
       <div class="subtitle" id="header-subtitle">Compteur de partie</div>
+      <div class="auth-bar" id="auth-bar">
+        <button class="auth-btn" id="auth-signin-btn" style="display:none;">Se connecter</button>
+        <div class="auth-user" id="auth-user" style="display:none;">
+          <span class="auth-user-name" id="auth-user-name">—</span>
+          <button class="auth-btn small" id="auth-signout-btn">Déconnexion</button>
+        </div>
+      </div>
     </header>
+
+    <!-- MODAL Auth (magic link) -->
+    <div class="modal-overlay" id="auth-modal">
+      <div class="modal">
+        <div class="modal-title">Se connecter</div>
+        <div class="modal-sub">On t'envoie un lien magique par mail. Pas de mot de passe à retenir.</div>
+        <div class="field">
+          <label>Ton email</label>
+          <input type="email" id="auth-email-input" placeholder="toi@exemple.com" autocomplete="email" inputmode="email">
+        </div>
+        <div class="field">
+          <label>Pseudo (optionnel — n'affichera si c'est ta 1ère connexion)</label>
+          <input type="text" id="auth-displayname-input" placeholder="Ton prénom" maxlength="32">
+        </div>
+        <div id="auth-modal-msg" style="font-size:13px; color:var(--text-dim); margin:8px 0; min-height:18px;"></div>
+        <button class="btn btn-blue" id="auth-send-link-btn">Envoyer le lien</button>
+        <button class="btn btn-secondary" id="auth-modal-close-btn" style="margin-top:8px;">Annuler</button>
+      </div>
+    </div>
 
     <section id="landing-section" style="display:none;">
       <div class="resume-banner" id="resume-banner" style="display:none;">
@@ -3168,6 +3220,142 @@ function confirmPriceChange() {
   closePriceModal();
   renderAll();
   showToast(`Nouveau prix : ${v.toFixed(2)}€/ligne`);
+}
+
+// ========== AUTH (Supabase) ==========
+// Login passwordless par magic link. La session est persistée côté Supabase JS dans
+// localStorage automatiquement → l'utilisateur reste loggué entre les reloads.
+//
+// Flow :
+//  1) clic "Se connecter" → modal email + display_name optionnel
+//  2) signInWithOtp envoie un lien dans le mail
+//  3) clic dans le mail → retour sur l'app, Supabase JS détecte le token dans l'URL,
+//     crée la session, fire SIGNED_IN
+//  4) handleAuthSession charge le profil et met à jour l'UI (auth bar)
+//
+// L'utilisateur peut continuer à utiliser le mode compteur solo / online P2P sans login.
+// La connexion n'est utile que pour persister l'historique cross-device + balances futures.
+
+let sb = null;               // client Supabase
+let authUser = null;         // { id, email, ... } depuis auth.users
+let authProfile = null;      // { user_id, display_name, ... } depuis public.profiles
+
+function initSupabase() {
+  if (sb) return sb;
+  if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+    console.warn('Supabase SDK/config absent — auth désactivée');
+    return null;
+  }
+  sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  });
+  // Réagit aux SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED
+  sb.auth.onAuthStateChange((event, session) => {
+    handleAuthSession(session);
+  });
+  return sb;
+}
+
+async function refreshAuthBar() {
+  const signinBtn = document.getElementById('auth-signin-btn');
+  const userBox = document.getElementById('auth-user');
+  const nameEl = document.getElementById('auth-user-name');
+  if (!signinBtn || !userBox) return;
+  if (authUser && authProfile) {
+    signinBtn.style.display = 'none';
+    userBox.style.display = '';
+    nameEl.textContent = authProfile.display_name || authUser.email || '?';
+  } else {
+    signinBtn.style.display = '';
+    userBox.style.display = 'none';
+  }
+}
+
+async function handleAuthSession(session) {
+  if (!session || !session.user) {
+    authUser = null;
+    authProfile = null;
+    refreshAuthBar();
+    return;
+  }
+  authUser = session.user;
+  // Charge le profil (créé automatiquement par le trigger côté DB à l'inscription)
+  try {
+    const { data, error } = await sb.from('profiles').select('*').eq('user_id', authUser.id).maybeSingle();
+    if (error) {
+      console.warn('profile load failed', error);
+      authProfile = { user_id: authUser.id, display_name: authUser.email.split('@')[0] };
+    } else if (data) {
+      authProfile = data;
+    } else {
+      // Très rare : le trigger n'a pas encore tourné. On affiche un fallback.
+      authProfile = { user_id: authUser.id, display_name: authUser.email.split('@')[0] };
+    }
+  } catch (e) {
+    console.warn('profile fetch threw', e);
+    authProfile = { user_id: authUser.id, display_name: authUser.email.split('@')[0] };
+  }
+  refreshAuthBar();
+}
+
+function openAuthModal() {
+  document.getElementById('auth-modal-msg').textContent = '';
+  document.getElementById('auth-email-input').value = '';
+  document.getElementById('auth-displayname-input').value = '';
+  document.getElementById('auth-modal').classList.add('show');
+  setTimeout(() => { try { document.getElementById('auth-email-input').focus(); } catch(e) {} }, 50);
+}
+function closeAuthModal() {
+  document.getElementById('auth-modal').classList.remove('show');
+}
+
+async function authSendMagicLink() {
+  const emailRaw = document.getElementById('auth-email-input').value.trim();
+  const displayName = document.getElementById('auth-displayname-input').value.trim();
+  const msg = document.getElementById('auth-modal-msg');
+  const btn = document.getElementById('auth-send-link-btn');
+  if (!emailRaw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+    msg.textContent = 'Email invalide';
+    msg.style.color = 'var(--red)';
+    return;
+  }
+  if (!sb) { msg.textContent = 'Auth non initialisée'; msg.style.color = 'var(--red)'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours...';
+  msg.style.color = 'var(--text-dim)';
+  msg.textContent = '';
+  try {
+    const { error } = await sb.auth.signInWithOtp({
+      email: emailRaw,
+      options: {
+        emailRedirectTo: window.location.origin + window.location.pathname,
+        data: displayName ? { display_name: displayName } : undefined,
+      },
+    });
+    if (error) {
+      msg.style.color = 'var(--red)';
+      msg.textContent = error.message || 'Erreur';
+      btn.disabled = false;
+      btn.textContent = 'Envoyer le lien';
+      return;
+    }
+    msg.style.color = 'var(--green)';
+    msg.innerHTML = `✓ Lien envoyé à <strong>${escapeHTML(emailRaw)}</strong>.<br>Vérifie ta boîte mail (et les spams).`;
+    btn.textContent = 'Lien envoyé ✓';
+  } catch (e) {
+    console.error(e);
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Erreur réseau';
+    btn.disabled = false;
+    btn.textContent = 'Envoyer le lien';
+  }
+}
+
+async function authSignOut() {
+  if (!sb) return;
+  if (!confirm('Se déconnecter ?')) return;
+  await sb.auth.signOut();
+  // L'event SIGNED_OUT fired par Supabase JS → handleAuthSession(null) → refresh UI
 }
 
 // ========== ONLINE (PeerJS) ==========
@@ -6239,6 +6427,13 @@ function leaveOnlineGame() {
 // ========== INIT ==========
 load();
 
+// Auth (Supabase) : init au boot, restaure la session si présente
+initSupabase();
+if (sb) {
+  // getSession sync l'état au load (le SDK gère le hash du magic link automatiquement)
+  sb.auth.getSession().then(({ data }) => handleAuthSession(data.session));
+}
+
 document.getElementById('mode-counter-btn').addEventListener('click', () => setMode('counter'));
 document.getElementById('mode-online-btn').addEventListener('click', () => setMode('online'));
 document.getElementById('change-mode-btn').addEventListener('click', backToLanding);
@@ -6247,6 +6442,14 @@ document.getElementById('resume-discard-btn').addEventListener('click', () => {
   if (!confirm('Supprimer la sauvegarde de la partie ? Les comptes seront perdus.')) return;
   clearOnlineState();
   refreshResumeBanner();
+});
+
+document.getElementById('auth-signin-btn').addEventListener('click', openAuthModal);
+document.getElementById('auth-signout-btn').addEventListener('click', authSignOut);
+document.getElementById('auth-send-link-btn').addEventListener('click', authSendMagicLink);
+document.getElementById('auth-modal-close-btn').addEventListener('click', closeAuthModal);
+document.getElementById('auth-email-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); authSendMagicLink(); }
 });
 
 // Online mode
