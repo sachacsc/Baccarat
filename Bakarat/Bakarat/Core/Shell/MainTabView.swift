@@ -1,43 +1,61 @@
 //
 //  MainTabView.swift
-//  Baccarat
+//  Bakarat
 //
 //  Root TabView when signed in. Three tabs : Online · Compteur · Dettes.
-//  Each tab owns its own NavigationStack so push/pop is iOS-native (including
-//  the swipe-back gesture). On iOS 26+ the tab bar gets the Liquid Glass
-//  treatment for free.
+//  Each tab owns its own NavigationStack so push/pop, back chevron and the
+//  swipe-back gesture are all native (SwiftUI handles them).
+//
+//  Deployment target : iOS 18.
+//   - iOS 26+ : the tab bar gets Liquid Glass automatically — no extra code.
+//   - iOS 18..25 : we explicitly configure a solid translucent background so
+//     the tab bar stays visible (without that, scrollEdgeAppearance can
+//     render it fully transparent over scrolled content). Same pattern as
+//     the Zmeo iOS app uses.
 //
 
 import SwiftUI
+import UIKit
 
 struct MainTabView: View {
-    @State private var selection: Tab = .online
+    @State private var selection: AppTab = .online
 
-    enum Tab: Hashable {
+    enum AppTab: Hashable {
         case online, counter, debts
+    }
+
+    init() {
+        Self.configureLegacyTabBarAppearanceIfNeeded()
     }
 
     var body: some View {
         TabView(selection: $selection) {
-            OnlineRootView()
-                .tabItem {
-                    Label("Online", systemImage: "gamecontroller")
-                }
-                .tag(Tab.online)
+            Tab("Online", systemImage: "gamecontroller", value: AppTab.online) {
+                OnlineRootView()
+            }
 
-            CounterRootView()
-                .tabItem {
-                    Label("Compteur", systemImage: "list.bullet.clipboard")
-                }
-                .tag(Tab.counter)
+            Tab("Compteur", systemImage: "list.bullet.clipboard", value: AppTab.counter) {
+                CounterRootView()
+            }
 
-            DebtsRootView()
-                .tabItem {
-                    Label("Dettes", systemImage: "eurosign.circle")
-                }
-                .tag(Tab.debts)
+            Tab("Dettes", systemImage: "eurosign.circle", value: AppTab.debts) {
+                DebtsRootView()
+            }
         }
         .tint(Theme.brandRed)
+    }
+
+    /// On iOS 26+ : Liquid Glass automatique, on ne touche pas à UITabBar.
+    /// Avant : on force un background "translucent default" pour que la tab
+    /// bar reste visible sur fond de scroll (sinon iOS 18 peut rendre la
+    /// scrollEdgeAppearance complètement transparente).
+    private static func configureLegacyTabBarAppearanceIfNeeded() {
+        if #unavailable(iOS 26.0) {
+            let appearance = UITabBarAppearance()
+            appearance.configureWithDefaultBackground()
+            UITabBar.appearance().standardAppearance = appearance
+            UITabBar.appearance().scrollEdgeAppearance = appearance
+        }
     }
 }
 
