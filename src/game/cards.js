@@ -37,13 +37,16 @@ export function preloadCardImages() {
  *   - data (bool) : ajoute data-card="<rang+suite>" sur la racine */
 export function renderCardHTML(c, opts) {
   opts = opts || {};
-  // Check faceDown EN PREMIER : sinon les cartes back avec c=null tombaient dans placeholder
+  // NB: les handlers inline `onload`/`onerror` font une garde `this.parentNode &&` car
+  // sur Safari iOS, quand l'image est déjà en cache, l'événement load peut être déclenché
+  // SYNCHRONIQUEMENT au moment où on parse le HTML, AVANT que l'IMG soit insérée dans le DOM.
+  // Dans ce cas this.parentNode est null et `this.parentNode.classList` plante.
   if (opts.faceDown) {
     const flipAttr = opts.flipKey ? ` data-flip-card="${opts.flipKey}"` : '';
     const clickCls = opts.flipKey ? ' flippable' : '';
     const anim = opts.animate ? ' anim-in' : '';
     const styleAttr = (opts.animate && opts.delay) ? ` style="animation-delay:${opts.delay}ms;"` : '';
-    return `<div class="card back${clickCls}${anim}"${styleAttr}${flipAttr}><img class="card-img" src="${cardBackURL()}" onload="this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'" alt=""></div>`;
+    return `<div class="card back${clickCls}${anim}"${styleAttr}${flipAttr}><img class="card-img" src="${cardBackURL()}" onload="this.parentNode&&this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'" alt=""></div>`;
   }
   if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
   const r = c[0], s = c[1];
@@ -60,8 +63,5 @@ export function renderCardHTML(c, opts) {
   const centerHTML = isFace
     ? `<div class="card-center face">${rd}<span class="face-suit">${sd}</span></div>`
     : `<div class="card-center">${sd}</div>`;
-  // CSS fallback en dessous + image Bicycle en overlay
-  // onload : ajoute 'img-loaded' au parent → masque le CSS rendering (évite l'effet "doublé")
-  // onerror : cache l'img + ajoute 'img-failed' → laisse le CSS fallback visible
-  return `<div class="card ${color}${sel}${sct}${dis}${anim}"${styleAttr}${dataAttr}><div class="card-corner card-corner-tl"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div>${centerHTML}<div class="card-corner card-corner-br"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div><img class="card-img" src="${cardImgURL(c)}" onload="this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'; this.parentNode.classList.add('img-failed')" alt=""></div>`;
+  return `<div class="card ${color}${sel}${sct}${dis}${anim}"${styleAttr}${dataAttr}><div class="card-corner card-corner-tl"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div>${centerHTML}<div class="card-corner card-corner-br"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div><img class="card-img" src="${cardImgURL(c)}" onload="this.parentNode&&this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none';this.parentNode&&this.parentNode.classList.add('img-failed')" alt=""></div>`;
 }
