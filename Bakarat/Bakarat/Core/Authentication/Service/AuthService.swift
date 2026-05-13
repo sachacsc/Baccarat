@@ -38,12 +38,12 @@ final class AuthService: ObservableObject {
     private func observeAuthChanges() {
         observationTask = Task { [weak self] in
             guard let self else { return }
-            for await (event, session) in self.client.auth.authStateChanges {
-                self.session = session
-                switch event {
+            for await change in self.client.auth.authStateChanges {
+                self.session = change.session
+                switch change.event {
                 case .signedIn, .tokenRefreshed, .initialSession:
-                    if let session {
-                        await self.loadProfile(for: session.user.id)
+                    if let s = change.session {
+                        await self.loadProfile(for: s.user.id)
                     }
                 case .signedOut:
                     self.profile = nil

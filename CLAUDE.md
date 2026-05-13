@@ -6,10 +6,10 @@
 
 This repo holds **two** front-ends targeting the same Supabase backend :
 
-| Folder       | What it is                              | Status              |
-|--------------|------------------------------------------|---------------------|
-| `/` (root)   | Web app (vanilla JS, PWA on GH Pages)    | Live, in maintenance|
-| `/ios/`      | Native SwiftUI app                       | In active development|
+| Folder       | What it is                              | Status                |
+|--------------|------------------------------------------|-----------------------|
+| `/` (root)   | Web app (vanilla JS, PWA on GH Pages)    | Live, in maintenance  |
+| `/Bakarat/`  | Native SwiftUI iOS app                   | In active development |
 
 Both share the same DB schema, RLS, RPCs, and Storage bucket. Migrations live under `/supabase/migrations/` and apply to **both** clients automatically — never reimplement business logic in only one place.
 
@@ -23,7 +23,7 @@ A web + iOS app for the **Baccarat 3-boards** card game variant. Two play modes:
 
 Auth + persistence via **Supabase**. Each user has an account; their games and balances are saved cloud-side. The web is deployed as a **PWA** on GitHub Pages. The iOS app is published via the App Store (planned).
 
-For iOS-specific onboarding, see `/ios/SETUP.md` and `/ios/README.md`.
+For iOS-specific onboarding, see `/Bakarat/README.md`.
 
 Game rules are documented in [`RULES.md`](RULES.md) — read it once before working on game logic.
 

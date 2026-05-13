@@ -22,12 +22,7 @@ struct SignUpView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 40)
 
-            Image("AppLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 80, height: 80)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: Theme.brandRed.opacity(0.25), radius: 10, x: 0, y: 4)
+            BrandLogo(size: 80)
                 .padding(.bottom, 16)
 
             Text("Créer ton compte")

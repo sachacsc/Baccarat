@@ -22,12 +22,7 @@ struct LoginView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 60)
 
-            Image("AppLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 96, height: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .shadow(color: Theme.brandRed.opacity(0.25), radius: 12, x: 0, y: 6)
+            BrandLogo(size: 96)
                 .padding(.bottom, 40)
 
             VStack(spacing: 12) {

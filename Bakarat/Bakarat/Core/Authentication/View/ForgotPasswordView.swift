@@ -22,11 +22,7 @@ struct ForgotPasswordView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 40)
 
-            Image("AppLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 80, height: 80)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            BrandLogo(size: 80)
                 .padding(.bottom, 16)
 
             Text("Mot de passe oublié")

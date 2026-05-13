@@ -1,9 +1,8 @@
 //
 //  ContentView.swift
-//  Baccarat
+//  Bakarat
 //
 //  Top-level switch : auth gate when no session, MainTabView when signed in.
-//  All animations are SwiftUI-native (cross-fade between states).
 //
 
 import SwiftUI
