@@ -83,15 +83,104 @@ final class OnlineGameService: ObservableObject {
         phase = .left
     }
 
-    /// Host uniquement : passe la room en `.playing` et le broadcast.
-    /// (Phase 2 : ce sera le départ du dealing.)
+    /// Host uniquement : démarre la 1ère manche (génère le deck, distribue les
+    /// mains, prépare community + brûles). Broadcast immédiat.
     func startGame() async {
         guard role == .host, var current = room else { return }
+        guard current.participants.count >= 2 else {
+            lastError = "Au moins 2 joueurs requis."
+            return
+        }
+
+        guard let initialGameState = OnlineGameService.buildInitialGameState(
+            mancheNumber: 1,
+            participants: current.participants,
+            dealerSeat: 0,
+            linePrice: current.linePrice
+        ) else {
+            lastError = "Distribution impossible (trop de joueurs ou bug)."
+            return
+        }
+
         current.status = .playing
+        current.gameState = initialGameState
         room = current
         phase = .playing
         await broadcastSnapshot()
-        try? await sendMessage(.init(kind: .start, payload: .start))
+
+        // Petit délai pour laisser l'anim de "distribution" jouer côté UI,
+        // puis on révèle le flop (les 9 cartes du flop, board par board).
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        await revealFlop()
+    }
+
+    /// Host : passe la phase de dealing → flop en révélant les 9 cartes du flop.
+    func revealFlop() async {
+        guard role == .host, var current = room, var gs = current.gameState else { return }
+        guard gs.phase == .dealing else { return }
+        gs.communityCards = gs.pendingFlop
+        gs.burnsRevealed = max(gs.burnsRevealed, 1)
+        gs.phase = .flop
+        current.gameState = gs
+        room = current
+        await broadcastSnapshot()
+    }
+
+    // MARK: - Game state construction (host)
+
+    /// Construit l'état initial d'une manche : seats fixes, deck mélangé,
+    /// mains distribuées, community pré-piochée (flop visible, turn/river
+    /// pending), brûles cachées.
+    static func buildInitialGameState(
+        mancheNumber: Int,
+        participants: [OnlineParticipant],
+        dealerSeat: Int,
+        linePrice: Double
+    ) -> OnlineGameState? {
+        // Players = participants triés par ordre de connexion, seat = index.
+        let players = participants.enumerated().map { idx, p in
+            GamePlayer(
+                userId: p.userId, displayName: p.displayName,
+                seat: idx, score: 0,
+                inManche: true, connected: true, forfeitFromBoard: nil
+            )
+        }
+        let target = OnlineDealer.cardsPerPlayer(activeCount: players.count)
+        guard target > 0 else { return nil }
+
+        // Ordre de distribution : 1er après le donneur → donneur servi en dernier
+        let n = players.count
+        let dealOrder: [Int] = (1...n).map { (dealerSeat + $0) % n }
+
+        var deck = Deck.shuffled()
+        guard let hands = OnlineDealer.dealHands(
+            deck: &deck, orderedSeats: dealOrder, target: target
+        ) else { return nil }
+
+        guard let community = OnlineDealer.dealCommunity(deck: &deck) else { return nil }
+
+        return OnlineGameState(
+            mancheNumber: mancheNumber,
+            linePrice: linePrice,
+            players: players,
+            dealerSeat: dealerSeat,
+            phase: .dealing,
+            currentBoard: 0,
+            rebidRound: 0,
+            hands: hands,
+            burns: [community.burn1, community.burn2, community.burn3],
+            burnsRevealed: 0,
+            communityCards: [[], [], []],
+            pendingFlop: community.flop,
+            pendingTurns: community.turns,
+            pendingRivers: community.rivers,
+            submissions: [:],
+            boardResults: [nil, nil, nil],
+            fullBoardWinnerSeat: nil,
+            excludedThisBoard: []
+        )
+        // Note : on conserve community.flop séparément pour le passage à `.flop`
+        //        (geré dans la fonction `revealFlop()` à venir Phase 2.2).
     }
 
     // MARK: - Channel lifecycle

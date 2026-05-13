@@ -18,6 +18,18 @@ struct OnlineLobbyView: View {
     @State private var didCallLeave = false
 
     var body: some View {
+        // Router : si la partie a démarré → on bascule sur OnlineGameView
+        // (toujours dans le même NavigationStack, le back chevron du game reviendra
+        //  à OnlineRootView via .onDisappear).
+        if service.room?.status == .playing {
+            OnlineGameView(service: service)
+                .onDisappear { performLeaveIfNeeded() }
+        } else {
+            lobbyContent
+        }
+    }
+
+    private var lobbyContent: some View {
         ScrollView {
             VStack(spacing: 20) {
                 if let room = service.room {

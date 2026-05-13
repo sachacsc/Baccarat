@@ -30,9 +30,12 @@ struct OnlineRoom: Codable, Equatable {
     let code: String
     let hostUserId: UUID
     var participants: [OnlineParticipant]
-    /// Status simplifié : 'lobby' au début, 'playing' une fois la partie lancée
-    /// (gameplay arrive Phase 2).
+    /// Status simplifié : 'lobby' au début, 'playing' une fois la partie lancée.
     var status: Status
+    /// Prix de la ligne configuré par le host (visible en lobby, fixe pendant la partie).
+    var linePrice: Double = 2.5
+    /// État de la manche en cours. nil tant qu'on est en lobby ou que la partie n'a pas démarré.
+    var gameState: OnlineGameState?
 
     enum Status: String, Codable {
         case lobby
