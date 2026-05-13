@@ -142,27 +142,32 @@ struct OnlineJoinView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 14) {
             Spacer().frame(height: 24)
-
-            Text("Code à 4 caractères")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
 
             TextField("ABCD", text: $code)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .focused($focused)
                 .multilineTextAlignment(.center)
-                .font(.system(size: 36, weight: .bold, design: .monospaced))
-                .frame(maxWidth: 240)
-                .padding(.vertical, 14)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .font(.system(size: 40, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color(.systemBackground)) // blanc en light, noir en dark
+                .tint(Color(.systemBackground))
+                .tracking(8)
+                .frame(maxWidth: 280)
+                .padding(.vertical, 22)
+                .padding(.horizontal, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.primary) // noir en light, blanc en dark
+                )
+                .padding(.horizontal, 16)
                 .onChange(of: code) { _, new in
                     let trimmed = new.uppercased().filter { $0.isLetter || $0.isNumber }
                     if trimmed != new { code = String(trimmed.prefix(4)) }
                 }
+
+            Spacer()
 
             Button {
                 onSubmit()
@@ -172,8 +177,8 @@ struct OnlineJoinView: View {
             .modifier(PrimaryButtonStyle())
             .disabled(code.count != 4)
             .opacity(code.count == 4 ? 1 : 0.5)
-
-            Spacer()
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
         .navigationTitle("Rejoindre")
         .navigationBarTitleDisplayMode(.inline)

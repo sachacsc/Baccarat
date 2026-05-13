@@ -44,6 +44,22 @@ final class OnlineGameService: ObservableObject {
     private var channel: RealtimeChannelV2?
     private var subscribeTask: Task<Void, Never>?
     private var listenerTask: Task<Void, Never>?
+    private var helloRetryTask: Task<Void, Never>?
+
+    // MARK: - Logging
+
+    /// Log de debug — préfixé par le rôle pour reconnaître HOST vs GUEST dans la console.
+    private func log(_ msg: String) {
+        #if DEBUG
+        let tag: String
+        switch role {
+        case .host:  tag = "HOST "
+        case .guest: tag = "GUEST"
+        case .none:  tag = "?    "
+        }
+        print("[Online \(tag)] \(msg)")
+        #endif
+    }
 
     // MARK: - Public API
 
@@ -53,6 +69,7 @@ final class OnlineGameService: ObservableObject {
         let me = OnlineParticipant(userId: myUserId, displayName: myDisplayName, isHost: true)
         self.role = .host
         self.room = OnlineRoom(code: code, hostUserId: myUserId, participants: [me], status: .lobby)
+        log("createRoom code=\(code) user=\(myDisplayName) (\(myUserId.uuidString.prefix(8)))")
         await openChannel(code: code, myUserId: myUserId, myDisplayName: myDisplayName)
     }
 
@@ -65,11 +82,13 @@ final class OnlineGameService: ObservableObject {
         }
         self.role = .guest
         self.room = nil
+        log("joinRoom code=\(code) user=\(myDisplayName) (\(myUserId.uuidString.prefix(8)))")
         await openChannel(code: code, myUserId: myUserId, myDisplayName: myDisplayName)
     }
 
     /// Quitte la room (broadcast de leave + unsubscribe).
     func leave(myUserId: UUID) async {
+        log("leave")
         if let channel {
             // Best-effort leave broadcast
             try? await sendMessage(.init(kind: .leave, payload: .leave(userId: myUserId)))
@@ -77,10 +96,25 @@ final class OnlineGameService: ObservableObject {
         }
         listenerTask?.cancel()
         subscribeTask?.cancel()
+        helloRetryTask?.cancel()
         channel = nil
         room = nil
         role = nil
         phase = .left
+    }
+
+    /// Host : met à jour les réglages de la room en lobby (prix, flash, timer) et broadcast.
+    /// Sans effet pour les guests (la modif sera ignorée).
+    func updateSettings(linePrice: Double? = nil,
+                        flashMode: Bool? = nil,
+                        announceTimerSeconds: Int? = nil) async {
+        guard role == .host, var current = room else { return }
+        if let v = linePrice            { current.linePrice = v }
+        if let v = flashMode            { current.flashMode = v }
+        if let v = announceTimerSeconds { current.announceTimerSeconds = v }
+        room = current
+        log("updateSettings price=\(current.linePrice) flash=\(current.flashMode) timer=\(current.announceTimerSeconds)")
+        await broadcastSnapshot()
     }
 
     /// Host uniquement : démarre la 1ère manche (génère le deck, distribue les
@@ -444,9 +478,11 @@ final class OnlineGameService: ObservableObject {
     private func openChannel(code: String, myUserId: UUID, myDisplayName: String) async {
         phase = .connecting
         let name = "online:\(code)"
+        log("openChannel name=\(name)")
 
         // Si on a déjà un channel ouvert (re-join), on nettoie d'abord
         if let existing = channel {
+            log("openChannel: closing previous channel")
             await existing.unsubscribe()
         }
 
@@ -454,36 +490,77 @@ final class OnlineGameService: ObservableObject {
         self.channel = ch
 
         // Bind les broadcasts AVANT subscribe (sinon on peut rater le 1er message)
+        listenerTask?.cancel()
         listenerTask = Task { [weak self] in
             guard let self else { return }
+            self.log("listenerTask: started, waiting for messages")
             for await msg in ch.broadcastStream(event: "msg") {
                 await self.handleIncoming(rawMessage: msg, myUserId: myUserId, myDisplayName: myDisplayName)
             }
+            self.log("listenerTask: broadcastStream ended")
         }
 
         do {
+            log("openChannel: calling subscribeWithError…")
             try await ch.subscribeWithError()
+            log("openChannel: subscribe OK")
+            phase = .lobby
+
             // Si host : on est seul pour l'instant, rien d'autre à faire.
             // Si guest : on annonce notre arrivée, le host répondra avec un snapshot.
+            // On envoie en boucle (retry) jusqu'à recevoir le snapshot ou abandonner —
+            // ça évite la race "guest envoie hello avant que le host soit pleinement
+            // joint au channel" qui laissait le lobby bloqué sur 'Préparation…'.
             if role == .guest {
-                try await sendMessage(
-                    .init(kind: .helloFromGuest,
-                          payload: .hello(userId: myUserId, displayName: myDisplayName))
-                )
+                startGuestHelloRetry(myUserId: myUserId, myDisplayName: myDisplayName)
             }
-            phase = .lobby
         } catch {
+            log("openChannel: subscribe FAILED \(error.localizedDescription)")
             lastError = "Connexion au channel impossible : \(error.localizedDescription)"
             phase = .idle
         }
     }
 
+    /// Guest : (re)envoie helloFromGuest jusqu'à recevoir un snapshot, max ~15s.
+    private func startGuestHelloRetry(myUserId: UUID, myDisplayName: String) {
+        helloRetryTask?.cancel()
+        helloRetryTask = Task { [weak self] in
+            guard let self else { return }
+            let maxAttempts = 10
+            for attempt in 1...maxAttempts {
+                if Task.isCancelled { return }
+                if self.room != nil {
+                    self.log("guest got snapshot (after \(attempt - 1) retries)")
+                    return
+                }
+                self.log("guest sending helloFromGuest #\(attempt)/\(maxAttempts)")
+                do {
+                    try await self.sendMessage(
+                        .init(kind: .helloFromGuest,
+                              payload: .hello(userId: myUserId, displayName: myDisplayName))
+                    )
+                } catch {
+                    self.log("guest hello send failed: \(error.localizedDescription)")
+                }
+                try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
+            }
+            if self.room == nil {
+                self.log("guest gave up after \(maxAttempts) retries, no snapshot received")
+                self.lastError = "Le salon ne répond pas. Vérifie le code de la partie."
+            }
+        }
+    }
+
     private func sendMessage(_ msg: OnlineMessage) async throws {
-        guard let channel else { return }
+        guard let channel else {
+            log("sendMessage skipped: no channel (kind=\(msg.kind.rawValue))")
+            return
+        }
         // On encode l'OnlineMessage en JSON string puis on l'enveloppe dans une clé "p".
         // Plus simple et plus fiable que de mapper récursivement vers AnyJSON.
         let data = try JSONEncoder().encode(msg)
         let str = String(data: data, encoding: .utf8) ?? ""
+        log("→ broadcast kind=\(msg.kind.rawValue) bytes=\(data.count)")
         try await channel.broadcast(event: "msg", message: ["p": .string(str)])
     }
 
@@ -491,16 +568,36 @@ final class OnlineGameService: ObservableObject {
                                 myUserId: UUID,
                                 myDisplayName: String) async {
         // Désenveloppe : on attend ["p": .string(<json>)]
-        guard case .string(let payloadStr) = rawMessage["p"],
-              let data = payloadStr.data(using: .utf8),
-              let msg = try? JSONDecoder().decode(OnlineMessage.self, from: data) else {
+        guard case .string(let payloadStr) = rawMessage["p"] else {
+            log("← incoming: missing/invalid 'p' key, ignoring")
             return
         }
+        guard let data = payloadStr.data(using: .utf8) else {
+            log("← incoming: cannot encode payload as utf8, ignoring")
+            return
+        }
+        let msg: OnlineMessage
+        do {
+            msg = try JSONDecoder().decode(OnlineMessage.self, from: data)
+        } catch {
+            log("← incoming: decode FAILED \(error) — payload=\(payloadStr.prefix(160))")
+            return
+        }
+        log("← kind=\(msg.kind.rawValue)")
         switch msg.payload {
         case .hello(let userId, let displayName):
             // Côté host : on ajoute le guest à la liste, on broadcast le snapshot
-            guard role == .host, var current = room else { return }
-            if !current.participants.contains(where: { $0.userId == userId }) {
+            guard role == .host, var current = room else {
+                log("hello ignored: role=\(String(describing: role)) room=\(room == nil ? "nil" : "set")")
+                return
+            }
+            if current.participants.contains(where: { $0.userId == userId }) {
+                log("hello duplicate from \(displayName) — re-broadcasting snapshot")
+                // Le guest est déjà dans la liste mais re-demande un snapshot (retry).
+                // On rebroadcast pour qu'il sorte de "Préparation du salon…".
+                await broadcastSnapshot()
+            } else {
+                log("hello new guest \(displayName) (\(userId.uuidString.prefix(8))), adding to room")
                 current.participants.append(
                     OnlineParticipant(userId: userId, displayName: displayName, isHost: false)
                 )
@@ -511,20 +608,27 @@ final class OnlineGameService: ObservableObject {
         case .snapshot(let snapshot):
             // Côté guest (ou rejoin) : on prend le snapshot du host
             if role == .guest {
+                log("snapshot received (\(snapshot.participants.count) participants)")
                 self.room = snapshot
+                helloRetryTask?.cancel()
             } else if role == .host {
                 // Sécurité : ignore les snapshots d'un autre host (ne devrait pas arriver)
-                if snapshot.hostUserId != myUserId { return }
+                if snapshot.hostUserId != myUserId {
+                    log("snapshot ignored: foreign host \(snapshot.hostUserId.uuidString.prefix(8))")
+                    return
+                }
             }
 
         case .leave(let userId):
             guard role == .host, var current = room else { return }
             if userId == myUserId { return } // jamais soi-même
+            log("guest \(userId.uuidString.prefix(8)) left")
             current.participants.removeAll { $0.userId == userId }
             room = current
             await broadcastSnapshot()
 
         case .start:
+            log("start received")
             phase = .playing
             if var current = room {
                 current.status = .playing
@@ -534,6 +638,7 @@ final class OnlineGameService: ObservableObject {
         case .submitAnnounce(let seat, let submission):
             // Seul le host traite les soumissions
             if role == .host {
+                log("submitAnnounce seat=\(seat) category=\(submission.categoryId)")
                 await handleIncomingSubmission(seat: seat, submission: submission)
             }
         }
@@ -541,6 +646,7 @@ final class OnlineGameService: ObservableObject {
 
     private func broadcastSnapshot() async {
         guard let snapshot = room else { return }
+        log("broadcasting snapshot (status=\(snapshot.status.rawValue), \(snapshot.participants.count) participants)")
         try? await sendMessage(.init(kind: .roomSnapshot, payload: .snapshot(snapshot)))
     }
 }

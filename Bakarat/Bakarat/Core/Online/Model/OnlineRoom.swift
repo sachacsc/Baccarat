@@ -34,6 +34,10 @@ struct OnlineRoom: Codable, Equatable {
     var status: Status
     /// Prix de la ligne configuré par le host (visible en lobby, fixe pendant la partie).
     var linePrice: Double = 2.5
+    /// Mode Flash : manche raccourcie (tempo réduit + auto-skip plus agressif).
+    var flashMode: Bool = false
+    /// Timer par annonce, en secondes (0 = désactivé, sinon countdown rolling).
+    var announceTimerSeconds: Int = 0
     /// État de la manche en cours. nil tant qu'on est en lobby ou que la partie n'a pas démarré.
     var gameState: OnlineGameState?
 
@@ -41,6 +45,43 @@ struct OnlineRoom: Codable, Equatable {
         case lobby
         case playing
         case finished
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case code, hostUserId, participants, status,
+             linePrice, flashMode, announceTimerSeconds, gameState
+    }
+
+    init(code: String,
+         hostUserId: UUID,
+         participants: [OnlineParticipant],
+         status: Status,
+         linePrice: Double = 2.5,
+         flashMode: Bool = false,
+         announceTimerSeconds: Int = 0,
+         gameState: OnlineGameState? = nil) {
+        self.code = code
+        self.hostUserId = hostUserId
+        self.participants = participants
+        self.status = status
+        self.linePrice = linePrice
+        self.flashMode = flashMode
+        self.announceTimerSeconds = announceTimerSeconds
+        self.gameState = gameState
+    }
+
+    // Decoding tolérant : si un client envoie un snapshot sans les nouveaux champs,
+    // on tombe sur les valeurs par défaut au lieu de tout planter.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.code           = try c.decode(String.self, forKey: .code)
+        self.hostUserId     = try c.decode(UUID.self,   forKey: .hostUserId)
+        self.participants   = try c.decode([OnlineParticipant].self, forKey: .participants)
+        self.status         = try c.decode(Status.self, forKey: .status)
+        self.linePrice      = try c.decodeIfPresent(Double.self, forKey: .linePrice) ?? 2.5
+        self.flashMode      = try c.decodeIfPresent(Bool.self,   forKey: .flashMode) ?? false
+        self.announceTimerSeconds = try c.decodeIfPresent(Int.self, forKey: .announceTimerSeconds) ?? 0
+        self.gameState      = try c.decodeIfPresent(OnlineGameState.self, forKey: .gameState)
     }
 }
 
