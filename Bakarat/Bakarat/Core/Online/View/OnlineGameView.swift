@@ -23,6 +23,9 @@ struct OnlineGameView: View {
                 if let gs = service.room?.gameState {
                     phaseBanner(gs)
                     communityBoards(gs)
+                    if gs.phase == .announcing { announcePanel(gs) }
+                    if gs.phase == .boardReveal { revealPanel(gs) }
+                    if gs.phase == .mancheEnd { mancheEndPanel(gs) }
                     myHand(gs)
                     playersBar(gs)
                 } else {
@@ -34,6 +37,143 @@ struct OnlineGameView: View {
         }
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - Announce panel (Phase 2.2)
+
+    @ViewBuilder
+    private func announcePanel(_ gs: OnlineGameState) -> some View {
+        if let seat = mySeat(in: gs), let hand = gs.hands[seat] {
+            AnnouncePanel(
+                mySeat: seat,
+                myHand: hand,
+                alreadySubmitted: gs.submissions[seat] != nil,
+                onSubmit: { submission in
+                    Task { await service.submitAnnounce(submission: submission, mySeat: seat) }
+                }
+            )
+        }
+    }
+
+    // MARK: - Reveal panel (Phase 2.2)
+
+    @ViewBuilder
+    private func revealPanel(_ gs: OnlineGameState) -> some View {
+        if let result = gs.boardResults[gs.currentBoard] {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "eye.fill")
+                        .foregroundStyle(Theme.brandRed)
+                    Text("Reveal Board \(gs.currentBoard + 1)")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                }
+                if result.abandoned {
+                    Text("Board abandonné — aucun gagnant valide.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else if let winnerSeat = result.winnerSeat,
+                          let winner = gs.players.first(where: { $0.seat == winnerSeat }),
+                          let catId = result.winningCategoryId,
+                          let cat = HandCategory.from(id: catId) {
+                    HStack(spacing: 6) {
+                        Text(result.isSplit ? "⚡ Split" : "🏆 Gagnant")
+                            .font(.subheadline.weight(.bold))
+                        Text(winner.displayName)
+                            .font(.subheadline)
+                        Text("· \(cat.label)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        if cat.multi > 1 {
+                            Text("×\(cat.multi)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Theme.brandRed)
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Capsule().fill(Theme.brandRed.opacity(0.12)))
+                        }
+                    }
+                }
+                Divider()
+                ForEach(result.perPlayer, id: \.userId) { row in
+                    revealRow(gs: gs, row: row)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(.secondarySystemBackground))
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func revealRow(gs: OnlineGameState, row: PlayerBoardResult) -> some View {
+        let player = gs.players.first(where: { $0.userId == row.userId })
+        HStack(spacing: 8) {
+            Text(player?.displayName ?? "—")
+                .font(.subheadline.weight(.semibold))
+                .frame(minWidth: 80, alignment: .leading)
+            HStack(spacing: 3) {
+                ForEach(row.cards, id: \.self) { c in
+                    miniCard(c)
+                }
+            }
+            Spacer()
+            statusTag(row)
+        }
+    }
+
+    @ViewBuilder
+    private func statusTag(_ row: PlayerBoardResult) -> some View {
+        let (txt, color): (String, Color) = {
+            if row.isExcluded { return ("Hors-jeu", .gray) }
+            if row.isForfeit  { return ("Forfait", .gray) }
+            if row.isSkip     { return ("Skip", .gray) }
+            if row.isValid    { return ("Valide", .green) }
+            if row.isBluff    { return ("Bluff", .red) }
+            return ("—", .gray)
+        }()
+        Text(txt)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(color.opacity(0.12)))
+    }
+
+    @ViewBuilder
+    private func miniCard(_ c: Card) -> some View {
+        VStack(spacing: 0) {
+            Text(c.rank.display).font(.system(size: 11, weight: .bold))
+            Text(c.suit.symbol).font(.system(size: 12))
+        }
+        .frame(width: 24, height: 34)
+        .background(Color.white)
+        .foregroundStyle(c.suit.isRed ? .red : .black)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.black.opacity(0.12), lineWidth: 0.5))
+    }
+
+    // MARK: - Manche end (Phase 2.3 ajoutera le scoring détaillé)
+
+    @ViewBuilder
+    private func mancheEndPanel(_ gs: OnlineGameState) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Manche \(gs.mancheNumber) terminée")
+                    .font(.subheadline.weight(.bold))
+                Spacer()
+            }
+            Text("Le scoring détaillé et le passage à la manche suivante arrivent en Phase 2.3.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
     }
 
     private var navigationTitle: String {

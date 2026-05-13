@@ -124,6 +124,206 @@ final class OnlineGameService: ObservableObject {
         current.gameState = gs
         room = current
         await broadcastSnapshot()
+
+        // Court délai pour laisser admirer le flop, puis on bascule en
+        // "announcing" pour que les joueurs puissent annoncer le board 1.
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        await enterAnnouncing()
+    }
+
+    /// Host : ouvre la phase d'annonces pour le board courant.
+    func enterAnnouncing() async {
+        guard role == .host, var current = room, var gs = current.gameState else { return }
+        guard gs.phase == .flop || gs.phase == .turn || gs.phase == .river else { return }
+        gs.phase = .announcing
+        gs.submissions = [:]
+        gs.excludedThisBoard = []
+        current.gameState = gs
+        room = current
+        await broadcastSnapshot()
+    }
+
+    /// Guest : envoie son annonce au host (intent).
+    func submitAnnounce(submission: BoardSubmission, mySeat: Int) async {
+        // Côté host on traite directement, côté guest on broadcast.
+        if role == .host {
+            await handleIncomingSubmission(seat: mySeat, submission: submission)
+        } else {
+            try? await sendMessage(
+                .init(kind: .submitAnnounce,
+                      payload: .submitAnnounce(seat: mySeat, submission: submission))
+            )
+        }
+    }
+
+    /// Host : reçoit une annonce, l'enregistre, et déclenche le reveal si
+    /// toutes les soumissions attendues sont arrivées.
+    private func handleIncomingSubmission(seat: Int, submission: BoardSubmission) async {
+        guard role == .host, var current = room, var gs = current.gameState else { return }
+        guard gs.phase == .announcing else { return }
+        // Vérifie que le joueur n'a pas déjà soumis et qu'il est encore éligible
+        guard gs.submissions[seat] == nil else { return }
+        guard !gs.excludedThisBoard.contains(seat) else { return }
+        // Vérifie que les cartes appartiennent à la main (anti-cheat basique)
+        if submission.categoryId != "skip" {
+            let myHand = gs.hands[seat] ?? []
+            for c in submission.cards where !myHand.contains(c) { return }
+        }
+        gs.submissions[seat] = submission
+        current.gameState = gs
+        room = current
+        await broadcastSnapshot()
+
+        // Tout le monde a soumis (parmi les joueurs encore en lice) ?
+        let eligibleSeats = eligibleSeats(in: gs)
+        if Set(gs.submissions.keys).isSuperset(of: eligibleSeats) {
+            await revealBoard()
+        }
+    }
+
+    /// Host : reveal du board courant. Détermine winner / split / abandon,
+    /// stocke dans boardResults[currentBoard], avance à la phase suivante
+    /// après un délai.
+    func revealBoard() async {
+        guard role == .host, var current = room, var gs = current.gameState else { return }
+        guard gs.phase == .announcing else { return }
+
+        let boardIdx = gs.currentBoard
+        let boardCards = gs.communityCards[boardIdx]
+        // Construit le résultat par joueur
+        var perPlayer: [PlayerBoardResult] = []
+        for player in gs.players where player.inManche {
+            let sub = gs.submissions[player.seat]
+            let isExcluded = gs.excludedThisBoard.contains(player.seat)
+            let isForfeit  = player.forfeitFromBoard.map { $0 <= boardIdx } ?? false
+            let isSkip     = sub?.categoryId == "skip"
+            let cards      = sub?.cards ?? []
+            var isValid = false
+            if let categoryId = sub?.categoryId,
+               let cat = HandCategory.from(id: categoryId),
+               !isSkip, !isExcluded, !isForfeit {
+                isValid = HandEvaluator.validateAnnounce(cat, hole: cards, board: boardCards)
+            }
+            let isBluff = sub != nil && !isSkip && !isExcluded && !isForfeit && !isValid
+            perPlayer.append(PlayerBoardResult(
+                userId: player.userId, seat: player.seat,
+                announcedCategoryId: sub?.categoryId,
+                cards: cards, isValid: isValid, isBluff: isBluff,
+                isSkip: isSkip, isExcluded: isExcluded, isForfeit: isForfeit
+            ))
+        }
+
+        // Détermine le gagnant : meilleure catégorie valide, puis meilleur ranks
+        let validResults = perPlayer.filter { $0.isValid }
+        var winnerSeat: Int?
+        var winningCategoryId: String?
+        var finalMulti = 1
+        var isSplit = false
+        var splitterSeats: [Int] = []
+        var abandoned = false
+
+        if validResults.isEmpty {
+            // Bluffeurs exclus définitivement du board ; si plus de candidats
+            // → board abandonné (Phase 2.2 simplifiée : on ne fait pas de rebid).
+            let bluffers = perPlayer.filter { $0.isBluff }.map { $0.seat }
+            gs.excludedThisBoard.append(contentsOf: bluffers)
+            abandoned = true
+        } else {
+            // Trie par force décroissante
+            let sorted = validResults.sorted { a, b in
+                guard let ca = a.announcedCategoryId.flatMap({ HandCategory.from(id: $0) }),
+                      let cb = b.announcedCategoryId.flatMap({ HandCategory.from(id: $0) }) else { return false }
+                if ca != cb { return ca.rawValue > cb.rawValue }
+                // À catégorie égale : compare les mains réelles
+                let bestA = HandEvaluator.evaluateBest(a.cards + boardCards)
+                let bestB = HandEvaluator.evaluateBest(b.cards + boardCards)
+                guard let bA = bestA, let bB = bestB else { return false }
+                return HandEvaluator.compare(bA, bB) > 0
+            }
+            let top = sorted[0]
+            let topCat = top.announcedCategoryId.flatMap { HandCategory.from(id: $0) }
+            // Détection split : même catégorie + force égale
+            let tied = sorted.filter { r in
+                guard r.announcedCategoryId == top.announcedCategoryId else { return false }
+                let bA = HandEvaluator.evaluateBest(r.cards + boardCards)
+                let bB = HandEvaluator.evaluateBest(top.cards + boardCards)
+                guard let _bA = bA, let _bB = bB else { return false }
+                return HandEvaluator.compare(_bA, _bB) == 0
+            }
+            if tied.count >= 2 {
+                isSplit = true
+                splitterSeats = tied.map { $0.seat }
+                // Phase 2.2 simplifiée : on prend arbitrairement le 1er splitter comme winner
+                // (tie-break propre arrive Phase 2.3).
+                winnerSeat = splitterSeats.first
+                winningCategoryId = top.announcedCategoryId
+                finalMulti = topCat?.multi ?? 1
+            } else {
+                winnerSeat = top.seat
+                winningCategoryId = top.announcedCategoryId
+                finalMulti = topCat?.multi ?? 1
+            }
+        }
+
+        gs.boardResults[boardIdx] = BoardResult(
+            board: boardIdx, winnerSeat: winnerSeat,
+            winningCategoryId: winningCategoryId, finalMulti: finalMulti,
+            isSplit: isSplit, splitterSeats: splitterSeats,
+            perPlayer: perPlayer, abandoned: abandoned
+        )
+        gs.phase = .boardReveal
+        current.gameState = gs
+        room = current
+        await broadcastSnapshot()
+
+        // Délai pour laisser le reveal à l'écran, puis on enchaîne
+        try? await Task.sleep(nanoseconds: 5_000_000_000)
+        await advanceAfterReveal()
+    }
+
+    /// Host : après un reveal, on passe au board suivant ou on termine la
+    /// manche. Si on est sur le board 0 ou 1 → on révèle le turn ou le river.
+    func advanceAfterReveal() async {
+        guard role == .host, var current = room, var gs = current.gameState else { return }
+        guard gs.phase == .boardReveal else { return }
+        if gs.currentBoard < 2 {
+            // Révèle la prochaine carte communautaire (turn pour board 0, river pour 1)
+            let isTurn = (gs.currentBoard == 0)
+            for b in 0..<3 {
+                let next = isTurn ? gs.pendingTurns[b] : gs.pendingRivers[b]
+                if gs.communityCards[b].count < (isTurn ? 4 : 5) {
+                    gs.communityCards[b].append(next)
+                }
+            }
+            gs.burnsRevealed = max(gs.burnsRevealed, isTurn ? 2 : 3)
+            gs.currentBoard += 1
+            gs.phase = isTurn ? .turn : .river
+            current.gameState = gs
+            room = current
+            await broadcastSnapshot()
+
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await enterAnnouncing()
+        } else {
+            // Fin de la manche (Phase 2.3 ajoutera le scoring + full board + persistance)
+            gs.phase = .mancheEnd
+            current.gameState = gs
+            room = current
+            await broadcastSnapshot()
+        }
+    }
+
+    // MARK: - Utilities
+
+    /// Liste des seats encore éligibles à soumettre une annonce sur le board courant.
+    private func eligibleSeats(in gs: OnlineGameState) -> Set<Int> {
+        var result: Set<Int> = []
+        for p in gs.players where p.inManche {
+            if gs.excludedThisBoard.contains(p.seat) { continue }
+            if let ff = p.forfeitFromBoard, ff <= gs.currentBoard { continue }
+            result.insert(p.seat)
+        }
+        return result
     }
 
     // MARK: - Game state construction (host)
@@ -269,11 +469,16 @@ final class OnlineGameService: ObservableObject {
             await broadcastSnapshot()
 
         case .start:
-            // Phase 1 : on note juste que la partie démarre. Phase 2 sera étoffée.
             phase = .playing
             if var current = room {
                 current.status = .playing
                 room = current
+            }
+
+        case .submitAnnounce(let seat, let submission):
+            // Seul le host traite les soumissions
+            if role == .host {
+                await handleIncomingSubmission(seat: seat, submission: submission)
             }
         }
     }

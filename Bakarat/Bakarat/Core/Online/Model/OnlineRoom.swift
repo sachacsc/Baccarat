@@ -58,8 +58,10 @@ struct OnlineMessage: Codable {
         case roomSnapshot
         /// Quelqu'un quitte volontairement (avant déconnexion forcée)
         case leave
-        /// Host lance la partie (placeholder Phase 1, gameplay vient Phase 2)
+        /// Host lance la partie
         case start
+        /// Guest envoie son annonce pour le board en cours
+        case submitAnnounce
     }
 
     enum Payload: Codable {
@@ -67,6 +69,7 @@ struct OnlineMessage: Codable {
         case snapshot(OnlineRoom)
         case leave(userId: UUID)
         case start
+        case submitAnnounce(seat: Int, submission: BoardSubmission)
 
         // Custom encoding: tag + value (so it's resilient to future variants)
         enum CodingKeys: String, CodingKey { case t, v }
@@ -85,6 +88,9 @@ struct OnlineMessage: Codable {
                 try c.encode(LeaveV(userId: userId), forKey: .v)
             case .start:
                 try c.encode("start", forKey: .t)
+            case .submitAnnounce(let seat, let submission):
+                try c.encode("submit", forKey: .t)
+                try c.encode(SubmitV(seat: seat, submission: submission), forKey: .v)
             }
         }
 
@@ -103,6 +109,9 @@ struct OnlineMessage: Codable {
                 self = .leave(userId: v.userId)
             case "start":
                 self = .start
+            case "submit":
+                let v = try c.decode(SubmitV.self, forKey: .v)
+                self = .submitAnnounce(seat: v.seat, submission: v.submission)
             default:
                 throw DecodingError.dataCorruptedError(forKey: .t, in: c,
                                                        debugDescription: "Unknown tag \(tag)")
@@ -111,6 +120,7 @@ struct OnlineMessage: Codable {
 
         private struct HelloV: Codable { let userId: UUID; let displayName: String }
         private struct LeaveV: Codable { let userId: UUID }
+        private struct SubmitV: Codable { let seat: Int; let submission: BoardSubmission }
     }
 }
 
