@@ -7,7 +7,7 @@
 // Le SW se met à jour automatiquement à chaque navigation : on incrémente CACHE_VERSION quand
 // on push une nouvelle version qui doit invalider le cache (ex: nouvelles icônes, nouveaux assets).
 
-const CACHE_VERSION = 'v4-nav-stack';
+const CACHE_VERSION = 'v5-swipe-back';
 const CACHE_NAME = `baccarat-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   './',

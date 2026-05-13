@@ -882,7 +882,9 @@
   /* ===== Navigation stack (iOS style push/pop) =====
      Quand on entre dans une partie online ou un compteur, on push une vue qui
      couvre TOUT le viewport (y compris la tabbar). Slide-in depuis la droite.
-     Le back button du nav title pop la stack (= retire .active). */
+     Le back button du nav title pop la stack (= retire .active).
+     - Le background full-viewport (inset:0) couvre toute la page
+     - Le contenu interne est contraint à 600px max et centré sur desktop */
   .nav-stack {
     position: fixed;
     inset: 0;
@@ -899,6 +901,17 @@
   .nav-stack.active {
     transform: translateX(0);
     pointer-events: auto;
+  }
+  /* Contraint le contenu interne de la stack à 600px sur desktop, et centré */
+  .nav-stack > * {
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* Le nav title sticky DOIT garder son padding ; sa position sticky reste valable
+     même avec la contrainte de largeur. */
+  .nav-stack > .tab-header {
+    width: 100%;
   }
   /* Quand une stack est active : on cache la tabbar (couverture totale) */
   body.nav-stack-active .tabbar {
@@ -1101,7 +1114,7 @@
   }
   .header-action-btn:active { transform: scale(0.92); }
 
-  /* Bouton icône dans la nav bar (back ‹, options ⋯) */
+  /* Bouton icône dans la nav bar (options ⋯ et autres) */
   .nav-icon-btn {
     background: none;
     border: none;
@@ -1119,6 +1132,38 @@
     justify-content: center;
   }
   .nav-icon-btn:active { background: rgba(0,0,0,0.06); }
+
+  /* Back button style iOS : chevron SVG + label optionnel, tint accent */
+  .nav-back-btn {
+    background: none;
+    border: none;
+    padding: 6px 6px 6px 4px;
+    margin-left: -4px;
+    cursor: pointer;
+    color: #7e1219; /* Bicycle red (l'équivalent du SF blue d'iOS) */
+    font: inherit;
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    border-radius: 6px;
+  }
+  .nav-back-btn:active { opacity: 0.55; }
+  .nav-back-btn svg { display: block; flex-shrink: 0; }
+  .nav-back-btn .nav-back-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+  }
+  /* Sur écran étroit, on cache le label pour éviter le débordement */
+  @media (max-width: 380px) {
+    .nav-back-btn .nav-back-label { display: none; }
+  }
 
   /* Avatar plus petit pour le trailing du nav title Dettes */
   .avatar.size-sm {
@@ -2278,7 +2323,9 @@
   .mobile-stats-toggle { display: inline-flex; }
   .game-sidebar { display: none; }
   @media (min-width: 900px) {
-    .container { max-width: min(96vw, 1500px); }
+    /* Container reste à 600px max sur desktop : on garde un look mobile-first
+       (les fenêtres pleine largeur sont inadaptées aux flows tabbed). */
+    .container { max-width: 600px; }
     .game-with-sidebar { grid-template-columns: 1fr; }
     .game-sidebar { display: none; }
     .mobile-stats-toggle { display: inline-flex; }
@@ -2490,7 +2537,12 @@
     <div id="counter-detail-stack" class="nav-stack">
     <div id="counter-detail-header" class="tab-header">
       <div class="tab-header-leading">
-        <button class="nav-icon-btn" id="counter-back-btn" type="button" aria-label="Retour">‹</button>
+        <button class="nav-back-btn" id="counter-back-btn" type="button" aria-label="Retour">
+          <svg width="11" height="20" viewBox="0 0 11 20" aria-hidden="true">
+            <path d="M9 1 1 10l8 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="nav-back-label">Compteurs</span>
+        </button>
       </div>
       <div class="tab-header-title" id="counter-detail-title">—</div>
       <div class="tab-header-trailing">
@@ -2611,7 +2663,12 @@
       <div id="online-name-view" style="display:none;">
         <div class="tab-header">
           <div class="tab-header-leading">
-            <button class="nav-icon-btn" id="online-name-back-btn" type="button" aria-label="Retour">‹</button>
+            <button class="nav-back-btn" id="online-name-back-btn" type="button" aria-label="Retour">
+              <svg width="11" height="20" viewBox="0 0 11 20" aria-hidden="true">
+                <path d="M9 1 1 10l8 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="nav-back-label">Online</span>
+            </button>
           </div>
           <div class="tab-header-title">Rejoindre une partie</div>
           <div class="tab-header-trailing"></div>
@@ -4496,10 +4553,79 @@ function pushNavStack(id) {
 }
 function popNavStack(id) {
   const el = typeof id === 'string' ? document.getElementById(id) : id;
-  if (el) el.classList.remove('active');
+  if (el) {
+    el.classList.remove('active');
+    // Reset toute transform inline laissée par un swipe-back partiel
+    el.style.transform = '';
+    el.style.transition = '';
+  }
   // Reset le body class uniquement si plus aucune stack n'est active
   const anyActive = document.querySelector('.nav-stack.active');
   if (!anyActive) document.body.classList.remove('nav-stack-active');
+}
+
+// Swipe-back depuis le bord gauche (style iOS UINavigationController). On track le
+// touch ; si l'utilisateur tire suffisamment vers la droite, on appelle onPop().
+function setupSwipeBack(stackEl, onPop) {
+  if (!stackEl || stackEl.dataset.swipeBackInited) return;
+  stackEl.dataset.swipeBackInited = '1';
+
+  const EDGE_PX = 28;     // zone de départ : 28px depuis le bord gauche
+  const LOCK_PX = 6;      // distance min pour engager le swipe (horizontal)
+  const POP_RATIO = 0.33; // tirer > 1/3 de la largeur de la stack = pop
+
+  let startX = 0, startY = 0, dx = 0, dragging = false, lockedH = false;
+
+  stackEl.addEventListener('touchstart', (e) => {
+    if (!stackEl.classList.contains('active')) return;
+    const t = e.touches[0];
+    if (t.clientX > EDGE_PX) return; // pas depuis le bord
+    startX = t.clientX;
+    startY = t.clientY;
+    dx = 0;
+    dragging = true;
+    lockedH = false;
+    stackEl.style.transition = 'none';
+  }, { passive: true });
+
+  stackEl.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    const dxRaw = t.clientX - startX;
+    const dyRaw = t.clientY - startY;
+    if (!lockedH) {
+      if (Math.abs(dxRaw) > LOCK_PX && Math.abs(dxRaw) > Math.abs(dyRaw) * 1.5) {
+        lockedH = true;
+      } else if (Math.abs(dyRaw) > 8) {
+        // L'utilisateur scrolle verticalement, on abandonne le swipe
+        dragging = false;
+        stackEl.style.transition = '';
+        stackEl.style.transform = '';
+        return;
+      }
+    }
+    if (!lockedH) return;
+    if (dxRaw > 0) {
+      dx = dxRaw;
+      stackEl.style.transform = `translateX(${dx}px)`;
+    }
+  }, { passive: true });
+
+  const finish = () => {
+    if (!dragging) return;
+    dragging = false;
+    stackEl.style.transition = '';
+    const w = stackEl.getBoundingClientRect().width || window.innerWidth;
+    if (dx > w * POP_RATIO) {
+      stackEl.style.transform = '';
+      try { onPop(); } catch(e) { console.error('swipe-back onPop', e); }
+    } else {
+      stackEl.style.transform = '';
+    }
+    dx = 0;
+  };
+  stackEl.addEventListener('touchend', finish);
+  stackEl.addEventListener('touchcancel', finish);
 }
 
 // switchTab : active le pane correspondant + met à jour state.mode pour rester compatible
@@ -8063,6 +8189,23 @@ function setupSheets() {
   });
 }
 setupSheets();
+
+// Swipe-back gestures depuis le bord gauche (iOS style) pour chaque nav-stack
+setupSwipeBack(document.getElementById('counter-detail-stack'), () => {
+  closeCounter();
+});
+setupSwipeBack(document.getElementById('online-stack'), () => {
+  // Pour online, on délègue au bouton back/quit selon l'état actuel
+  if (online.status === 'name-join' || online.status === 'connecting') {
+    if (typeof onlineGoToEntry === 'function') onlineGoToEntry();
+  } else if (online.status === 'lobby') {
+    document.getElementById('online-lobby-leave-btn')?.click();
+  } else if (online.status === 'in-game') {
+    document.getElementById('game-leave-btn')?.click();
+  } else {
+    if (typeof onlineGoToEntry === 'function') onlineGoToEntry();
+  }
+});
 
 // PWA : enregistre le service worker (cache + installabilité). Silencieux si non supporté.
 if ('serviceWorker' in navigator) {
