@@ -516,24 +516,71 @@
     margin-top: 8px;
   }
 
+  /* ===== Sheets iOS-style : slide up + drag handle + X close ===== */
   .modal-overlay {
     position: fixed; inset: 0;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0,0,0,0.4);
     display: none;
     align-items: flex-end;
     justify-content: center;
     z-index: 200;
   }
-  .modal-overlay.show { display: flex; }
-  .modal {
-    background: var(--bg);
-    border-radius: 16px 16px 0 0;
-    width: 100%;
-    max-width: 600px;
-    padding: 20px;
-    max-height: 88vh;
-    overflow-y: auto;
+  .modal-overlay.show {
+    display: flex;
+    animation: sheet-overlay-fade 0.22s ease-out;
   }
+  @keyframes sheet-overlay-fade {
+    from { background: rgba(0,0,0,0); }
+    to   { background: rgba(0,0,0,0.4); }
+  }
+  .modal {
+    position: relative;
+    background: var(--bg);
+    border-radius: 18px 18px 0 0;
+    width: 100%;
+    max-width: 480px;
+    padding: 18px 20px calc(24px + env(safe-area-inset-bottom));
+    max-height: 92vh;
+    overflow-y: auto;
+    box-shadow: 0 -10px 32px rgba(0,0,0,0.16);
+    will-change: transform;
+  }
+  .modal-overlay.show .modal {
+    animation: sheet-slide-up 0.28s cubic-bezier(0.2, 0.85, 0.35, 1);
+  }
+  @keyframes sheet-slide-up {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .modal-drag-handle {
+    width: 36px;
+    height: 5px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 999px;
+    margin: -4px auto 16px;
+    flex-shrink: 0;
+  }
+  .modal-close-x {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(120,120,128,0.16);
+    border: none;
+    font-size: 18px;
+    font-weight: 600;
+    color: rgba(60,60,67,0.6);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    z-index: 2;
+  }
+  .modal-close-x:active { background: rgba(120,120,128,0.28); }
   .modal-title {
     font-size: 18px;
     font-weight: 700;
@@ -771,7 +818,7 @@
      Fallback safe sur vieux navigateurs : fond opaque. */
   .tabbar {
     position: fixed;
-    bottom: calc(6px + env(safe-area-inset-bottom));
+    bottom: env(safe-area-inset-bottom);
     left: 50%;
     transform: translateX(-50%);
     width: calc(100% - 24px);
@@ -835,22 +882,48 @@
   /* Footer-actions (nouveau-partie) visible uniquement sur l'onglet Compteur */
   body:not([data-tab="counter"]) #footer-actions { display: none !important; }
 
-  /* ===== Header de tab (titre + sous-titre, style Zmeo large title) ===== */
+  /* ===== Navigation title (style iOS inline) =====
+     Barre sticky en haut du pane, titre centré, leading/trailing buttons positionnés
+     en absolu sur les bords. Background flouté pour l'effet "frosted" iOS. */
   .tab-header {
-    padding: 32px 20px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    min-height: 44px;
+    background: rgba(255, 255, 255, 0.78);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    margin-bottom: 8px;
   }
+  .tab-header-leading,
+  .tab-header-trailing {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1;
+    min-width: 44px;
+  }
+  .tab-header-trailing { justify-content: flex-end; }
   .tab-header-title {
-    font-size: 30px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    margin-bottom: 4px;
-    line-height: 1.1;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    color: var(--text);
   }
-  .tab-header-subtitle {
-    font-size: 14px;
-    color: var(--text-dim);
-    line-height: 1.35;
-  }
+  /* legacy class kept for migration safety; unused now */
+  .tab-header-subtitle { display: none; }
+  /* le wrapper avec avatar (Dettes) ne pousse plus le titre — réutilise tab-header-trailing */
+  .tab-header.with-avatar { display: flex; }
+  .tab-header.with-avatar .tab-header-text { display: none; }
 
   /* ===== Big card cliquable (créer/rejoindre, etc.) ===== */
   .big-card {
@@ -974,7 +1047,7 @@
   }
   .tab-header.with-avatar .tab-header-text { flex: 1; min-width: 0; }
 
-  /* Bouton "+" rond en haut à droite de la vue liste */
+  /* Bouton "+" rond utilisé en trailing de nav title */
   .header-action-btn {
     width: 44px;
     height: 44px;
@@ -993,10 +1066,70 @@
     transition: transform 0.1s;
     flex-shrink: 0;
   }
+  .header-action-btn.header-action-sm {
+    width: 34px;
+    height: 34px;
+    font-size: 20px;
+  }
   .header-action-btn:active { transform: scale(0.92); }
 
-  /* ===== Liste des compteurs (Tricount-style) ===== */
+  /* Bouton icône dans la nav bar (back ‹, options ⋯) */
+  .nav-icon-btn {
+    background: none;
+    border: none;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1;
+    border-radius: 8px;
+    min-width: 32px;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav-icon-btn:active { background: rgba(0,0,0,0.06); }
+
+  /* Avatar plus petit pour le trailing du nav title Dettes */
+  .avatar.size-sm {
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+    border-width: 1.5px;
+    box-shadow: 0 2px 6px rgba(126,18,25,0.18);
+  }
+
+  /* ===== Liste des compteurs (Tricount-style + iOS swipe-to-delete) ===== */
   #counters-list { padding: 0 16px; }
+  .counter-row-wrap {
+    position: relative;
+    margin-bottom: 10px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--red); /* visible derrière quand on swipe */
+    isolation: isolate;
+  }
+  .counter-row-delete-bg {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 92px;
+    background: #ff3b30;
+    color: white;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 0;
+  }
+  .counter-row-delete-bg:active { background: #d92e25; }
   .counter-row {
     display: flex;
     align-items: center;
@@ -1004,16 +1137,21 @@
     background: var(--bg-soft);
     padding: 14px 16px;
     border-radius: 14px;
-    margin-bottom: 10px;
     cursor: pointer;
-    transition: transform 0.08s, background 0.15s;
+    transition: transform 0.18s cubic-bezier(0.3, 0.8, 0.4, 1), background 0.15s;
     width: 100%;
     text-align: left;
     font-family: inherit;
     color: var(--text);
     border: none;
+    position: relative;
+    z-index: 1;
+    touch-action: pan-y; /* permet scroll vertical, on intercepte horizontal */
   }
-  .counter-row:active { transform: scale(0.98); }
+  .counter-row:active { background: rgba(0,0,0,0.04); }
+  .counter-row-wrap.swiped .counter-row {
+    transform: translateX(-92px);
+  }
   .counter-row-icon {
     width: 44px;
     height: 44px;
@@ -1062,39 +1200,8 @@
     line-height: 1.5;
   }
 
-  /* Header dans la vue détail d'un compteur (back + titre + options) */
-  .counter-detail-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 16px 12px 18px;
-    border-bottom: 0.5px solid var(--border);
-    margin-bottom: 16px;
-  }
-  .counter-back-btn,
-  .counter-more-btn {
-    background: none;
-    border: none;
-    padding: 8px 12px;
-    cursor: pointer;
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--text);
-    line-height: 1;
-    flex-shrink: 0;
-  }
-  .counter-back-btn:active,
-  .counter-more-btn:active { opacity: 0.5; }
-  .counter-detail-title {
-    flex: 1;
-    text-align: center;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  /* Le header de la vue détail réutilise .tab-header (style inline) — pas de classes
+     dédiées nécessaires. Le titre est dans .tab-header-title (centré, ellipsable). */
 
   /* ===== Profile modal ===== */
   .profile-modal-content { text-align: center; }
@@ -1153,20 +1260,27 @@
   }
   .profile-modal-msg.error { color: var(--red); }
   .profile-modal-msg.ok    { color: var(--green); }
-  .profile-modal .danger-btn {
-    background: rgba(198, 40, 40, 0.08);
-    color: var(--red);
+  /* Bouton danger global (rouge plein) — utilisé pour Supprimer compteur, Se déconnecter, etc. */
+  .danger-btn {
+    background: #ff3b30;
+    color: white;
     border: none;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
-    padding: 12px;
-    border-radius: 10px;
+    padding: 14px;
+    border-radius: 12px;
     width: 100%;
     cursor: pointer;
-    margin-top: 8px;
+    margin-top: 16px;
   }
-  .profile-modal .danger-btn:active { background: rgba(198, 40, 40, 0.16); }
+  .danger-btn:active { background: #d92e25; }
+  /* Variante "soft" plus discrète (utilisée pour Se déconnecter dans profil) */
+  .danger-btn.danger-soft {
+    background: rgba(255, 59, 48, 0.10);
+    color: #ff3b30;
+  }
+  .danger-btn.danger-soft:active { background: rgba(255, 59, 48, 0.18); }
 
   /* ===== Resume banner (sauvegarde online auto) ===== */
   .resume-banner {
@@ -2334,21 +2448,25 @@
 
     <!-- Vue LISTE : tous mes compteurs -->
     <section id="counters-list-section" style="display:none;">
-      <div class="tab-header with-avatar">
-        <div class="tab-header-text">
-          <div class="tab-header-title">Compteurs</div>
-          <div class="tab-header-subtitle">Crée un compteur par soirée ou occasion. Les comptes restent séparés.</div>
+      <div class="tab-header">
+        <div class="tab-header-leading"></div>
+        <div class="tab-header-title">Compteurs</div>
+        <div class="tab-header-trailing">
+          <button class="header-action-btn header-action-sm" id="counter-create-btn" type="button" aria-label="Nouveau compteur">＋</button>
         </div>
-        <button class="header-action-btn" id="counter-create-btn" type="button" aria-label="Nouveau compteur">＋</button>
       </div>
       <div id="counters-list"></div>
     </section>
 
-    <!-- Vue DÉTAIL : header avec back + nom du compteur -->
-    <div id="counter-detail-header" class="counter-detail-header" style="display:none;">
-      <button class="counter-back-btn" id="counter-back-btn" type="button" aria-label="Retour">‹</button>
-      <div class="counter-detail-title" id="counter-detail-title">—</div>
-      <button class="counter-more-btn" id="counter-more-btn" type="button" aria-label="Options">⋯</button>
+    <!-- Vue DÉTAIL : nav title inline avec back + nom + options -->
+    <div id="counter-detail-header" class="tab-header" style="display:none;">
+      <div class="tab-header-leading">
+        <button class="nav-icon-btn" id="counter-back-btn" type="button" aria-label="Retour">‹</button>
+      </div>
+      <div class="tab-header-title" id="counter-detail-title">—</div>
+      <div class="tab-header-trailing">
+        <button class="nav-icon-btn" id="counter-more-btn" type="button" aria-label="Options">⋯</button>
+      </div>
     </div>
 
     <section id="setup-section" style="display:none;">
@@ -2431,8 +2549,9 @@
       <!-- Vue ENTRY : créer ou rejoindre -->
       <div id="online-entry">
         <div class="tab-header">
+          <div class="tab-header-leading"></div>
           <div class="tab-header-title">Partie en ligne</div>
-          <div class="tab-header-subtitle">Joue avec tes amis, chacun sur son téléphone. L'app distribue les cartes et gère les annonces.</div>
+          <div class="tab-header-trailing"></div>
         </div>
         <button class="big-card primary" id="online-create-btn" type="button">
           <span class="big-card-icon">＋</span>
@@ -2452,21 +2571,24 @@
         </button>
       </div>
 
-      <!-- Vue NAME : saisie pseudo (et code si guest) -->
+      <!-- Vue NAME (renommée fonctionnellement en "saisir code") : pour les guests on demande
+           uniquement le code de la partie. Le pseudo vient de authProfile.display_name. -->
       <div id="online-name-view" style="display:none;">
-        <div class="section-title">
-          <span id="online-name-title">Ton pseudo</span>
-          <button class="section-title-action" id="online-name-back-btn">← Retour</button>
+        <div class="tab-header">
+          <div class="tab-header-leading">
+            <button class="nav-icon-btn" id="online-name-back-btn" type="button" aria-label="Retour">‹</button>
+          </div>
+          <div class="tab-header-title">Rejoindre une partie</div>
+          <div class="tab-header-trailing"></div>
         </div>
-        <div class="field">
-          <label>Ton pseudo</label>
-          <input type="text" id="online-pseudo-input" maxlength="20" placeholder="Pseudo">
-        </div>
-        <div class="field" id="online-code-input-wrap" style="display:none;">
-          <label>Code de la partie</label>
+        <div style="padding: 24px 24px 0;">
+          <div style="font-size:14px; color: var(--text-dim); margin-bottom: 14px; text-align:center;">
+            Entre le code à 4 caractères donné par l'hôte.
+          </div>
           <input type="text" id="online-code-input" maxlength="4" placeholder="ABCD" class="code-input">
+          <input type="text" id="online-pseudo-input" style="display:none;">
+          <button class="auth-gate-cta" id="online-name-confirm-btn" style="margin: 22px 0 0;">Rejoindre</button>
         </div>
-        <button class="btn" id="online-name-confirm-btn">Continuer</button>
       </div>
 
       <!-- Vue CONNECTING : spinner -->
@@ -2601,12 +2723,12 @@
 
       <!-- TAB Dettes : ledger et historique des parties + profil (avatar en haut à droite) -->
       <div class="tab-pane" id="tab-debts">
-        <div class="tab-header with-avatar">
-          <div class="tab-header-text">
-            <div class="tab-header-title">Dettes</div>
-            <div class="tab-header-subtitle">Tes balances avec tes amis</div>
+        <div class="tab-header">
+          <div class="tab-header-leading"></div>
+          <div class="tab-header-title">Dettes</div>
+          <div class="tab-header-trailing">
+            <div class="avatar size-sm" id="debts-avatar" title="Éditer le profil"></div>
           </div>
-          <div class="avatar" id="debts-avatar" title="Éditer le profil"></div>
         </div>
         <div id="debts-content">
           <div class="debts-empty">Joue ta première partie compteur ou online pour voir ton ledger ici.</div>
@@ -2623,7 +2745,7 @@
           <input type="text" id="counter-name-input" placeholder="Ex: Soirée chez Alex" maxlength="40">
         </div>
         <button class="btn btn-blue" id="counter-create-confirm-btn">Créer</button>
-        <button class="btn btn-secondary" id="counter-create-cancel-btn" style="margin-top:8px;">Annuler</button>
+        <button class="btn btn-secondary" id="counter-create-cancel-btn" style="display:none;">Annuler</button>
       </div>
     </div>
 
@@ -2636,8 +2758,8 @@
           <input type="text" id="counter-rename-input" maxlength="40">
         </div>
         <button class="btn btn-blue" id="counter-rename-confirm-btn">Enregistrer</button>
-        <button class="danger-btn" id="counter-delete-btn" style="margin-top: 12px;">Supprimer ce compteur</button>
-        <button class="btn btn-secondary" id="counter-more-close-btn" style="margin-top:8px;">Fermer</button>
+        <button class="danger-btn" id="counter-delete-btn">Supprimer ce compteur</button>
+        <button class="btn btn-secondary" id="counter-more-close-btn" style="display:none;">Fermer</button>
       </div>
     </div>
 
@@ -2665,8 +2787,7 @@
         <div class="profile-modal-msg" id="profile-msg"></div>
 
         <button class="btn btn-blue" id="profile-save-btn">Enregistrer</button>
-        <button class="btn btn-secondary" id="profile-modal-close" style="margin-top:8px;">Fermer</button>
-        <button class="danger-btn" id="profile-signout-btn">Se déconnecter</button>
+        <button class="danger-btn danger-soft" id="profile-signout-btn">Se déconnecter</button>
       </div>
     </div>
 
@@ -3655,7 +3776,7 @@ function renderAll() {
   }
 }
 
-// Liste de tous les compteurs (vue Tricount-style)
+// Liste de tous les compteurs (vue Tricount-style + swipe-left to delete iOS)
 function renderCountersList() {
   const list = document.getElementById('counters-list');
   if (!list) return;
@@ -3663,7 +3784,6 @@ function renderCountersList() {
     list.innerHTML = '<div class="counters-empty">Pas encore de compteur.<br>Crée-en un avec le bouton ＋ en haut à droite.</div>';
     return;
   }
-  // Tri par lastUsedAt desc
   const sorted = [...state.counters].sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
   list.innerHTML = '';
   sorted.forEach(c => {
@@ -3677,19 +3797,98 @@ function renderCountersList() {
     if (ago) subtitleParts.push(ago);
     const subtitle = subtitleParts.join(' · ') || 'Nouveau compteur';
 
-    const btn = document.createElement('button');
-    btn.className = 'counter-row';
-    btn.dataset.counterId = c.id;
-    btn.innerHTML = `
-      <div class="counter-row-icon">${escapeHTML(initial)}</div>
-      <div class="counter-row-body">
-        <div class="counter-row-name">${escapeHTML(c.name || 'Compteur')}</div>
-        <div class="counter-row-sub">${escapeHTML(subtitle)}</div>
-      </div>
-      <div class="counter-row-chevron">›</div>
+    const wrap = document.createElement('div');
+    wrap.className = 'counter-row-wrap';
+    wrap.innerHTML = `
+      <button class="counter-row-delete-bg" type="button" aria-label="Supprimer">Supprimer</button>
+      <button class="counter-row" type="button">
+        <div class="counter-row-icon">${escapeHTML(initial)}</div>
+        <div class="counter-row-body">
+          <div class="counter-row-name">${escapeHTML(c.name || 'Compteur')}</div>
+          <div class="counter-row-sub">${escapeHTML(subtitle)}</div>
+        </div>
+        <div class="counter-row-chevron">›</div>
+      </button>
     `;
-    btn.addEventListener('click', () => openCounter(c.id));
-    list.appendChild(btn);
+    list.appendChild(wrap);
+
+    const row = wrap.querySelector('.counter-row');
+    const delBg = wrap.querySelector('.counter-row-delete-bg');
+
+    // Tap normal sur la row → ouvre le compteur (sauf si swipé : alors snap back)
+    row.addEventListener('click', (e) => {
+      if (wrap.classList.contains('swiped')) {
+        wrap.classList.remove('swiped');
+        row.style.transform = '';
+        e.preventDefault();
+        return;
+      }
+      openCounter(c.id);
+    });
+
+    // Bouton supprimer (côté droit révélé au swipe)
+    delBg.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`Supprimer le compteur "${c.name}" ?\nTous les comptes et l'historique seront perdus.`)) {
+        deleteCounter(c.id);
+      } else {
+        wrap.classList.remove('swiped');
+        row.style.transform = '';
+      }
+    });
+
+    // Swipe gesture
+    let startX = 0, startY = 0, currentDx = 0, dragging = false, lockedHoriz = false;
+    const swipedOffset = -92;
+
+    row.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      currentDx = 0;
+      dragging = true;
+      lockedHoriz = false;
+      row.style.transition = 'none';
+    }, { passive: true });
+
+    row.addEventListener('touchmove', (e) => {
+      if (!dragging) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (!lockedHoriz) {
+        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          lockedHoriz = true;
+        } else if (Math.abs(dy) > 8) {
+          dragging = false; // c'est un scroll vertical, on lâche
+          row.style.transition = '';
+          row.style.transform = wrap.classList.contains('swiped') ? `translateX(${swipedOffset}px)` : '';
+          return;
+        }
+      }
+      if (!lockedHoriz) return;
+      // Si déjà swipé, le baseline est -92px
+      const baseline = wrap.classList.contains('swiped') ? swipedOffset : 0;
+      const newX = Math.min(0, baseline + dx); // ne dépasse pas 0 vers la droite
+      currentDx = newX;
+      row.style.transform = `translateX(${newX}px)`;
+    }, { passive: true });
+
+    const endSwipe = () => {
+      if (!dragging) return;
+      dragging = false;
+      row.style.transition = 'transform 0.2s cubic-bezier(0.3, 0.8, 0.4, 1)';
+      // Seuil : si on a tiré + de 40px vers la gauche → snap à -92, sinon snap à 0
+      if (currentDx < swipedOffset / 2) {
+        wrap.classList.add('swiped');
+        row.style.transform = `translateX(${swipedOffset}px)`;
+      } else {
+        wrap.classList.remove('swiped');
+        row.style.transform = '';
+      }
+    };
+    row.addEventListener('touchend', endSwipe);
+    row.addEventListener('touchcancel', endSwipe);
   });
 }
 
@@ -5022,12 +5221,8 @@ function renderOnline() {
   const target = map[online.status] || 'online-entry';
   showSection(target, true);
 
-  if (online.status === 'name-create' || online.status === 'name-join') {
-    document.getElementById('online-name-title').textContent =
-      online.status === 'name-create' ? 'Créer une partie' : 'Rejoindre une partie';
-    document.getElementById('online-code-input-wrap').style.display =
-      online.status === 'name-join' ? 'block' : 'none';
-  }
+  // (name-create est maintenant bypassé — onlineCreateStart → onlineHostStart direct.
+  //  Le pseudo vient de authProfile, plus de saisie manuelle.)
 
   if (online.status === 'lobby') {
     renderLobby();
@@ -5095,33 +5290,41 @@ function onlineGoToEntry() {
   renderOnline();
 }
 
+// Pseudo dérivé du compte loggué (authProfile.display_name). Plus de prompt manuel.
+function onlineMyName() {
+  if (authProfile && authProfile.display_name) return authProfile.display_name.trim().slice(0, 20);
+  if (authUser && authUser.email) return authUser.email.split('@')[0].slice(0, 20);
+  return 'Joueur';
+}
+
 function onlineCreateStart() {
+  // Loggué → on a déjà un pseudo, on lance direct la création de la partie.
   online.role = 'host';
-  online.status = 'name-create';
-  renderOnline();
-  setTimeout(() => document.getElementById('online-pseudo-input').focus(), 50);
+  online.myName = onlineMyName();
+  onlineHostStart();
 }
 
 function onlineJoinStart() {
+  // Loggué → on a déjà un pseudo, on ne demande QUE le code.
   online.role = 'guest';
+  online.myName = onlineMyName();
   online.status = 'name-join';
   renderOnline();
-  setTimeout(() => document.getElementById('online-pseudo-input').focus(), 50);
+  setTimeout(() => { try { document.getElementById('online-code-input').focus(); } catch(e) {} }, 50);
 }
 
 function onlineConfirmName() {
-  const name = (document.getElementById('online-pseudo-input').value || '').trim();
-  if (!name) { showToast('Pseudo vide', true); return; }
-  if (name.length > 20) { showToast('Pseudo trop long (20 max)', true); return; }
-  online.myName = name;
+  // Fonction utilisée uniquement par la vue "name-join" pour valider le code.
+  // Le pseudo vient du profil Supabase — pas de saisie manuelle.
+  if (!online.myName) online.myName = onlineMyName();
 
-  if (online.role === 'host') {
-    onlineHostStart();
-  } else {
+  if (online.role === 'guest') {
     const code = (document.getElementById('online-code-input').value || '').trim().toUpperCase();
     if (!/^[A-Z2-9]{4}$/.test(code)) { showToast('Code invalide (4 caractères)', true); return; }
     online.roomCode = code;
     onlineGuestStart();
+  } else {
+    onlineHostStart();
   }
 }
 
@@ -7880,6 +8083,89 @@ function leaveOnlineGame() {
 
 // ========== INIT ==========
 load();
+
+// Sheet UX iOS-style : drag handle + X close + swipe-down + tap outside to dismiss
+function setupSheets() {
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    const modal = overlay.querySelector('.modal');
+    if (!modal || modal.dataset.sheetInited) return;
+    modal.dataset.sheetInited = '1';
+
+    // Drag handle (en haut)
+    if (!modal.querySelector('.modal-drag-handle')) {
+      const handle = document.createElement('div');
+      handle.className = 'modal-drag-handle';
+      modal.prepend(handle);
+    }
+
+    // X close button (top-right)
+    if (!modal.querySelector('.modal-close-x')) {
+      const x = document.createElement('button');
+      x.className = 'modal-close-x';
+      x.type = 'button';
+      x.setAttribute('aria-label', 'Fermer');
+      x.innerHTML = '×';
+      x.addEventListener('click', () => overlay.classList.remove('show'));
+      modal.prepend(x);
+    }
+
+    // Tap on backdrop to close
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.classList.remove('show');
+    });
+
+    // Swipe-down gesture (touch + ~mouse)
+    let startY = 0, currentY = 0, dragging = false;
+    const begin = (clientY, target) => {
+      if (modal.scrollTop > 0) return;  // si scrollé, laisse le scroll natif
+      const rect = modal.getBoundingClientRect();
+      // Démarre uniquement si toucher dans les 80px du haut (handle area + headers)
+      if (clientY - rect.top > 80) return;
+      startY = clientY;
+      currentY = 0;
+      dragging = true;
+      modal.style.transition = 'none';
+    };
+    const moveTo = (clientY) => {
+      if (!dragging) return;
+      const dy = clientY - startY;
+      if (dy > 0) {
+        currentY = dy;
+        modal.style.transform = `translateY(${dy}px)`;
+      }
+    };
+    const finish = () => {
+      if (!dragging) return;
+      dragging = false;
+      modal.style.transition = '';
+      if (currentY > 110) {
+        // Animation de sortie : on glisse vers le bas avant de fermer
+        modal.style.transition = 'transform 0.18s ease-out';
+        modal.style.transform = 'translateY(100%)';
+        setTimeout(() => {
+          overlay.classList.remove('show');
+          modal.style.transform = '';
+          modal.style.transition = '';
+        }, 180);
+      } else {
+        modal.style.transition = 'transform 0.18s ease-out';
+        modal.style.transform = '';
+        setTimeout(() => { modal.style.transition = ''; }, 200);
+      }
+      currentY = 0;
+    };
+
+    modal.addEventListener('touchstart', (e) => {
+      begin(e.touches[0].clientY, e.target);
+    }, { passive: true });
+    modal.addEventListener('touchmove', (e) => {
+      moveTo(e.touches[0].clientY);
+    }, { passive: true });
+    modal.addEventListener('touchend', finish);
+    modal.addEventListener('touchcancel', finish);
+  });
+}
+setupSheets();
 
 // PWA : enregistre le service worker (cache + installabilité). Silencieux si non supporté.
 if ('serviceWorker' in navigator) {
