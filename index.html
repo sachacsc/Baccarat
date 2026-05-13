@@ -642,75 +642,145 @@
     margin-top: 8px;
   }
 
-  /* ===== Auth gate (login obligatoire avant d'entrer dans l'app) ===== */
+  /* ===== Auth gate (login obligatoire avant d'entrer dans l'app) =====
+     Inspiré du pattern Zmeo : logo en haut, champs gris arrondis, gros bouton plein,
+     barre fixe en bas qui amène à la signup (login mode) ou retour login (signup mode). */
   .auth-gate {
     min-height: 100vh;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 40px 0 24px;
-  }
-  .auth-gate-card {
     width: 100%;
-    max-width: 380px;
-    text-align: center;
-    padding: 28px 24px;
-    background: var(--bg);
-    border: 1.5px solid var(--border);
-    border-radius: 18px;
-    box-shadow: 0 10px 28px rgba(0,0,0,0.08);
-  }
-  .auth-gate-icon {
-    width: 84px;
-    height: 84px;
-    border-radius: 20px;
-    margin-bottom: 16px;
-    box-shadow: 0 4px 12px rgba(126,18,25,0.25);
-  }
-  .auth-gate-title { font-size: 28px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.02em; }
-  .auth-gate-sub { font-size: 14px; color: var(--text-dim); margin-bottom: 22px; line-height: 1.45; }
-  .auth-gate-mode-title {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 18px;
-    color: var(--text);
-    letter-spacing: -0.01em;
-  }
-  .auth-gate .field { margin-bottom: 12px; text-align: left; }
-  .auth-gate .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .auth-gate input {
-    width: 100%;
-    background: var(--bg-input);
-    border: 1.5px solid var(--border-strong);
-    color: var(--text);
-    font-family: inherit;
-    font-size: 16px;
-    padding: 12px 14px;
-    border-radius: 10px;
-    outline: none;
-  }
-  .auth-gate-msg { font-size: 13px; min-height: 18px; margin: 6px 0 12px; line-height: 1.4; }
-  .auth-gate-msg.error { color: var(--red); }
-  .auth-gate-msg.ok    { color: var(--green); }
-  .auth-gate-switch {
-    margin-top: 18px;
-    font-size: 13px;
-    color: var(--text-dim);
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 60px 0 80px;
+    position: relative;
     display: flex;
-    justify-content: center;
-    gap: 6px;
-    align-items: center;
+    flex-direction: column;
   }
-  .auth-gate-link {
+  .auth-gate-back {
+    position: absolute;
+    top: 16px;
+    left: 16px;
     background: none;
     border: none;
-    color: var(--blue);
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .auth-gate-back:hover { color: var(--text-dim); }
+  .auth-gate-icon {
+    display: block;
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 28px;
+    border-radius: 22px;
+    box-shadow: 0 6px 18px rgba(126,18,25,0.22);
+  }
+  .auth-gate-title {
+    font-size: 22px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 6px;
+    letter-spacing: -0.01em;
+  }
+  .auth-gate-section {
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 0 30px;
+    margin: 20px 0 4px;
+  }
+  .auth-gate-field {
+    margin: 0 24px;
+  }
+  .auth-gate-field input {
+    width: 100%;
+    background: var(--bg-soft);
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15px;
+    padding: 14px;
+    border-radius: 10px;
+    outline: none;
+    margin-bottom: 6px;
+  }
+  .auth-gate-field input:focus {
+    box-shadow: 0 0 0 2px rgba(126,18,25,0.18);
+  }
+  .auth-gate-forgot {
+    text-align: right;
+    margin: 6px 28px 0;
+  }
+  .auth-gate-forgot a, .auth-gate-link {
+    background: none;
+    border: none;
+    color: #7e1219;
     font: inherit;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
+    text-decoration: none;
     padding: 0;
-    text-decoration: underline;
   }
+  .auth-gate-error {
+    color: var(--red);
+    font-size: 12px;
+    margin: 8px 30px 0;
+    text-align: center;
+    min-height: 16px;
+  }
+  .auth-gate-ok {
+    color: var(--green);
+    font-size: 12px;
+    margin: 8px 30px 0;
+    text-align: center;
+    min-height: 16px;
+  }
+  .auth-gate-cta {
+    margin: 24px 25px 0;
+    display: block;
+    width: calc(100% - 50px);
+    height: 46px;
+    background: linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(126,18,25,0.25);
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .auth-gate-cta:disabled { opacity: 0.5; cursor: not-allowed; }
+  .auth-gate-cta:active:not(:disabled) { transform: scale(0.98); }
+
+  /* Barre fixe en bas du gate (login → signup, signup → login) */
+  .auth-gate-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-dim);
+    z-index: 10;
+  }
+  .auth-gate-bottom-link {
+    background: none;
+    border: none;
+    color: #7e1219;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    margin-left: 5px;
+    padding: 0;
+  }
+  body.signed-out .tabbar { display: none !important; }
 
   /* ===== Tabbar (navigation principale, fixe en bas) ===== */
   .tabbar {
@@ -1837,31 +1907,58 @@
       </div>
     </div>
 
-    <!-- AUTH GATE : 2 vues toggleables (signin / signup), logo + email + password.
-         Le pseudo (display_name) se règle plus tard dans le profil — il est dérivé
-         de l'email au signup, modifiable ensuite. -->
-    <div id="auth-gate" class="auth-gate" style="display:none;">
-      <div class="auth-gate-card">
+    <!-- AUTH GATE : 2 vues (login par défaut + signup), pattern proche de Zmeo.
+         Logo en haut, champs gris arrondis, gros bouton rouge, barre fixe en bas
+         pour basculer entre les 2 vues. Le display_name est dérivé de l'email au
+         signup et modifiable plus tard via le profil. -->
+    <div id="auth-gate" style="display:none;">
+
+      <!-- LOGIN VIEW -->
+      <div class="auth-gate" id="gate-view-login">
         <img class="auth-gate-icon" src="icon-192.png" alt="">
-        <div class="auth-gate-mode-title" id="gate-mode-title">Connexion</div>
-
-        <div class="field">
-          <label>Email</label>
-          <input type="email" id="gate-email" placeholder="toi@exemple.com" autocomplete="email" inputmode="email">
+        <div class="auth-gate-field">
+          <input type="email" id="login-email" placeholder="Email" autocomplete="email" inputmode="email">
         </div>
-        <div class="field">
-          <label>Mot de passe</label>
-          <input type="password" id="gate-password" placeholder="••••••••" autocomplete="current-password" minlength="6">
+        <div class="auth-gate-field">
+          <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password" minlength="6">
         </div>
+        <div class="auth-gate-error" id="login-err"></div>
+        <button class="auth-gate-cta" id="login-submit">Se connecter</button>
 
-        <div class="auth-gate-msg" id="gate-msg"></div>
-        <button class="btn btn-blue" id="gate-submit-btn">Se connecter</button>
-
-        <div class="auth-gate-switch">
-          <span id="gate-switch-text">Pas encore de compte ?</span>
-          <button type="button" class="auth-gate-link" id="gate-toggle-btn">Créer un compte</button>
+        <div class="auth-gate-bottom">
+          Pas encore de compte ?
+          <button class="auth-gate-bottom-link" id="login-go-signup">S'inscrire</button>
         </div>
       </div>
+
+      <!-- SIGNUP VIEW -->
+      <div class="auth-gate" id="gate-view-signup" style="display:none;">
+        <button class="auth-gate-back" id="signup-back" type="button" aria-label="Retour">‹</button>
+        <img class="auth-gate-icon" src="icon-192.png" alt="">
+        <div class="auth-gate-title">Créer ton compte</div>
+
+        <div class="auth-gate-section">Tu utiliseras cet email pour te connecter.</div>
+        <div class="auth-gate-field">
+          <input type="email" id="signup-email" placeholder="Email" autocomplete="email" inputmode="email">
+        </div>
+
+        <div class="auth-gate-section">Choisis un mot de passe (6 caractères min).</div>
+        <div class="auth-gate-field">
+          <input type="password" id="signup-password" placeholder="Mot de passe" autocomplete="new-password" minlength="6">
+        </div>
+        <div class="auth-gate-field">
+          <input type="password" id="signup-password-confirm" placeholder="Confirmer le mot de passe" autocomplete="new-password" minlength="6">
+        </div>
+
+        <div class="auth-gate-error" id="signup-err"></div>
+        <button class="auth-gate-cta" id="signup-submit">Créer mon compte</button>
+
+        <div class="auth-gate-bottom">
+          Déjà inscrit ?
+          <button class="auth-gate-bottom-link" id="signup-go-login">Se connecter</button>
+        </div>
+      </div>
+
     </div>
 
     <!-- APP SHELL : visible après login. Contient les 3 onglets + la tabbar. -->
@@ -3615,92 +3712,81 @@ function gateErrorMessage(err) {
   return err && err.message ? err.message : 'Erreur inconnue';
 }
 
-// Deux vues : 'signin' (par défaut) et 'signup'. Le display_name est dérivé de l'email
-// par le trigger handle_new_user — l'utilisateur le modifiera plus tard via son profil.
-let gateAuthMode = 'signin';
-
-function applyGateMode() {
-  const title      = document.getElementById('gate-mode-title');
-  const submitBtn  = document.getElementById('gate-submit-btn');
-  const switchText = document.getElementById('gate-switch-text');
-  const switchBtn  = document.getElementById('gate-toggle-btn');
-  const pw         = document.getElementById('gate-password');
-  if (gateAuthMode === 'signup') {
-    title.textContent = 'Créer un compte';
-    submitBtn.textContent = 'Créer mon compte';
-    switchText.textContent = 'Déjà inscrit ?';
-    switchBtn.textContent = 'Se connecter';
-    pw.setAttribute('autocomplete', 'new-password');
+function gateShowView(name) {
+  const login  = document.getElementById('gate-view-login');
+  const signup = document.getElementById('gate-view-signup');
+  if (!login || !signup) return;
+  if (name === 'signup') {
+    login.style.display = 'none';
+    signup.style.display = '';
+    setTimeout(() => { try { document.getElementById('signup-email').focus(); } catch(e) {} }, 60);
   } else {
-    title.textContent = 'Connexion';
-    submitBtn.textContent = 'Se connecter';
-    switchText.textContent = 'Pas encore de compte ?';
-    switchBtn.textContent = 'Créer un compte';
-    pw.setAttribute('autocomplete', 'current-password');
+    login.style.display = '';
+    signup.style.display = 'none';
+    setTimeout(() => { try { document.getElementById('login-email').focus(); } catch(e) {} }, 60);
   }
-  const msg = document.getElementById('gate-msg');
-  if (msg) { msg.className = 'auth-gate-msg'; msg.textContent = ''; }
-  submitBtn.disabled = false;
+  // Reset les messages d'erreur
+  document.getElementById('login-err').textContent = '';
+  document.getElementById('signup-err').textContent = '';
 }
 
-function toggleGateMode() {
-  gateAuthMode = (gateAuthMode === 'signin') ? 'signup' : 'signin';
-  applyGateMode();
-  // Met le focus sur le champ email après le toggle
-  setTimeout(() => { try { document.getElementById('gate-email').focus(); } catch(e) {} }, 50);
-}
-
-async function gateSubmit() {
-  const emailEl = document.getElementById('gate-email');
-  const pwEl    = document.getElementById('gate-password');
-  const msg     = document.getElementById('gate-msg');
-  const btn     = document.getElementById('gate-submit-btn');
-
-  const email = emailEl.value.trim();
-  const password = pwEl.value;
-
-  msg.className = 'auth-gate-msg';
-  msg.textContent = '';
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    msg.className = 'auth-gate-msg error';
-    msg.textContent = 'Email invalide';
-    return;
-  }
-  if (!password || password.length < 6) {
-    msg.className = 'auth-gate-msg error';
-    msg.textContent = 'Mot de passe : 6 caractères minimum.';
-    return;
-  }
-  if (!sb) {
-    msg.className = 'auth-gate-msg error';
-    msg.textContent = 'Auth non initialisée';
-    return;
-  }
-
+async function gateDoLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('login-submit');
+  err.textContent = '';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Email invalide'; return; }
+  if (!password || password.length < 6)                    { err.textContent = 'Mot de passe : 6 caractères minimum.'; return; }
+  if (!sb)                                                 { err.textContent = 'Auth non initialisée'; return; }
   btn.disabled = true;
-  const labelInit = btn.textContent;
-  btn.textContent = (gateAuthMode === 'signup') ? 'Création...' : 'Connexion...';
-
+  const lbl = btn.textContent;
+  btn.textContent = 'Connexion...';
   try {
-    const resp = (gateAuthMode === 'signup')
-      ? await sb.auth.signUp({ email, password })
-      : await sb.auth.signInWithPassword({ email, password });
-    if (resp.error) {
-      msg.className = 'auth-gate-msg error';
-      msg.textContent = gateErrorMessage(resp.error);
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      err.textContent = gateErrorMessage(error);
       btn.disabled = false;
-      btn.textContent = labelInit;
+      btn.textContent = lbl;
       return;
     }
-    msg.className = 'auth-gate-msg ok';
-    msg.textContent = (gateAuthMode === 'signup') ? '✓ Compte créé, on entre…' : '✓ Connecté, on entre…';
+    // L'event SIGNED_IN → handleAuthSession → applyAuthGate ferme le gate
   } catch (e) {
-    console.error('gateSubmit error', e);
-    msg.className = 'auth-gate-msg error';
-    msg.textContent = gateErrorMessage(e);
+    console.error('login error', e);
+    err.textContent = gateErrorMessage(e);
     btn.disabled = false;
-    btn.textContent = labelInit;
+    btn.textContent = lbl;
+  }
+}
+
+async function gateDoSignup() {
+  const email  = document.getElementById('signup-email').value.trim();
+  const pw     = document.getElementById('signup-password').value;
+  const pwConf = document.getElementById('signup-password-confirm').value;
+  const err    = document.getElementById('signup-err');
+  const btn    = document.getElementById('signup-submit');
+  err.textContent = '';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Email invalide'; return; }
+  if (!pw || pw.length < 6)                                { err.textContent = 'Mot de passe : 6 caractères minimum.'; return; }
+  if (pw !== pwConf)                                       { err.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+  if (!sb)                                                 { err.textContent = 'Auth non initialisée'; return; }
+  btn.disabled = true;
+  const lbl = btn.textContent;
+  btn.textContent = 'Création...';
+  try {
+    const { error } = await sb.auth.signUp({ email, password: pw });
+    if (error) {
+      err.textContent = gateErrorMessage(error);
+      btn.disabled = false;
+      btn.textContent = lbl;
+      return;
+    }
+    // SIGNED_IN fired immédiatement (confirmations off) → handleAuthSession → applyAuthGate
+  } catch (e) {
+    console.error('signup error', e);
+    err.textContent = gateErrorMessage(e);
+    btn.disabled = false;
+    btn.textContent = lbl;
   }
 }
 
@@ -6942,13 +7028,21 @@ document.getElementById('resume-discard-btn').addEventListener('click', () => {
   refreshResumeBanner();
 });
 
-// Auth gate (signin par défaut, toggle vers signup) + déconnexion depuis le header
-applyGateMode();
-document.getElementById('gate-submit-btn').addEventListener('click', gateSubmit);
-document.getElementById('gate-toggle-btn').addEventListener('click', toggleGateMode);
-['gate-email', 'gate-password'].forEach(id => {
+// Auth gate : 2 vues (login par défaut, signup au clic sur "S'inscrire")
+gateShowView('login');
+document.getElementById('login-submit').addEventListener('click', gateDoLogin);
+document.getElementById('signup-submit').addEventListener('click', gateDoSignup);
+document.getElementById('login-go-signup').addEventListener('click', () => gateShowView('signup'));
+document.getElementById('signup-go-login').addEventListener('click', () => gateShowView('login'));
+document.getElementById('signup-back').addEventListener('click', () => gateShowView('login'));
+['login-email', 'login-password'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); gateSubmit(); }
+    if (e.key === 'Enter') { e.preventDefault(); gateDoLogin(); }
+  });
+});
+['signup-email', 'signup-password', 'signup-password-confirm'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); gateDoSignup(); }
   });
 });
 document.getElementById('auth-signout-btn').addEventListener('click', authSignOut);
