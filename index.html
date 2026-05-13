@@ -673,7 +673,9 @@
     display: block;
     width: 96px;
     height: 96px;
-    margin: 0 auto 36px;
+    /* margin-bottom = champ-mb (12) + erreur-mt (14, collapse) + erreur min-h (16)
+       + cta-mt (26) → ~56 pour matcher la distance password→CTA */
+    margin: 0 auto 56px;
     border-radius: 22px;
     box-shadow: 0 6px 18px rgba(126,18,25,0.22);
   }
