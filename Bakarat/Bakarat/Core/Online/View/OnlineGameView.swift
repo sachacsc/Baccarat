@@ -191,7 +191,10 @@ struct OnlineGameView: View {
             Text(phaseLabel(gs.phase))
                 .font(.subheadline.weight(.semibold))
             Spacer()
-            if gs.phase != .dealing && gs.phase != .mancheEnd {
+            // Le badge "Board X / 3" ne fait sens que pendant les annonces /
+            // reveal — pendant la révélation initiale les cartes tombent sur
+            // les 3 boards en même temps.
+            if gs.phase == .announcing || gs.phase == .boardReveal {
                 Text("Board \(gs.currentBoard + 1) / 3")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -209,9 +212,13 @@ struct OnlineGameView: View {
     @ViewBuilder
     private func communityBoards(_ gs: OnlineGameState) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Tableau")
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 4)
+            HStack {
+                Text("Tableau")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                burnsIndicator(gs.burnsRevealed)
+            }
+            .padding(.horizontal, 4)
             ForEach(0..<3, id: \.self) { boardIdx in
                 let cards = gs.communityCards[boardIdx]
                 HStack(spacing: 6) {
@@ -220,14 +227,33 @@ struct OnlineGameView: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 24)
                     ForEach(0..<5, id: \.self) { k in
-                        if k < cards.count {
-                            cardView(cards[k])
-                        } else {
-                            cardPlaceholder()
+                        Group {
+                            if k < cards.count {
+                                cardView(cards[k])
+                                    .transition(.asymmetric(
+                                        insertion: .scale(scale: 0.3).combined(with: .opacity),
+                                        removal: .opacity
+                                    ))
+                            } else {
+                                cardPlaceholder()
+                            }
                         }
+                        .animation(.spring(response: 0.45, dampingFraction: 0.7),
+                                   value: cards.count)
                     }
                     Spacer()
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func burnsIndicator(_ count: Int) -> some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { i in
+                Image(systemName: "flame.fill")
+                    .font(.caption2)
+                    .foregroundStyle(i < count ? Theme.brandRed : Color(.tertiaryLabel))
             }
         }
     }
@@ -240,8 +266,14 @@ struct OnlineGameView: View {
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 4)
                 HStack(spacing: 6) {
-                    ForEach(hand, id: \.self) { c in
+                    ForEach(Array(hand.enumerated()), id: \.element) { idx, c in
                         cardView(c)
+                            .transition(.scale(scale: 0.3).combined(with: .opacity))
+                            .animation(
+                                .spring(response: 0.5, dampingFraction: 0.7)
+                                    .delay(Double(idx) * 0.18),
+                                value: hand.count
+                            )
                     }
                     Spacer()
                 }
@@ -303,12 +335,12 @@ struct OnlineGameView: View {
 
     private func phaseLabel(_ p: GamePhase) -> String {
         switch p {
-        case .dealing:     return "Distribution"
-        case .flop:        return "Flop révélé"
+        case .dealing:     return "Le donneur distribue…"
+        case .flop:        return "Brûle + Flop"
+        case .turn:        return "Brûle + Turn"
+        case .river:       return "Brûle + River"
         case .announcing:  return "Annonces"
         case .boardReveal: return "Reveal"
-        case .turn:        return "Turn"
-        case .river:       return "River"
         case .mancheEnd:   return "Fin de manche"
         }
     }
@@ -317,10 +349,10 @@ struct OnlineGameView: View {
         switch p {
         case .dealing:     return "rectangle.portrait.on.rectangle.portrait.angled"
         case .flop:        return "square.stack.3d.down.right"
-        case .announcing:  return "hand.raised"
-        case .boardReveal: return "eye"
         case .turn:        return "arrow.turn.right.up"
         case .river:       return "water.waves"
+        case .announcing:  return "hand.raised"
+        case .boardReveal: return "eye"
         case .mancheEnd:   return "checkmark.circle"
         }
     }

@@ -108,33 +108,98 @@ final class OnlineGameService: ObservableObject {
         phase = .playing
         await broadcastSnapshot()
 
-        // Petit délai pour laisser l'anim de "distribution" jouer côté UI,
-        // puis on révèle le flop (les 9 cartes du flop, board par board).
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        await revealFlop()
+        // On laisse les joueurs encaisser leur main pendant quelques secondes
+        // (tension dramatique). Puis on enchaîne sur la révélation progressive
+        // de TOUTES les cartes communautaires.
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        await revealCommunityProgressively()
     }
 
-    /// Host : passe la phase de dealing → flop en révélant les 9 cartes du flop.
-    func revealFlop() async {
-        guard role == .host, var current = room, var gs = current.gameState else { return }
-        guard gs.phase == .dealing else { return }
-        gs.communityCards = gs.pendingFlop
-        gs.burnsRevealed = max(gs.burnsRevealed, 1)
-        gs.phase = .flop
+    // MARK: - Community reveal (tempo dramatique)
+
+    /// Délais pour le pacing de révélation (en nanosecondes).
+    private static let revealInterval: UInt64    = 700_000_000   // 0.7s entre 2 cartes
+    private static let burnPause: UInt64         = 1_200_000_000 // 1.2s avant chaque burn suivant
+    private static let preAnnouncePause: UInt64  = 1_500_000_000 // 1.5s avant la 1ère annonce
+    private static let boardRevealPause: UInt64  = 5_000_000_000 // 5s entre 2 reveals
+    private static let nextBoardAnnouncePause: UInt64 = 1_500_000_000
+
+    /// Host : dévoile progressivement les 15 cartes communautaires —
+    /// brûle 1 + flop (3×3 board par board) → brûle 2 + turn (1×3) →
+    /// brûle 3 + river (1×3). Annonce s'ouvre seulement après les 15 cartes.
+    func revealCommunityProgressively() async {
+        guard role == .host else { return }
+
+        // ===== FLOP : board par board, carte par carte =====
+        await updateGameState { gs in
+            gs.phase = .flop
+            gs.burnsRevealed = max(gs.burnsRevealed, 1)
+        }
+        for boardIdx in 0..<3 {
+            for cardIdx in 0..<3 {
+                try? await Task.sleep(nanoseconds: Self.revealInterval)
+                await updateGameState { gs in
+                    let card = gs.pendingFlop[boardIdx][cardIdx]
+                    if gs.communityCards[boardIdx].count <= cardIdx {
+                        gs.communityCards[boardIdx].append(card)
+                    }
+                }
+            }
+        }
+
+        // ===== TURN : une carte sur chaque board =====
+        try? await Task.sleep(nanoseconds: Self.burnPause)
+        await updateGameState { gs in
+            gs.phase = .turn
+            gs.burnsRevealed = max(gs.burnsRevealed, 2)
+        }
+        for boardIdx in 0..<3 {
+            try? await Task.sleep(nanoseconds: Self.revealInterval)
+            await updateGameState { gs in
+                let card = gs.pendingTurns[boardIdx]
+                if gs.communityCards[boardIdx].count < 4 {
+                    gs.communityCards[boardIdx].append(card)
+                }
+            }
+        }
+
+        // ===== RIVER : une carte sur chaque board =====
+        try? await Task.sleep(nanoseconds: Self.burnPause)
+        await updateGameState { gs in
+            gs.phase = .river
+            gs.burnsRevealed = max(gs.burnsRevealed, 3)
+        }
+        for boardIdx in 0..<3 {
+            try? await Task.sleep(nanoseconds: Self.revealInterval)
+            await updateGameState { gs in
+                let card = gs.pendingRivers[boardIdx]
+                if gs.communityCards[boardIdx].count < 5 {
+                    gs.communityCards[boardIdx].append(card)
+                }
+            }
+        }
+
+        // ===== Pause pour laisser regarder le tableau complet, puis annonces board 1
+        try? await Task.sleep(nanoseconds: Self.preAnnouncePause)
+        await enterAnnouncing()
+    }
+
+    /// Helper : applique une mutation au gameState courant et broadcast.
+    private func updateGameState(_ mutate: (inout OnlineGameState) -> Void) async {
+        guard var current = room, var gs = current.gameState else { return }
+        mutate(&gs)
         current.gameState = gs
         room = current
         await broadcastSnapshot()
-
-        // Court délai pour laisser admirer le flop, puis on bascule en
-        // "announcing" pour que les joueurs puissent annoncer le board 1.
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        await enterAnnouncing()
     }
 
     /// Host : ouvre la phase d'annonces pour le board courant.
     func enterAnnouncing() async {
         guard role == .host, var current = room, var gs = current.gameState else { return }
-        guard gs.phase == .flop || gs.phase == .turn || gs.phase == .river else { return }
+        // On accepte d'arriver depuis :
+        //  - .river (fin de la révélation initiale → annonces board 1)
+        //  - .boardReveal (après reveal du board précédent → annonces board suivant)
+        guard gs.phase == .river || gs.phase == .boardReveal else { return }
         gs.phase = .announcing
         gs.submissions = [:]
         gs.excludedThisBoard = []
@@ -281,28 +346,19 @@ final class OnlineGameService: ObservableObject {
         await advanceAfterReveal()
     }
 
-    /// Host : après un reveal, on passe au board suivant ou on termine la
-    /// manche. Si on est sur le board 0 ou 1 → on révèle le turn ou le river.
+    /// Host : après un reveal de board, on passe au board suivant (annonces) ou
+    /// on termine la manche. Les cartes communautaires sont déjà toutes
+    /// dévoilées avant l'annonce du board 1 — on ne révèle rien ici.
     func advanceAfterReveal() async {
         guard role == .host, var current = room, var gs = current.gameState else { return }
         guard gs.phase == .boardReveal else { return }
         if gs.currentBoard < 2 {
-            // Révèle la prochaine carte communautaire (turn pour board 0, river pour 1)
-            let isTurn = (gs.currentBoard == 0)
-            for b in 0..<3 {
-                let next = isTurn ? gs.pendingTurns[b] : gs.pendingRivers[b]
-                if gs.communityCards[b].count < (isTurn ? 4 : 5) {
-                    gs.communityCards[b].append(next)
-                }
-            }
-            gs.burnsRevealed = max(gs.burnsRevealed, isTurn ? 2 : 3)
             gs.currentBoard += 1
-            gs.phase = isTurn ? .turn : .river
             current.gameState = gs
             room = current
             await broadcastSnapshot()
 
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            try? await Task.sleep(nanoseconds: Self.nextBoardAnnouncePause)
             await enterAnnouncing()
         } else {
             // Fin de la manche (Phase 2.3 ajoutera le scoring + full board + persistance)
