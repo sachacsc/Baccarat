@@ -737,6 +737,13 @@
   .auth-gate-cta:disabled { opacity: 0.5; cursor: not-allowed; }
   .auth-gate-cta:active:not(:disabled) { transform: scale(0.98); }
 
+  /* Lien "Mot de passe oublié" sous le password, aligné à droite, dans le flow du form */
+  .auth-gate-forgot-line {
+    margin: -4px 28px 0;
+    text-align: right;
+    font-size: 13px;
+  }
+
   /* Lien de bascule (signup ↔ login), juste sous le CTA */
   .auth-gate-switch-line {
     margin: 22px 24px 0;
@@ -1896,6 +1903,9 @@
         <div class="auth-gate-field">
           <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password" minlength="6">
         </div>
+        <div class="auth-gate-forgot-line">
+          <button class="auth-gate-switch-link" id="login-go-forgot" type="button">Mot de passe oublié ?</button>
+        </div>
         <div class="auth-gate-error" id="login-err"></div>
         <button class="auth-gate-cta" id="login-submit">Se connecter</button>
 
@@ -1903,6 +1913,42 @@
           Pas encore de compte ?
           <button class="auth-gate-switch-link" id="login-go-signup" type="button">S'inscrire</button>
         </div>
+      </div>
+
+      <!-- FORGOT PASSWORD VIEW -->
+      <div class="auth-gate" id="gate-view-forgot" style="display:none;">
+        <button class="auth-gate-back" id="forgot-back" type="button" aria-label="Retour">‹</button>
+        <img class="auth-gate-icon" src="icon-192.png" alt="">
+        <div class="auth-gate-title">Mot de passe oublié</div>
+
+        <div class="auth-gate-section">Entre ton email, on t'envoie un lien pour choisir un nouveau mot de passe.</div>
+        <div class="auth-gate-field">
+          <input type="email" id="forgot-email" placeholder="Email" autocomplete="email" inputmode="email">
+        </div>
+
+        <div class="auth-gate-error" id="forgot-err"></div>
+        <button class="auth-gate-cta" id="forgot-submit">Envoyer le lien</button>
+
+        <div class="auth-gate-switch-line">
+          <button class="auth-gate-switch-link" id="forgot-go-login" type="button">Retour à la connexion</button>
+        </div>
+      </div>
+
+      <!-- RESET PASSWORD VIEW (montrée quand on revient sur l'app via le lien email) -->
+      <div class="auth-gate" id="gate-view-reset" style="display:none;">
+        <img class="auth-gate-icon" src="icon-192.png" alt="">
+        <div class="auth-gate-title">Nouveau mot de passe</div>
+
+        <div class="auth-gate-section">Choisis un nouveau mot de passe (6 caractères min).</div>
+        <div class="auth-gate-field">
+          <input type="password" id="reset-password" placeholder="Nouveau mot de passe" autocomplete="new-password" minlength="6">
+        </div>
+        <div class="auth-gate-field">
+          <input type="password" id="reset-password-confirm" placeholder="Confirmer le mot de passe" autocomplete="new-password" minlength="6">
+        </div>
+
+        <div class="auth-gate-error" id="reset-err"></div>
+        <button class="auth-gate-cta" id="reset-submit">Mettre à jour</button>
       </div>
 
       <!-- SIGNUP VIEW -->
@@ -3508,8 +3554,18 @@ function initSupabase() {
   sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
-  // Réagit aux SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED
+  // Réagit aux SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED / PASSWORD_RECOVERY
   sb.auth.onAuthStateChange((event, session) => {
+    // Si l'utilisateur clique le lien de récupération de mot de passe reçu par email,
+    // Supabase JS fire l'event PASSWORD_RECOVERY (la session est active mais "limitée").
+    // On force l'affichage de la vue reset pour qu'il choisisse un nouveau password.
+    if (event === 'PASSWORD_RECOVERY') {
+      authUser = session && session.user || null;
+      gateShowView('reset');
+      // On NE PAS appeler applyAuthGate ici : on veut garder le gate visible
+      // jusqu'à ce que le password soit mis à jour.
+      return;
+    }
     handleAuthSession(session);
   });
   return sb;
@@ -3687,21 +3743,29 @@ function gateErrorMessage(err) {
 }
 
 function gateShowView(name) {
-  const login  = document.getElementById('gate-view-login');
-  const signup = document.getElementById('gate-view-signup');
-  if (!login || !signup) return;
-  if (name === 'signup') {
-    login.style.display = 'none';
-    signup.style.display = '';
-    setTimeout(() => { try { document.getElementById('signup-email').focus(); } catch(e) {} }, 60);
-  } else {
-    login.style.display = '';
-    signup.style.display = 'none';
-    setTimeout(() => { try { document.getElementById('login-email').focus(); } catch(e) {} }, 60);
+  const views = {
+    login:  document.getElementById('gate-view-login'),
+    signup: document.getElementById('gate-view-signup'),
+    forgot: document.getElementById('gate-view-forgot'),
+    reset:  document.getElementById('gate-view-reset'),
+  };
+  if (!views.login || !views.signup || !views.forgot || !views.reset) return;
+  Object.entries(views).forEach(([k, el]) => { el.style.display = (k === name) ? '' : 'none'; });
+
+  const firstInputId = {
+    login:  'login-email',
+    signup: 'signup-email',
+    forgot: 'forgot-email',
+    reset:  'reset-password',
+  }[name];
+  if (firstInputId) {
+    setTimeout(() => { try { document.getElementById(firstInputId).focus(); } catch(e) {} }, 60);
   }
   // Reset les messages d'erreur
-  document.getElementById('login-err').textContent = '';
-  document.getElementById('signup-err').textContent = '';
+  ['login-err', 'signup-err', 'forgot-err', 'reset-err'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '';
+  });
 }
 
 async function gateDoLogin() {
@@ -3727,6 +3791,71 @@ async function gateDoLogin() {
     // L'event SIGNED_IN → handleAuthSession → applyAuthGate ferme le gate
   } catch (e) {
     console.error('login error', e);
+    err.textContent = gateErrorMessage(e);
+    btn.disabled = false;
+    btn.textContent = lbl;
+  }
+}
+
+async function gateDoForgot() {
+  const email = document.getElementById('forgot-email').value.trim();
+  const err = document.getElementById('forgot-err');
+  const btn = document.getElementById('forgot-submit');
+  err.textContent = '';
+  err.style.color = '';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Email invalide'; return; }
+  if (!sb)                                                 { err.textContent = 'Auth non initialisée'; return; }
+  btn.disabled = true;
+  const lbl = btn.textContent;
+  btn.textContent = 'Envoi...';
+  try {
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname,
+    });
+    if (error) {
+      err.textContent = gateErrorMessage(error);
+      btn.disabled = false;
+      btn.textContent = lbl;
+      return;
+    }
+    err.style.color = 'var(--green)';
+    err.innerHTML = `✓ Lien envoyé à <strong>${escapeHTML(email)}</strong>.<br>Vérifie ta boîte mail (et les spams).`;
+    btn.textContent = 'Lien envoyé ✓';
+  } catch (e) {
+    console.error('forgot error', e);
+    err.textContent = gateErrorMessage(e);
+    btn.disabled = false;
+    btn.textContent = lbl;
+  }
+}
+
+async function gateDoReset() {
+  const pw     = document.getElementById('reset-password').value;
+  const pwConf = document.getElementById('reset-password-confirm').value;
+  const err    = document.getElementById('reset-err');
+  const btn    = document.getElementById('reset-submit');
+  err.textContent = '';
+  err.style.color = '';
+  if (!pw || pw.length < 6)  { err.textContent = 'Mot de passe : 6 caractères minimum.'; return; }
+  if (pw !== pwConf)         { err.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+  if (!sb)                   { err.textContent = 'Auth non initialisée'; return; }
+  btn.disabled = true;
+  const lbl = btn.textContent;
+  btn.textContent = 'Mise à jour...';
+  try {
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) {
+      err.textContent = gateErrorMessage(error);
+      btn.disabled = false;
+      btn.textContent = lbl;
+      return;
+    }
+    // updateUser réussit → la session reste active (l'utilisateur est déjà loggué via le lien recovery)
+    // → handleAuthSession sera idempotent, applyAuthGate masquera le gate
+    err.style.color = 'var(--green)';
+    err.textContent = '✓ Mot de passe mis à jour, on entre…';
+  } catch (e) {
+    console.error('reset error', e);
     err.textContent = gateErrorMessage(e);
     btn.disabled = false;
     btn.textContent = lbl;
@@ -7002,13 +7131,18 @@ document.getElementById('resume-discard-btn').addEventListener('click', () => {
   refreshResumeBanner();
 });
 
-// Auth gate : 2 vues (login par défaut, signup au clic sur "S'inscrire")
+// Auth gate : 4 vues (login / signup / forgot / reset)
 gateShowView('login');
 document.getElementById('login-submit').addEventListener('click', gateDoLogin);
 document.getElementById('signup-submit').addEventListener('click', gateDoSignup);
+document.getElementById('forgot-submit').addEventListener('click', gateDoForgot);
+document.getElementById('reset-submit').addEventListener('click', gateDoReset);
 document.getElementById('login-go-signup').addEventListener('click', () => gateShowView('signup'));
+document.getElementById('login-go-forgot').addEventListener('click', () => gateShowView('forgot'));
 document.getElementById('signup-go-login').addEventListener('click', () => gateShowView('login'));
 document.getElementById('signup-back').addEventListener('click', () => gateShowView('login'));
+document.getElementById('forgot-go-login').addEventListener('click', () => gateShowView('login'));
+document.getElementById('forgot-back').addEventListener('click', () => gateShowView('login'));
 ['login-email', 'login-password'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); gateDoLogin(); }
@@ -7017,6 +7151,14 @@ document.getElementById('signup-back').addEventListener('click', () => gateShowV
 ['signup-email', 'signup-password', 'signup-password-confirm'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); gateDoSignup(); }
+  });
+});
+document.getElementById('forgot-email').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); gateDoForgot(); }
+});
+['reset-password', 'reset-password-confirm'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); gateDoReset(); }
   });
 });
 document.getElementById('auth-signout-btn').addEventListener('click', authSignOut);
