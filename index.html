@@ -806,7 +806,7 @@
     font-family: inherit;
     font-size: 10px;
     font-weight: 600;
-    border-radius: 18px;
+    border-radius: 999px;  /* pill complète pour matcher la tabbar */
     transition: color 0.18s, background 0.18s, transform 0.1s;
   }
   .tab .tab-icon {
@@ -965,7 +965,7 @@
   .avatar.size-md { width: 44px; height: 44px; font-size: 17px; border-width: 2px; }
   .avatar.size-lg { width: 92px; height: 92px; font-size: 36px; border-width: 3px; }
 
-  /* En-tête du tab Dettes : titre + avatar à droite */
+  /* En-tête du tab Dettes : titre + avatar à droite. Réutilisé pour Compteur avec un + */
   .tab-header.with-avatar {
     display: flex;
     align-items: flex-end;
@@ -973,6 +973,128 @@
     gap: 12px;
   }
   .tab-header.with-avatar .tab-header-text { flex: 1; min-width: 0; }
+
+  /* Bouton "+" rond en haut à droite de la vue liste */
+  .header-action-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #c1262f 0%, #7e1219 100%);
+    color: white;
+    font-size: 24px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(126,18,25,0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: transform 0.1s;
+    flex-shrink: 0;
+  }
+  .header-action-btn:active { transform: scale(0.92); }
+
+  /* ===== Liste des compteurs (Tricount-style) ===== */
+  #counters-list { padding: 0 16px; }
+  .counter-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-soft);
+    padding: 14px 16px;
+    border-radius: 14px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: transform 0.08s, background 0.15s;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    color: var(--text);
+    border: none;
+  }
+  .counter-row:active { transform: scale(0.98); }
+  .counter-row-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(126,18,25,0.10);
+    color: #7e1219;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .counter-row-body { flex: 1; min-width: 0; }
+  .counter-row-name {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .counter-row-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .counter-row-delta {
+    font-size: 14px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .counter-row-delta.pos { color: var(--green); }
+  .counter-row-delta.neg { color: var(--red); }
+  .counter-row-chevron {
+    color: var(--text-faint);
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .counters-empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-faint);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Header dans la vue détail d'un compteur (back + titre + options) */
+  .counter-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 12px 18px;
+    border-bottom: 0.5px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .counter-back-btn,
+  .counter-more-btn {
+    background: none;
+    border: none;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .counter-back-btn:active,
+  .counter-more-btn:active { opacity: 0.5; }
+  .counter-detail-title {
+    flex: 1;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   /* ===== Profile modal ===== */
   .profile-modal-content { text-align: center; }
@@ -2207,8 +2329,27 @@
     <!-- APP SHELL : visible après login. Contient les 3 onglets + la tabbar. -->
     <div id="app-shell" class="app-shell" style="display:none;">
 
-      <!-- TAB Compteur : contenu existant des sections setup → history -->
+      <!-- TAB Compteur : liste de compteurs OU détail d'un compteur (style Tricount) -->
       <div class="tab-pane" id="tab-counter">
+
+    <!-- Vue LISTE : tous mes compteurs -->
+    <section id="counters-list-section" style="display:none;">
+      <div class="tab-header with-avatar">
+        <div class="tab-header-text">
+          <div class="tab-header-title">Compteurs</div>
+          <div class="tab-header-subtitle">Crée un compteur par soirée ou occasion. Les comptes restent séparés.</div>
+        </div>
+        <button class="header-action-btn" id="counter-create-btn" type="button" aria-label="Nouveau compteur">＋</button>
+      </div>
+      <div id="counters-list"></div>
+    </section>
+
+    <!-- Vue DÉTAIL : header avec back + nom du compteur -->
+    <div id="counter-detail-header" class="counter-detail-header" style="display:none;">
+      <button class="counter-back-btn" id="counter-back-btn" type="button" aria-label="Retour">‹</button>
+      <div class="counter-detail-title" id="counter-detail-title">—</div>
+      <button class="counter-more-btn" id="counter-more-btn" type="button" aria-label="Options">⋯</button>
+    </div>
 
     <section id="setup-section" style="display:none;">
       <div class="section-title">
@@ -2472,6 +2613,34 @@
         </div>
       </div>
 
+    <!-- MODAL Créer un nouveau compteur -->
+    <div class="modal-overlay" id="counter-create-modal">
+      <div class="modal">
+        <div class="modal-title">Nouveau compteur</div>
+        <div class="modal-sub">Donne-lui un nom (soirée, week-end, voyage…). Tu pourras le retrouver depuis ta liste.</div>
+        <div class="field">
+          <label>Nom</label>
+          <input type="text" id="counter-name-input" placeholder="Ex: Soirée chez Alex" maxlength="40">
+        </div>
+        <button class="btn btn-blue" id="counter-create-confirm-btn">Créer</button>
+        <button class="btn btn-secondary" id="counter-create-cancel-btn" style="margin-top:8px;">Annuler</button>
+      </div>
+    </div>
+
+    <!-- MODAL Options compteur (renommer, supprimer) -->
+    <div class="modal-overlay" id="counter-more-modal">
+      <div class="modal">
+        <div class="modal-title" id="counter-more-title">Options</div>
+        <div class="field">
+          <label>Renommer</label>
+          <input type="text" id="counter-rename-input" maxlength="40">
+        </div>
+        <button class="btn btn-blue" id="counter-rename-confirm-btn">Enregistrer</button>
+        <button class="danger-btn" id="counter-delete-btn" style="margin-top: 12px;">Supprimer ce compteur</button>
+        <button class="btn btn-secondary" id="counter-more-close-btn" style="margin-top:8px;">Fermer</button>
+      </div>
+    </div>
+
     <!-- MODAL Profil : édition pseudo, avatar, déconnexion (accessible via avatar tab Dettes) -->
     <div class="modal-overlay profile-modal" id="profile-modal">
       <div class="modal profile-modal-content">
@@ -2657,14 +2826,133 @@
 const STORAGE_KEY = 'baccarat3boards_v4';
 let state = {
   mode: null,           // null = landing | 'counter' | 'online'
+  activeTab: 'online',
+  counters: [],         // [{id, name, players, scores, history, ..., createdAt, lastUsedAt}]
+  activeCounterId: null,// si null → vue liste, sinon vue détail du compteur
+
+  // ===== Champs "actifs" projetés depuis le compteur courant pour préserver le code existant.
+  // Quand on ouvre un compteur, on copie ses champs ici ; à chaque save() on les recopie dans
+  // state.counters[i]. Quand on revient à la liste, ces champs sont réinitialisés.
   linePrice: 2.5,
-  players: [],          // [{id, name, active}]  ordre = ordre de jeu
+  players: [],
   scores: {},
-  history: [],          // [{ts, numActive, participantIds, boards, fullBoard, linePrice}]
+  history: [],
   currentManche: [null, null, null],
   configured: false,
   dealerIdx: 0,
 };
+
+// ===== Helpers multi-compteurs =====
+function createCounterShape(overrides) {
+  return Object.assign({
+    id: uid(),
+    name: 'Compteur',
+    linePrice: 2.5,
+    currency: 'EUR',
+    players: [],
+    scores: {},
+    history: [],
+    currentManche: [null, null, null],
+    dealerIdx: 0,
+    configured: false,
+    cloudGameId: null,
+    cloudSeatMap: null,
+    createdAt: Date.now(),
+    lastUsedAt: Date.now(),
+  }, overrides || {});
+}
+
+function activeCounter() {
+  if (!state.activeCounterId) return null;
+  return state.counters.find(c => c.id === state.activeCounterId) || null;
+}
+
+function loadCounterIntoState(c) {
+  state.players       = c.players;
+  state.scores        = c.scores;
+  state.history       = c.history;
+  state.currentManche = c.currentManche;
+  state.dealerIdx     = c.dealerIdx;
+  state.configured    = c.configured;
+  state.linePrice     = c.linePrice;
+  state.cloudGameId   = c.cloudGameId;
+  state.cloudSeatMap  = c.cloudSeatMap;
+}
+
+function syncStateToActiveCounter() {
+  const c = activeCounter();
+  if (!c) return;
+  c.players       = state.players;
+  c.scores        = state.scores;
+  c.history       = state.history;
+  c.currentManche = state.currentManche;
+  c.dealerIdx     = state.dealerIdx;
+  c.configured    = state.configured;
+  c.linePrice     = state.linePrice;
+  c.cloudGameId   = state.cloudGameId;
+  c.cloudSeatMap  = state.cloudSeatMap;
+  c.lastUsedAt    = Date.now();
+}
+
+function clearActiveStateFields() {
+  state.players       = [];
+  state.scores        = {};
+  state.history       = [];
+  state.currentManche = [null, null, null];
+  state.dealerIdx     = 0;
+  state.configured    = false;
+  state.linePrice     = 2.5;
+  state.cloudGameId   = null;
+  state.cloudSeatMap  = null;
+}
+
+function openCounter(id) {
+  const c = state.counters.find(c => c.id === id);
+  if (!c) return;
+  state.activeCounterId = id;
+  c.lastUsedAt = Date.now();
+  loadCounterIntoState(c);
+  save();
+  renderAll();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function closeCounter() {
+  syncStateToActiveCounter();
+  state.activeCounterId = null;
+  clearActiveStateFields();
+  save();
+  renderAll();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function createAndOpenCounter(name) {
+  const c = createCounterShape({ name: (name || '').trim() || 'Compteur' });
+  state.counters.unshift(c);
+  state.activeCounterId = c.id;
+  loadCounterIntoState(c);
+  save();
+  renderAll();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function deleteCounter(id) {
+  if (state.activeCounterId === id) {
+    state.activeCounterId = null;
+    clearActiveStateFields();
+  }
+  state.counters = state.counters.filter(c => c.id !== id);
+  save();
+  renderAll();
+}
+
+function renameCounter(id, newName) {
+  const c = state.counters.find(c => c.id === id);
+  if (!c) return;
+  c.name = (newName || '').trim() || c.name;
+  save();
+  renderAll();
+}
 
 const MULTI_OPTIONS = [
   { value: 1,  label: 'Normal',   sub: '×1'  },
@@ -2676,6 +2964,8 @@ const MULTI_OPTIONS = [
 const EXPORT_HEADER = '=== BACCARAT 3 BOARDS ===';
 
 function save() {
+  // Avant d'écrire, on rapatrie les champs actifs (players/scores/...) dans le compteur courant
+  syncStateToActiveCounter();
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
 }
 function load() {
@@ -2684,25 +2974,61 @@ function load() {
     if (raw) {
       const loaded = JSON.parse(raw);
       Object.assign(state, loaded);
+      if (!Array.isArray(state.counters)) state.counters = [];
+
+      // ===== Migration ancien format flat → multi-compteurs =====
+      // Si on a des players/history en racine et pas encore de counter, on encapsule.
+      const hasLegacy = !!(loaded.players && loaded.players.length > 0)
+                     || !!(loaded.history && loaded.history.length > 0)
+                     || !!loaded.configured;
+      if (hasLegacy && state.counters.length === 0) {
+        const c = createCounterShape({
+          name: 'Mon premier compteur',
+          players: loaded.players || [],
+          scores: loaded.scores || {},
+          history: loaded.history || [],
+          currentManche: loaded.currentManche || [null, null, null],
+          dealerIdx: typeof loaded.dealerIdx === 'number' ? loaded.dealerIdx : 0,
+          linePrice: typeof loaded.linePrice === 'number' ? loaded.linePrice : 2.5,
+          configured: !!loaded.configured,
+          cloudGameId: loaded.cloudGameId || null,
+          cloudSeatMap: loaded.cloudSeatMap || null,
+        });
+        state.counters = [c];
+        if (c.configured) {
+          state.activeCounterId = c.id;
+          loadCounterIntoState(c);
+        } else {
+          state.activeCounterId = null;
+          clearActiveStateFields();
+        }
+      } else if (state.activeCounterId) {
+        // Charge le compteur actif dans les champs racine
+        const c = state.counters.find(c => c.id === state.activeCounterId);
+        if (c) loadCounterIntoState(c);
+        else { state.activeCounterId = null; clearActiveStateFields(); }
+      } else {
+        clearActiveStateFields();
+      }
+
+      // Normalisations
       if (!state.currentManche) state.currentManche = [null, null, null];
       if (typeof state.dealerIdx !== 'number') state.dealerIdx = 0;
-      state.players.forEach(p => { if (typeof p.active !== 'boolean') p.active = true; });
-      state.history.forEach(h => { if (typeof h.linePrice !== 'number') h.linePrice = state.linePrice; });
+      (state.players || []).forEach(p => { if (typeof p.active !== 'boolean') p.active = true; });
+      (state.history || []).forEach(h => { if (typeof h.linePrice !== 'number') h.linePrice = state.linePrice; });
       // Migration : ancien shape winnerId (string) → winnerIds (array) pour supporter le split
-      state.currentManche.forEach((b, i) => {
+      state.currentManche.forEach((b) => {
         if (b && b.winnerId && !b.winnerIds) {
           b.winnerIds = [b.winnerId];
           delete b.winnerId;
         }
       });
-      // Compat : partie sauvegardée avant l'ajout du sélecteur de mode = mode compteur
+      // Compat mode
       if (state.configured && !state.mode) state.mode = 'counter';
-      // Mode online non restaurable au reload (la connexion WebRTC est perdue) → on reste sur l'onglet online qui montrera la vue entry
       if (state.mode === 'online') { state.mode = 'counter'; }
-      // L'onglet actif par défaut est Online si rien n'est défini
       if (!state.activeTab) state.activeTab = 'online';
     }
-  } catch(e) {}
+  } catch(e) { console.warn('load failed', e); }
 }
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -3282,6 +3608,28 @@ function renderAll() {
 
   // Mode compteur
   showSection('online-section', false);
+
+  // Si pas de compteur actif → vue LISTE
+  if (!state.activeCounterId) {
+    showSection('counters-list-section', true);
+    document.getElementById('counter-detail-header').style.display = 'none';
+    showSection('setup-section', false);
+    showSection('dealer-section', false);
+    showSection('game-section', false);
+    showSection('manche-section', false);
+    showSection('history-section', false);
+    showSection('footer-actions', false);
+    sub.textContent = 'Compteurs';
+    renderCountersList();
+    return;
+  }
+
+  // Vue DÉTAIL d'un compteur : header avec back + nom
+  showSection('counters-list-section', false);
+  document.getElementById('counter-detail-header').style.display = '';
+  const c = activeCounter();
+  if (c) document.getElementById('counter-detail-title').textContent = c.name;
+
   if (state.configured) {
     showSection('setup-section', false);
     showSection('dealer-section', true);
@@ -3305,6 +3653,58 @@ function renderAll() {
     sub.textContent = 'Compteur de partie';
     renderSetup();
   }
+}
+
+// Liste de tous les compteurs (vue Tricount-style)
+function renderCountersList() {
+  const list = document.getElementById('counters-list');
+  if (!list) return;
+  if (!state.counters || state.counters.length === 0) {
+    list.innerHTML = '<div class="counters-empty">Pas encore de compteur.<br>Crée-en un avec le bouton ＋ en haut à droite.</div>';
+    return;
+  }
+  // Tri par lastUsedAt desc
+  const sorted = [...state.counters].sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
+  list.innerHTML = '';
+  sorted.forEach(c => {
+    const activeCount = (c.players || []).filter(p => p.active !== false).length;
+    const manches = (c.history || []).length;
+    const ago = formatAgo(c.lastUsedAt);
+    const initial = (c.name || '?').trim().charAt(0).toUpperCase() || '?';
+    const subtitleParts = [];
+    if (manches > 0) subtitleParts.push(`${manches} manche${manches > 1 ? 's' : ''}`);
+    if (activeCount > 0) subtitleParts.push(`${activeCount} joueur${activeCount > 1 ? 's' : ''}`);
+    if (ago) subtitleParts.push(ago);
+    const subtitle = subtitleParts.join(' · ') || 'Nouveau compteur';
+
+    const btn = document.createElement('button');
+    btn.className = 'counter-row';
+    btn.dataset.counterId = c.id;
+    btn.innerHTML = `
+      <div class="counter-row-icon">${escapeHTML(initial)}</div>
+      <div class="counter-row-body">
+        <div class="counter-row-name">${escapeHTML(c.name || 'Compteur')}</div>
+        <div class="counter-row-sub">${escapeHTML(subtitle)}</div>
+      </div>
+      <div class="counter-row-chevron">›</div>
+    `;
+    btn.addEventListener('click', () => openCounter(c.id));
+    list.appendChild(btn);
+  });
+}
+
+function formatAgo(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1)   return 'à l\'instant';
+  if (m < 60)  return `il y a ${m}min`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `il y a ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 30)  return `il y a ${d}j`;
+  const mo = Math.floor(d / 30);
+  return `il y a ${mo} mois`;
 }
 
 function setMode(mode) {
@@ -7549,9 +7949,10 @@ document.getElementById('profile-signout-btn').addEventListener('click', () => {
   closeProfileModal();
   authSignOut();
 });
-document.getElementById('profile-avatar-edit').addEventListener('click', () => {
-  document.getElementById('profile-avatar-input').click();
-});
+// Le pencil ET l'avatar entier déclenchent le file picker
+const openAvatarPicker = () => document.getElementById('profile-avatar-input').click();
+document.getElementById('profile-avatar-edit').addEventListener('click', openAvatarPicker);
+document.getElementById('profile-avatar').addEventListener('click', openAvatarPicker);
 document.getElementById('profile-avatar-input').addEventListener('change', (e) => {
   const file = e.target.files && e.target.files[0];
   if (file) profileUploadAvatar(file);
@@ -7560,6 +7961,62 @@ document.getElementById('profile-avatar-input').addEventListener('change', (e) =
 document.getElementById('profile-name-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); profileSave(); }
 });
+
+// Multi-compteurs : création, back, options (renommer/supprimer)
+function openCreateCounterModal() {
+  document.getElementById('counter-name-input').value = '';
+  document.getElementById('counter-create-modal').classList.add('show');
+  setTimeout(() => { try { document.getElementById('counter-name-input').focus(); } catch(e) {} }, 60);
+}
+function closeCreateCounterModal() {
+  document.getElementById('counter-create-modal').classList.remove('show');
+}
+function confirmCreateCounter() {
+  const name = document.getElementById('counter-name-input').value.trim();
+  if (!name) { showToast('Donne un nom au compteur', true); return; }
+  closeCreateCounterModal();
+  createAndOpenCounter(name);
+}
+function openMoreModal() {
+  const c = activeCounter();
+  if (!c) return;
+  document.getElementById('counter-more-title').textContent = c.name;
+  document.getElementById('counter-rename-input').value = c.name;
+  document.getElementById('counter-more-modal').classList.add('show');
+}
+function closeMoreModal() {
+  document.getElementById('counter-more-modal').classList.remove('show');
+}
+function confirmRenameCounter() {
+  const c = activeCounter();
+  if (!c) return;
+  const newName = document.getElementById('counter-rename-input').value.trim();
+  if (!newName) { showToast('Nom invalide', true); return; }
+  renameCounter(c.id, newName);
+  closeMoreModal();
+}
+function confirmDeleteCounter() {
+  const c = activeCounter();
+  if (!c) return;
+  if (!confirm(`Supprimer le compteur "${c.name}" ?\nTous les comptes et l'historique seront perdus.`)) return;
+  closeMoreModal();
+  deleteCounter(c.id);
+}
+
+document.getElementById('counter-create-btn').addEventListener('click', openCreateCounterModal);
+document.getElementById('counter-create-confirm-btn').addEventListener('click', confirmCreateCounter);
+document.getElementById('counter-create-cancel-btn').addEventListener('click', closeCreateCounterModal);
+document.getElementById('counter-name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); confirmCreateCounter(); }
+});
+document.getElementById('counter-back-btn').addEventListener('click', closeCounter);
+document.getElementById('counter-more-btn').addEventListener('click', openMoreModal);
+document.getElementById('counter-more-close-btn').addEventListener('click', closeMoreModal);
+document.getElementById('counter-rename-confirm-btn').addEventListener('click', confirmRenameCounter);
+document.getElementById('counter-rename-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); confirmRenameCounter(); }
+});
+document.getElementById('counter-delete-btn').addEventListener('click', confirmDeleteCounter);
 
 // Online mode
 document.getElementById('online-create-btn').addEventListener('click', onlineCreateStart);
