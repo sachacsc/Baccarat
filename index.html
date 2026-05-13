@@ -879,6 +879,34 @@
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
 
+  /* ===== Navigation stack (iOS style push/pop) =====
+     Quand on entre dans une partie online ou un compteur, on push une vue qui
+     couvre TOUT le viewport (y compris la tabbar). Slide-in depuis la droite.
+     Le back button du nav title pop la stack (= retire .active). */
+  .nav-stack {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 80;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transform: translateX(100%);
+    transition: transform 0.28s cubic-bezier(0.2, 0.85, 0.4, 1);
+    pointer-events: none;
+    will-change: transform;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .nav-stack.active {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  /* Quand une stack est active : on cache la tabbar (couverture totale) */
+  body.nav-stack-active .tabbar {
+    transform: translateX(-50%) translateY(calc(100% + 30px));
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+  }
+
   /* Footer-actions (nouveau-partie) visible uniquement sur l'onglet Compteur */
   body:not([data-tab="counter"]) #footer-actions { display: none !important; }
 
@@ -2458,8 +2486,9 @@
       <div id="counters-list"></div>
     </section>
 
-    <!-- Vue DÉTAIL : nav title inline avec back + nom + options -->
-    <div id="counter-detail-header" class="tab-header" style="display:none;">
+    <!-- Vue DÉTAIL : wrappée dans une nav-stack qui couvre la tabbar (push iOS-style) -->
+    <div id="counter-detail-stack" class="nav-stack">
+    <div id="counter-detail-header" class="tab-header">
       <div class="tab-header-leading">
         <button class="nav-icon-btn" id="counter-back-btn" type="button" aria-label="Retour">‹</button>
       </div>
@@ -2528,6 +2557,8 @@
       <div id="history-list"></div>
     </section>
 
+    </div> <!-- /counter-detail-stack -->
+
       </div> <!-- /tab-counter -->
 
       <!-- TAB Online : reprise + partie en ligne -->
@@ -2570,6 +2601,10 @@
           <span class="big-card-chevron">›</span>
         </button>
       </div>
+
+      <!-- Stack online : toutes les vues "deep" (saisir code / connecting / lobby / game)
+           sont à l'intérieur d'une nav-stack qui couvre la tabbar. -->
+      <div id="online-stack" class="nav-stack">
 
       <!-- Vue NAME (renommée fonctionnellement en "saisir code") : pour les guests on demande
            uniquement le code de la partie. Le pseudo vient de authProfile.display_name. -->
@@ -2716,6 +2751,8 @@
           <aside class="game-sidebar" id="game-sidebar"></aside>
         </div>
       </div>
+
+      </div> <!-- /online-stack -->
 
     </section>
 
@@ -3735,10 +3772,10 @@ function renderAll() {
   // Mode compteur
   showSection('online-section', false);
 
-  // Si pas de compteur actif → vue LISTE
+  // Si pas de compteur actif → vue LISTE (pop la stack si elle était active)
   if (!state.activeCounterId) {
+    popNavStack('counter-detail-stack');
     showSection('counters-list-section', true);
-    document.getElementById('counter-detail-header').style.display = 'none';
     showSection('setup-section', false);
     showSection('dealer-section', false);
     showSection('game-section', false);
@@ -3750,9 +3787,9 @@ function renderAll() {
     return;
   }
 
-  // Vue DÉTAIL d'un compteur : header avec back + nom
+  // Vue DÉTAIL d'un compteur : push la stack (overlay couvre tabbar)
   showSection('counters-list-section', false);
-  document.getElementById('counter-detail-header').style.display = '';
+  pushNavStack('counter-detail-stack');
   const c = activeCounter();
   if (c) document.getElementById('counter-detail-title').textContent = c.name;
 
@@ -4447,6 +4484,22 @@ function applyAuthGate() {
     const initialTab = (state && state.activeTab) || 'online';
     switchTab(initialTab);
   }
+}
+
+// ===== Navigation stack helpers =====
+// Pour pousser/popper une vue qui couvre l'écran (incl. tabbar). Style iOS.
+function pushNavStack(id) {
+  const el = typeof id === 'string' ? document.getElementById(id) : id;
+  if (!el) return;
+  el.classList.add('active');
+  document.body.classList.add('nav-stack-active');
+}
+function popNavStack(id) {
+  const el = typeof id === 'string' ? document.getElementById(id) : id;
+  if (el) el.classList.remove('active');
+  // Reset le body class uniquement si plus aucune stack n'est active
+  const anyActive = document.querySelector('.nav-stack.active');
+  if (!anyActive) document.body.classList.remove('nav-stack-active');
 }
 
 // switchTab : active le pane correspondant + met à jour state.mode pour rester compatible
@@ -5214,8 +5267,12 @@ function renderOnline() {
   const target = map[online.status] || 'online-entry';
   showSection(target, true);
 
-  // (name-create est maintenant bypassé — onlineCreateStart → onlineHostStart direct.
-  //  Le pseudo vient de authProfile, plus de saisie manuelle.)
+  // Push/pop la nav-stack online : tout sauf 'entry' couvre la tabbar (iOS style).
+  if (target === 'online-entry') {
+    popNavStack('online-stack');
+  } else {
+    pushNavStack('online-stack');
+  }
 
   if (online.status === 'lobby') {
     renderLobby();
