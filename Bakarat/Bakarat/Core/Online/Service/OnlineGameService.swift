@@ -26,6 +26,14 @@ final class OnlineGameService: ObservableObject {
     @Published private(set) var role: OnlineRole?
     @Published private(set) var phase: Phase = .idle
     @Published var lastError: String?
+    /// Numéro de tentative actuel du helloFromGuest (0 = pas de retry en cours).
+    /// Permet d'afficher "Tentative N/X" pendant que le guest attend le snapshot.
+    @Published private(set) var helloAttempt: Int = 0
+    /// Code du channel sur lequel on a tenté de se connecter (utile pour
+    /// afficher "Recherche du salon XXXX" pendant l'attente du snapshot).
+    @Published private(set) var pendingChannelCode: String?
+    /// Nombre total de tentatives avant abandon (visible dans le loader UI).
+    static let maxHelloAttempts: Int = 5
 
     enum Phase: Equatable {
         /// Pas encore dans une room (vue entry)
@@ -74,16 +82,21 @@ final class OnlineGameService: ObservableObject {
     }
 
     /// Rejoint une room existante en tant que guest.
-    func joinRoom(code rawCode: String, myUserId: UUID, myDisplayName: String) async {
+    /// Retourne false si le code a un format invalide (=> ne navigue pas au salon).
+    @discardableResult
+    func joinRoom(code rawCode: String, myUserId: UUID, myDisplayName: String) async -> Bool {
         let code = rawCode.uppercased().filter { $0.isLetter || $0.isNumber }
         guard code.count == 4 else {
             lastError = "Code invalide (4 caractères attendus)."
-            return
+            log("joinRoom REJECTED: bad format '\(rawCode)' → '\(code)' (\(code.count) chars)")
+            return false
         }
         self.role = .guest
         self.room = nil
+        self.lastError = nil
         log("joinRoom code=\(code) user=\(myDisplayName) (\(myUserId.uuidString.prefix(8)))")
         await openChannel(code: code, myUserId: myUserId, myDisplayName: myDisplayName)
+        return true
     }
 
     /// Quitte la room (broadcast de leave + unsubscribe).
@@ -101,6 +114,8 @@ final class OnlineGameService: ObservableObject {
         room = nil
         role = nil
         phase = .left
+        pendingChannelCode = nil
+        helloAttempt = 0
     }
 
     /// Host : met à jour les réglages de la room en lobby (prix, flash, timer) et broadcast.
@@ -477,6 +492,7 @@ final class OnlineGameService: ObservableObject {
 
     private func openChannel(code: String, myUserId: UUID, myDisplayName: String) async {
         phase = .connecting
+        pendingChannelCode = code
         let name = "online:\(code)"
         log("openChannel name=\(name)")
 
@@ -488,6 +504,7 @@ final class OnlineGameService: ObservableObject {
 
         let ch = client.realtimeV2.channel(name)
         self.channel = ch
+        log("openChannel: initial status = \(ch.status)")
 
         // Bind les broadcasts AVANT subscribe (sinon on peut rater le 1er message)
         listenerTask?.cancel()
@@ -498,6 +515,16 @@ final class OnlineGameService: ObservableObject {
                 await self.handleIncoming(rawMessage: msg, myUserId: myUserId, myDisplayName: myDisplayName)
             }
             self.log("listenerTask: broadcastStream ended")
+        }
+
+        // Observe les changements de statut du channel (joined / joining / closed / errored)
+        subscribeTask?.cancel()
+        subscribeTask = Task { [weak self] in
+            guard let self else { return }
+            for await status in ch.statusChange {
+                self.log("channel status → \(status)")
+            }
+            self.log("channel statusChange stream ended")
         }
 
         do {
@@ -521,18 +548,21 @@ final class OnlineGameService: ObservableObject {
         }
     }
 
-    /// Guest : (re)envoie helloFromGuest jusqu'à recevoir un snapshot, max ~15s.
+    /// Guest : (re)envoie helloFromGuest jusqu'à recevoir un snapshot, max ~8s.
     private func startGuestHelloRetry(myUserId: UUID, myDisplayName: String) {
         helloRetryTask?.cancel()
+        helloAttempt = 0
+        let maxAttempts = Self.maxHelloAttempts
         helloRetryTask = Task { [weak self] in
             guard let self else { return }
-            let maxAttempts = 10
             for attempt in 1...maxAttempts {
                 if Task.isCancelled { return }
                 if self.room != nil {
                     self.log("guest got snapshot (after \(attempt - 1) retries)")
+                    self.helloAttempt = 0
                     return
                 }
+                self.helloAttempt = attempt
                 self.log("guest sending helloFromGuest #\(attempt)/\(maxAttempts)")
                 do {
                     try await self.sendMessage(
@@ -542,11 +572,13 @@ final class OnlineGameService: ObservableObject {
                 } catch {
                     self.log("guest hello send failed: \(error.localizedDescription)")
                 }
-                try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
             }
             if self.room == nil {
-                self.log("guest gave up after \(maxAttempts) retries, no snapshot received")
-                self.lastError = "Le salon ne répond pas. Vérifie le code de la partie."
+                let code = self.pendingChannelCode ?? "????"
+                self.log("guest gave up after \(maxAttempts) retries, no snapshot for '\(code)'")
+                self.lastError = "Aucun salon trouvé avec le code \(code). Demande à l'hôte de vérifier."
+                self.helloAttempt = 0
             }
         }
     }
@@ -567,9 +599,24 @@ final class OnlineGameService: ObservableObject {
     private func handleIncoming(rawMessage: [String: AnyJSON],
                                 myUserId: UUID,
                                 myDisplayName: String) async {
-        // Désenveloppe : on attend ["p": .string(<json>)]
-        guard case .string(let payloadStr) = rawMessage["p"] else {
-            log("← incoming: missing/invalid 'p' key, ignoring")
+        // Realtime V2 enveloppe les broadcasts au format :
+        //   { "type": "broadcast", "event": "msg", "payload": { "p": "<json>" } }
+        // On extrait notre payload utilisateur (clé "p" nichée dans "payload").
+        // Fallback : si le SDK nous le donne déjà unwrappé, on accepte aussi.
+        let userPayload: [String: AnyJSON]
+        if case .object(let o) = rawMessage["payload"] {
+            userPayload = o
+        } else if rawMessage["p"] != nil {
+            userPayload = rawMessage
+        } else {
+            let keys = rawMessage.keys.sorted().joined(separator: ",")
+            log("← incoming: unexpected shape, top keys=[\(keys)]")
+            return
+        }
+
+        guard case .string(let payloadStr) = userPayload["p"] else {
+            let keys = userPayload.keys.sorted().joined(separator: ",")
+            log("← incoming: missing 'p' in user payload, keys=[\(keys)]")
             return
         }
         guard let data = payloadStr.data(using: .utf8) else {

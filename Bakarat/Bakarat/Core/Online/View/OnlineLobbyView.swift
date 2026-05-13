@@ -49,19 +49,54 @@ struct OnlineLobbyView: View {
                             .foregroundStyle(.red)
                     }
                 }
+            } else if let err = service.lastError {
+                // Erreur de connexion : on n'a jamais reçu de snapshot
+                Section {
+                    VStack(spacing: 14) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title)
+                            .foregroundStyle(.red)
+                        Text(err)
+                            .font(.subheadline)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                        Button("Retour") {
+                            dismiss()
+                        }
+                        .modifier(PrimaryButtonStyle())
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .padding(.horizontal, 16)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
             } else {
                 Section {
-                    HStack {
-                        Spacer()
-                        VStack(spacing: 10) {
-                            ProgressView()
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        if let code = service.pendingChannelCode, service.role == .guest {
+                            Text("Recherche du salon")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(code)
+                                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                                .tracking(4)
+                                .foregroundStyle(.primary)
+                        } else {
                             Text(connectingLabel)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 24)
-                        Spacer()
+                        if service.helloAttempt > 0 {
+                            Text("Tentative \(service.helloAttempt)/\(OnlineGameService.maxHelloAttempts)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
@@ -179,37 +214,63 @@ struct OnlineLobbyView: View {
         let isHost = (service.role == .host)
 
         Section {
-            // Prix de la ligne — pattern Zmeo : minus circle + TextField + plus circle
-            linePriceRow(room: room, isHost: isHost)
-
-            // Timer par annonce — Picker compact (menu)
-            Picker(selection: timerBinding) {
-                Text("Désactivé").tag(0)
-                ForEach(Self.timerOptions, id: \.self) { sec in
-                    Text("\(sec) s").tag(sec)
-                }
-            } label: {
-                Text("Timer par annonce")
+            if isHost {
+                hostSettingsRows(room: room)
+            } else {
+                guestSettingsRows(room: room)
             }
-            .pickerStyle(.menu)
-            .tint(Theme.brandRed)
-            .disabled(!isHost)
-
-            // Mode Flash (sous le timer)
-            Toggle("Mode Flash", isOn: flashBinding)
-                .tint(Theme.brandRed)
-                .disabled(!isHost)
         } header: {
-            HStack {
-                Text("Réglages")
-                Spacer()
-                if !isHost {
-                    Text("Lecture seule")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
+            Text("Réglages")
         }
+    }
+
+    @ViewBuilder
+    private func hostSettingsRows(room: OnlineRoom) -> some View {
+        // Prix de la ligne — pattern Zmeo : TextField + barre clavier custom
+        linePriceRow(room: room, isHost: true)
+
+        // Timer par annonce — Picker compact (menu)
+        Picker(selection: timerBinding) {
+            Text("Désactivé").tag(0)
+            ForEach(Self.timerOptions, id: \.self) { sec in
+                Text("\(sec) s").tag(sec)
+            }
+        } label: {
+            Text("Timer par annonce")
+        }
+        .pickerStyle(.menu)
+        .tint(Theme.brandRed)
+
+        // Mode Flash
+        Toggle("Mode Flash", isOn: flashBinding)
+            .tint(Theme.brandRed)
+    }
+
+    @ViewBuilder
+    private func guestSettingsRows(room: OnlineRoom) -> some View {
+        readOnlyRow(label: "Prix de la ligne", value: formatPrice(room.linePrice))
+        readOnlyRow(label: "Timer par annonce",
+                    value: room.announceTimerSeconds == 0
+                        ? "Désactivé"
+                        : "\(room.announceTimerSeconds) s")
+        readOnlyRow(label: "Mode Flash", value: room.flashMode ? "Activé" : "Désactivé")
+    }
+
+    @ViewBuilder
+    private func readOnlyRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func formatPrice(_ p: Double) -> String {
+        if p.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(format: "%.0f €", p)
+        }
+        return String(format: "%.1f €", p).replacingOccurrences(of: ".", with: ",")
     }
 
     // MARK: - Section : joueurs
@@ -410,13 +471,6 @@ struct OnlineLobbyView: View {
             get: { service.room?.announceTimerSeconds ?? 0 },
             set: { v in Task { await service.updateSettings(announceTimerSeconds: v) } }
         )
-    }
-
-    private func formatPrice(_ p: Double) -> String {
-        if p.truncatingRemainder(dividingBy: 1) == 0 {
-            return String(format: "%.0f €", p)
-        }
-        return String(format: "%.1f €", p)
     }
 
     private var connectingLabel: String {
