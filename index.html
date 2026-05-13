@@ -8069,7 +8069,7 @@ document.getElementById('auth-signout-btn').addEventListener('click', authSignOu
 
 // Profile modal (avatar tab Dettes → modal édition pseudo/photo/logout)
 document.getElementById('debts-avatar').addEventListener('click', openProfileModal);
-document.getElementById('profile-modal-close').addEventListener('click', closeProfileModal);
+// profile-modal-close a été retiré du HTML : la X auto-injectée par setupSheets() suffit
 document.getElementById('profile-save-btn').addEventListener('click', profileSave);
 document.getElementById('profile-signout-btn').addEventListener('click', () => {
   closeProfileModal();
