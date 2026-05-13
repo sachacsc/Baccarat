@@ -2941,7 +2941,24 @@
 
   <div class="toast" id="toast"></div>
 
-<script>
+<script type="module">
+// ===== Imports modules (voir src/ et CLAUDE.md) =====
+import { uid, fmtMoney, escapeHTML, formatAgo } from './src/utils.js';
+import {
+  CATEGORIES, CAT_RANK, CAT_BY_ID, MULTI_OPTIONS,
+} from './src/game/categories.js';
+import {
+  SUITS, RANKS, RANK_VALUE, SUIT_SYMBOLS, SUIT_COLORS, RANK_DISPLAY,
+  buildDeck, shuffleDeck, cardRankVal, cardSuit,
+} from './src/game/deck.js';
+import {
+  evaluate5, evaluateBest, compareHands,
+  validateAnnounce, autoPickCards, computeNuts,
+} from './src/game/eval.js';
+import {
+  CARDS_CDN_BASE, cardImgURL, cardBackURL, preloadCardImages, renderCardHTML,
+} from './src/game/cards.js';
+
 'use strict';
 
 const STORAGE_KEY = 'baccarat3boards_v4';
@@ -3075,12 +3092,7 @@ function renameCounter(id, newName) {
   renderAll();
 }
 
-const MULTI_OPTIONS = [
-  { value: 1,  label: 'Normal',   sub: '×1'  },
-  { value: 8,  label: 'Carré',    sub: '×8'  },
-  { value: 16, label: 'Q. Flush', sub: '×16' },
-  { value: 20, label: 'Royale',   sub: '×20' },
-];
+// MULTI_OPTIONS / CATEGORIES / CAT_RANK / CAT_BY_ID désormais importés depuis src/game/categories.js
 
 const EXPORT_HEADER = '=== BACCARAT 3 BOARDS ===';
 
@@ -3152,14 +3164,7 @@ function load() {
   } catch(e) { console.warn('load failed', e); }
 }
 
-function uid() { return Math.random().toString(36).slice(2, 9); }
-function fmtMoney(v) {
-  const sign = v > 0 ? '+' : '';
-  return `${sign}${v.toFixed(2)}€`;
-}
-function escapeHTML(s) {
-  return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+// uid / fmtMoney / escapeHTML / formatAgo désormais importés depuis src/utils.js
 function showToast(msg, isError = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -3892,19 +3897,7 @@ function renderCountersList() {
   });
 }
 
-function formatAgo(ts) {
-  if (!ts) return '';
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1)   return 'à l\'instant';
-  if (m < 60)  return `il y a ${m}min`;
-  const h = Math.floor(m / 60);
-  if (h < 24)  return `il y a ${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 30)  return `il y a ${d}j`;
-  const mo = Math.floor(d / 30);
-  return `il y a ${mo} mois`;
-}
+// formatAgo désormais importé depuis src/utils.js
 
 function setMode(mode) {
   state.mode = mode;
@@ -5902,208 +5895,12 @@ async function copyRoomCode() {
 
 // ========== GAME (cartes + logique de poker + rendu + réseau) ==========
 
-const SUITS = ['c','d','h','s'];
-const SUIT_SYMBOLS = { c:'♣', d:'♦', h:'♥', s:'♠' };
-const SUIT_COLORS = { c:'black', d:'red', h:'red', s:'black' };
-const RANKS = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
-const RANK_VALUE = Object.fromEntries(RANKS.map((r,i) => [r, i+2]));
-const RANK_DISPLAY = { '2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9', T:'10', J:'V', Q:'D', K:'R', A:'A' };
-
-const CATEGORIES = [
-  { id: 'highcard',  label: 'Hauteur',       multi: 1 },
-  { id: 'pair',      label: 'Paire',         multi: 1 },
-  { id: 'twopair',   label: 'Double paire',  multi: 1 },
-  { id: 'trips',     label: 'Brelan',        multi: 1 },
-  { id: 'straight',  label: 'Suite',         multi: 1 },
-  { id: 'flush',     label: 'Couleur',       multi: 1 },
-  { id: 'fullhouse', label: 'Full',          multi: 1 },
-  { id: 'quads',     label: 'Carré',         multi: 8 },
-  { id: 'sflush',    label: 'Quinte flush',  multi: 16 },
-  { id: 'royal',     label: 'Royale',        multi: 20 },
-];
-const CAT_RANK = Object.fromEntries(CATEGORIES.map((c,i) => [c.id, i]));
-const CAT_BY_ID = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
-
-function buildDeck() {
-  const d = [];
-  for (const r of RANKS) for (const s of SUITS) d.push(r + s);
-  return d;
-}
-function shuffleDeck(arr) {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-function cardRankVal(c) { return RANK_VALUE[c[0]]; }
-function cardSuit(c) { return c[1]; }
-
-function evaluate5(cards) {
-  const ranks = cards.map(cardRankVal).sort((a,b) => b - a);
-  const suits = cards.map(cardSuit);
-  const isFlush = suits.every(s => s === suits[0]);
-  const counts = {};
-  for (const r of ranks) counts[r] = (counts[r]||0) + 1;
-  const countArr = Object.entries(counts).map(([r,c]) => ({r:parseInt(r), c})).sort((a,b) => b.c - a.c || b.r - a.r);
-  const uniq = [...new Set(ranks)].sort((a,b) => b - a);
-  let straightHigh = 0;
-  if (uniq.length === 5) {
-    if (uniq[0] - uniq[4] === 4) straightHigh = uniq[0];
-    if (uniq[0] === 14 && uniq[1] === 5 && uniq[2] === 4 && uniq[3] === 3 && uniq[4] === 2) straightHigh = 5;
-  }
-  const isStraight = straightHigh > 0;
-  if (isStraight && isFlush) {
-    if (straightHigh === 14) return { cat: 'royal', ranks: [14] };
-    return { cat: 'sflush', ranks: [straightHigh] };
-  }
-  if (countArr[0].c === 4) return { cat: 'quads', ranks: [countArr[0].r, countArr[1].r] };
-  if (countArr[0].c === 3 && countArr[1].c === 2) return { cat: 'fullhouse', ranks: [countArr[0].r, countArr[1].r] };
-  if (isFlush) return { cat: 'flush', ranks };
-  if (isStraight) return { cat: 'straight', ranks: [straightHigh] };
-  if (countArr[0].c === 3) return { cat: 'trips', ranks: [countArr[0].r, countArr[1].r, countArr[2].r] };
-  if (countArr[0].c === 2 && countArr[1].c === 2) return { cat: 'twopair', ranks: [countArr[0].r, countArr[1].r, countArr[2].r] };
-  if (countArr[0].c === 2) return { cat: 'pair', ranks: [countArr[0].r, countArr[1].r, countArr[2].r, countArr[3].r] };
-  return { cat: 'highcard', ranks };
-}
-
-function evaluateBest(cards) {
-  if (!cards || cards.length < 5) return null;
-  if (cards.length === 5) return evaluate5(cards);
-  let best = null;
-  const n = cards.length;
-  for (let a = 0; a < n-4; a++)
-    for (let b = a+1; b < n-3; b++)
-      for (let c = b+1; c < n-2; c++)
-        for (let d = c+1; d < n-1; d++)
-          for (let e = d+1; e < n; e++) {
-            const ev = evaluate5([cards[a],cards[b],cards[c],cards[d],cards[e]]);
-            if (!best || compareHands(ev, best) > 0) best = ev;
-          }
-  return best;
-}
-
-function compareHands(a, b) {
-  const ar = CAT_RANK[a.cat], br = CAT_RANK[b.cat];
-  if (ar !== br) return ar - br;
-  const len = Math.max(a.ranks.length, b.ranks.length);
-  for (let i = 0; i < len; i++) {
-    const av = a.ranks[i] || 0, bv = b.ranks[i] || 0;
-    if (av !== bv) return av - bv;
-  }
-  return 0;
-}
-
-function validateAnnounce(announcedCat, holeCards, boardCards) {
-  if (announcedCat === 'skip') return false;
-  if (!CAT_BY_ID[announcedCat]) return false;
-  const best = evaluateBest([...holeCards, ...boardCards]);
-  return !!best && CAT_RANK[best.cat] >= CAT_RANK[announcedCat];
-}
-
-// Calcule la "nuts" THÉORIQUE du board, du point de vue d'un observateur précis.
-// Le nuts représente la meilleure main qu'un adversaire POURRAIT avoir, étant donné
-// ce qu'on voit (les 3 boards) et ce qu'on tient en main (nos cartes ne sont pas dispo
-// pour quelqu'un d'autre). Ça reste théorique : on ne sait pas où sont les cartes
-// non visibles (autres mains, brûlées, deck non distribué) — toutes y sont candidates.
-//
-// Pool = deck (52) − 15 cartes des 3 boards − cartes de la main du viewer (4-6).
-// Pour chaque paire du pool, on évalue (paire + 5 cartes du board courant).
-// Coût : pool ≈ 31-37 cartes → C(n,2) ≈ 465-666 paires × evaluateBest sur 7 cartes.
-//
-// Appelée côté client à chaque render — chaque joueur voit sa propre nuts.
-function computeNuts(boardCards, allCommunityCards, viewerHand) {
-  if (!boardCards || boardCards.length < 5) return null;
-  const used = new Set();
-  for (const cs of (allCommunityCards || [])) {
-    if (Array.isArray(cs)) for (const c of cs) used.add(c);
-  }
-  for (const c of (viewerHand || [])) used.add(c);
-  const pool = buildDeck().filter(c => !used.has(c));
-  let best = null;
-  for (let i = 0; i < pool.length; i++) {
-    for (let j = i + 1; j < pool.length; j++) {
-      const ev = evaluateBest([pool[i], pool[j], ...boardCards]);
-      if (!best || compareHands(ev, best.ev) > 0) {
-        best = { cards: [pool[i], pool[j]], ev };
-      }
-    }
-  }
-  return best ? { cat: best.ev.cat, ranks: best.ev.ranks, cards: best.cards } : null;
-}
-
-// Trouve les 2 cartes optimales (parmi la main) qui satisfont l'annonce et maximisent la force
-function autoPickCards(holeCards, boardCards, announcedCat) {
-  if (announcedCat === 'skip') return [];
-  if (!CAT_BY_ID[announcedCat]) return null;
-  if (holeCards.length < 2) return null;
-  let best = null;
-  for (let i = 0; i < holeCards.length; i++) {
-    for (let j = i + 1; j < holeCards.length; j++) {
-      const cards = [holeCards[i], holeCards[j]];
-      const ev = evaluateBest([...cards, ...boardCards]);
-      if (ev && CAT_RANK[ev.cat] >= CAT_RANK[announcedCat]) {
-        if (!best || compareHands(ev, best.ev) > 0) best = { cards, ev };
-      }
-    }
-  }
-  return best ? best.cards : null;
-}
-
-// CDN Xadeck/xCards : faces + dos avec mêmes dimensions natives 750×1050 (ratio 5:7).
-// Naming : /face/{R}{S}@2x.png (suit en MAJUSCULE) ; /back/bicycle_blue@2x.png.
-const CARDS_CDN_BASE = 'https://cdn.jsdelivr.net/gh/Xadeck/xCards@master/png';
-function cardImgURL(c) {
-  return `${CARDS_CDN_BASE}/face/${c[0]}${c[1].toUpperCase()}@2x.png`;
-}
-function cardBackURL() {
-  return `${CARDS_CDN_BASE}/back/bicycle_blue@2x.png`;
-}
-
-let cardsPreloaded = false;
-function preloadCardImages() {
-  if (cardsPreloaded) return;
-  cardsPreloaded = true;
-  buildDeck().forEach(c => { const img = new Image(); img.src = cardImgURL(c); });
-  const back = new Image(); back.src = cardBackURL();
-}
-
-function renderCardHTML(c, opts) {
-  opts = opts || {};
-  // Check faceDown EN PREMIER : sinon les cartes back avec c=null tombaient dans placeholder
-  if (opts.faceDown) {
-    // Dos Bicycle Rider Back (image locale) rendu via <img class="card-img"> : même structure
-    // que les faces, donc même ratio + scale-to-fit + padding. Si l'image rate, le gradient
-    // rouge de fallback (sur .card.back) reste visible.
-    // opts.flipKey : si présent, ajoute data-flip-card pour permettre le click-to-flip (Flash mode)
-    // opts.animate + opts.delay : permet d'animer l'arrivée du dos (deal en Flash mode)
-    const flipAttr = opts.flipKey ? ` data-flip-card="${opts.flipKey}"` : '';
-    const clickCls = opts.flipKey ? ' flippable' : '';
-    const anim = opts.animate ? ' anim-in' : '';
-    const styleAttr = (opts.animate && opts.delay) ? ` style="animation-delay:${opts.delay}ms;"` : '';
-    return `<div class="card back${clickCls}${anim}"${styleAttr}${flipAttr}><img class="card-img" src="${cardBackURL()}" onload="this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'" alt=""></div>`;
-  }
-  if (opts.placeholder || !c) return '<div class="card placeholder"></div>';
-  const r = c[0], s = c[1];
-  const color = SUIT_COLORS[s];
-  const rd = RANK_DISPLAY[r];
-  const sd = SUIT_SYMBOLS[s];
-  const sel = opts.selected ? ' selected' : '';
-  const sct = opts.selectable ? ' selectable' : '';
-  const dis = opts.disabled ? ' disabled' : '';
-  const anim = opts.animate ? ' anim-in' : '';
-  const styleAttr = (opts.animate && opts.delay) ? ` style="animation-delay:${opts.delay}ms;"` : '';
-  const dataAttr = opts.data ? ` data-card="${c}"` : '';
-  const isFace = (r === 'J' || r === 'Q' || r === 'K' || r === 'A');
-  const centerHTML = isFace
-    ? `<div class="card-center face">${rd}<span class="face-suit">${sd}</span></div>`
-    : `<div class="card-center">${sd}</div>`;
-  // CSS fallback en dessous + image Bicycle en overlay
-  // onload : ajoute 'img-loaded' au parent → masque le CSS rendering (évite l'effet "doublé")
-  // onerror : cache l'img + ajoute 'img-failed' → laisse le CSS fallback visible
-  return `<div class="card ${color}${sel}${sct}${dis}${anim}"${styleAttr}${dataAttr}><div class="card-corner card-corner-tl"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div>${centerHTML}<div class="card-corner card-corner-br"><div class="card-rank">${rd}</div><div class="card-suit">${sd}</div></div><img class="card-img" src="${cardImgURL(c)}" onload="this.parentNode.classList.add('img-loaded')" onerror="this.style.display='none'; this.parentNode.classList.add('img-failed')" alt=""></div>`;
-}
+// Toute la logique de cartes / poker / rendering est désormais dans :
+//   - src/game/deck.js       (SUITS, RANKS, SUIT_SYMBOLS, SUIT_COLORS, RANK_DISPLAY, buildDeck, shuffleDeck, cardRankVal, cardSuit)
+//   - src/game/categories.js (CATEGORIES, CAT_RANK, CAT_BY_ID, MULTI_OPTIONS)
+//   - src/game/eval.js       (evaluate5, evaluateBest, compareHands, validateAnnounce, autoPickCards, computeNuts)
+//   - src/game/cards.js      (CARDS_CDN_BASE, cardImgURL, cardBackURL, preloadCardImages, renderCardHTML)
+// Voir CLAUDE.md → "File map".
 
 // ===== Game state =====
 
@@ -7068,13 +6865,28 @@ function renderGame() {
     burnedZone.style.display = 'none';
   }
 
-  // Pré-calcul des délais d'animation pour les cartes communautaires
-  // Ordre across-boards (column-major) : board1 carte k, board2 carte k, board3 carte k, puis k+1 etc.
-  // Cela imite un vrai dealer qui pose une carte sur chaque board avant de revenir
+  // Pré-calcul des délais d'animation pour les cartes communautaires.
+  // FLOP : on complète le board 1 (3 cartes) avant de passer au board 2, puis au board 3.
+  //        Ordre : B1c1,B1c2,B1c3, B2c1,B2c2,B2c3, B3c1,B3c2,B3c3.
+  // TURN (k=3) puis RIVER (k=4) : une seule carte par board, board par board.
+  //        Ordre : B1c4,B2c4,B3c4 ; puis B1c5,B2c5,B3c5.
+  // Cf. RULES.md → section "Le board".
   const COMMUNITY_CASCADE_MS = 300;
   const communityCardDelays = {};
   let cascadeIdx = 0;
-  for (let k = 0; k < 5; k++) {
+  // Flop : board par board
+  for (let i = 0; i < 3; i++) {
+    for (let k = 0; k < 3; k++) {
+      const cc = game.communityCards[i] && game.communityCards[i][k];
+      if (cc && !seenCards.has(cc)) {
+        communityCardDelays[`${i}-${k}`] = cascadeIdx * COMMUNITY_CASCADE_MS;
+        seenCards.add(cc);
+        cascadeIdx++;
+      }
+    }
+  }
+  // Turn (k=3) + River (k=4) : une carte sur chaque board, board par board
+  for (let k = 3; k < 5; k++) {
     for (let i = 0; i < 3; i++) {
       const cc = game.communityCards[i] && game.communityCards[i][k];
       if (cc && !seenCards.has(cc)) {

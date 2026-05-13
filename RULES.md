@@ -25,11 +25,30 @@ Le donneur est servi **en dernier**, distribution circulaire en commençant apr�
 
 ### Le board
 
-1. **Burn 1** carte → puis **flop** : 3 cartes sur chacun des 3 boards (= 9 cartes)
-2. **Burn 1** carte → puis **turn** : 1 carte de plus sur chaque board
-3. **Burn 1** carte → puis **river** : 1 carte de plus sur chaque board
+1. **Burn 1** carte → puis **flop** : le donneur sert d'abord 3 cartes sur le Board 1, puis 3 sur le Board 2, puis 3 sur le Board 3 (= 9 cartes)
+2. **Burn 1** carte → puis **turn** : 1 carte sur le Board 1, puis 1 sur le Board 2, puis 1 sur le Board 3 (= 3 cartes)
+3. **Burn 1** carte → puis **river** : pareil pour les rivers (= 3 cartes)
 
 Chaque board fait donc 5 cartes au final. Les 3 boards sont indépendants — chaque joueur "joue" les 3 successivement.
+
+#### Ordre exact des cartes piochées
+
+Si on numérote les 15 cases du tableau communautaire ainsi :
+
+```
+Board 1 : c1=1  c2=2  c3=3  c4=4  c5=5
+Board 2 : c1=6  c2=7  c3=8  c4=9  c5=10
+Board 3 : c1=11 c2=12 c3=13 c4=14 c5=15
+```
+
+L'ordre de distribution depuis le deck (après les mains) est :
+
+```
+[burn] 1,2,3 6,7,8 11,12,13   [burn] 4,9,14   [burn] 5,10,15
+        └─── flop ────┘            turn          river
+```
+
+Autrement dit : **board par board pendant le flop**, puis **une carte par board** au turn et au river. (À NE PAS confondre avec un dealing "column-major" où on poserait 1 carte sur chaque board avant de revenir au premier — ce n'est PAS le pattern utilisé.)
 
 ## Annonces et catégories
 
