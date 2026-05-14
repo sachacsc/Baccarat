@@ -113,8 +113,42 @@ struct MancheArchive: Codable, Equatable, Identifiable {
     let boardsWon: [Int: [Int]]
     /// Seat du full-board winner si applicable.
     let fullBoardWinnerSeat: Int?
+    /// Nombre de joueurs actifs sur cette manche.
+    let numActive: Int
+    /// Multiplicateur effectif de chaque board (board → multi). Permet
+    /// d'afficher "B1×8" dans l'historique pour les annonces fortes.
+    let boardMultis: [Int: Int]
 
     var id: Int { mancheNumber }
+
+    enum CodingKeys: String, CodingKey {
+        case mancheNumber, dealerSeat, perPlayerDelta, boardsWon,
+             fullBoardWinnerSeat, numActive, boardMultis
+    }
+
+    init(mancheNumber: Int, dealerSeat: Int,
+         perPlayerDelta: [Int: Double], boardsWon: [Int: [Int]],
+         fullBoardWinnerSeat: Int?, numActive: Int,
+         boardMultis: [Int: Int]) {
+        self.mancheNumber = mancheNumber
+        self.dealerSeat = dealerSeat
+        self.perPlayerDelta = perPlayerDelta
+        self.boardsWon = boardsWon
+        self.fullBoardWinnerSeat = fullBoardWinnerSeat
+        self.numActive = numActive
+        self.boardMultis = boardMultis
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.mancheNumber = try c.decode(Int.self, forKey: .mancheNumber)
+        self.dealerSeat = try c.decode(Int.self, forKey: .dealerSeat)
+        self.perPlayerDelta = try c.decode([Int: Double].self, forKey: .perPlayerDelta)
+        self.boardsWon = try c.decode([Int: [Int]].self, forKey: .boardsWon)
+        self.fullBoardWinnerSeat = try c.decodeIfPresent(Int.self, forKey: .fullBoardWinnerSeat)
+        self.numActive = try c.decodeIfPresent(Int.self, forKey: .numActive) ?? 0
+        self.boardMultis = try c.decodeIfPresent([Int: Int].self, forKey: .boardMultis) ?? [:]
+    }
 }
 
 // MARK: - Messages broadcast

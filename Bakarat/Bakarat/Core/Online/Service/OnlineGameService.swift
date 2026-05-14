@@ -778,10 +778,15 @@ final class OnlineGameService: ObservableObject {
         }
     }
 
-    /// Construit l'archive d'une manche terminée (delta + boards remportés).
+    /// Construit l'archive d'une manche terminée (delta + boards remportés
+    /// + multis + nombre de joueurs actifs).
     private func buildMancheArchive(gs: OnlineGameState) -> MancheArchive {
         var perPlayerDelta: [Int: Double] = [:]
         var boardsWon: [Int: [Int]] = [:]
+        var boardMultis: [Int: Int] = [:]
+        for r in gs.boardResults.compactMap({ $0 }) {
+            boardMultis[r.board] = r.finalMulti
+        }
         for p in gs.players {
             perPlayerDelta[p.seat] = p.score - (gs.initialScores[p.seat] ?? 0)
             boardsWon[p.seat] = gs.boardResults.compactMap { r -> Int? in
@@ -789,12 +794,15 @@ final class OnlineGameService: ObservableObject {
                 return r.winnerSeat == p.seat ? r.board : nil
             }
         }
+        let numActive = gs.players.filter { $0.inManche }.count
         return MancheArchive(
             mancheNumber: gs.mancheNumber,
             dealerSeat: gs.dealerSeat,
             perPlayerDelta: perPlayerDelta,
             boardsWon: boardsWon,
-            fullBoardWinnerSeat: gs.fullBoardWinnerSeat
+            fullBoardWinnerSeat: gs.fullBoardWinnerSeat,
+            numActive: numActive,
+            boardMultis: boardMultis
         )
     }
 

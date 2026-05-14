@@ -163,10 +163,8 @@ struct AnnouncePanel: View {
 
     @ViewBuilder
     private var hintLine: some View {
-        let txt: String = {
-            guard let cat = effectiveCategory else {
-                return "Aucune catégorie → Hauteur auto avec tes 2 plus hautes cartes."
-            }
+        let txt: String? = {
+            guard let cat = effectiveCategory else { return nil }
             if cat == .highcard {
                 return "Hauteur — pas besoin de toucher tes cartes."
             }
@@ -176,9 +174,11 @@ struct AnnouncePanel: View {
             default: return "\(selectedCards.count) cartes sélectionnées."
             }
         }()
-        Text(txt)
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        if let txt {
+            Text(txt)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder

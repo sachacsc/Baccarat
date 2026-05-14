@@ -129,26 +129,38 @@ struct BalanceHistorySheet: View {
     @ViewBuilder
     private func myMancheRow(_ archive: MancheArchive) -> some View {
         let myDelta = mySeat.map { archive.perPlayerDelta[$0] ?? 0 } ?? 0
-        let won = mySeat.flatMap { archive.boardsWon[$0] } ?? []
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Manche \(archive.mancheNumber)")
-                    .font(.subheadline.weight(.semibold))
-                HStack(spacing: 4) {
-                    if !won.isEmpty {
-                        Text(won.map { "B\($0 + 1)" }.joined(separator: " "))
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Theme.brandRed)
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Capsule().fill(Theme.brandRed.opacity(0.12)))
-                    }
-                    if let fb = archive.fullBoardWinnerSeat, fb == mySeat {
-                        Text("🌟 Full board")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Theme.brandRed)
-                    }
+        let won = (mySeat.flatMap { archive.boardsWon[$0] } ?? []).sorted()
+        HStack(spacing: 8) {
+            Text("Manche \(archive.mancheNumber)")
+                .font(.subheadline.weight(.semibold))
+
+            // Nombre de joueurs actifs sur cette manche
+            if archive.numActive > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 10))
+                    Text("\(archive.numActive)")
+                        .font(.caption2.weight(.semibold))
+                        .monospacedDigit()
                 }
+                .foregroundStyle(.secondary)
             }
+
+            // Chips B1×8 / B2 etc. pour les boards remportés
+            ForEach(won, id: \.self) { boardIdx in
+                let multi = archive.boardMultis[boardIdx] ?? 1
+                Text(multi > 1 ? "B\(boardIdx + 1)×\(multi)" : "B\(boardIdx + 1)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Theme.brandRed)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Capsule().fill(Theme.brandRed.opacity(0.12)))
+            }
+
+            if let fb = archive.fullBoardWinnerSeat, fb == mySeat {
+                Text("🌟")
+                    .font(.caption2)
+            }
+
             Spacer()
             Text(formatMoney(myDelta))
                 .font(.subheadline.weight(.bold).monospacedDigit())

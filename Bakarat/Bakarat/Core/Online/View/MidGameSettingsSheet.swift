@@ -30,6 +30,23 @@ struct MidGameSettingsSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    HStack {
+                        Image(systemName: "number")
+                            .foregroundStyle(Theme.brandRed)
+                        Text("Code de la partie")
+                        Spacer()
+                        if let code = service.room?.code {
+                            Text(code)
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .tracking(2.5)
+                                .foregroundStyle(Color(.systemBackground))
+                                .padding(.horizontal, 10).padding(.vertical, 4)
+                                .background(Capsule().fill(Color.primary))
+                        }
+                    }
+                }
+
                 if isHost {
                     Section {
                         priceRow
@@ -55,17 +72,8 @@ struct MidGameSettingsSheet: View {
                 }
 
                 Section {
-                    Toggle(isOn: spectatorBinding) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Spectateur")
-                            Text(mySpectatorWanted
-                                 ? "Tu reviendras spectateur à la prochaine manche."
-                                 : "Active pour devenir spectateur à la prochaine manche.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .tint(Theme.brandRed)
+                    Toggle("Spectateur", isOn: spectatorBinding)
+                        .tint(Theme.brandRed)
                 } header: {
                     Text("Mon statut")
                 }

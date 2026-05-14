@@ -58,10 +58,13 @@ struct OnlineGameView: View {
     var body: some View {
         GeometryReader { geo in
             let availableW = geo.size.width
+            let availableH = geo.size.height
             ScrollView {
                 VStack(spacing: 14) {
                     if let gs = service.room?.gameState {
-                        phaseBanner(gs)
+                        // Brûlées (3 dos) visibles dès le début, révélées en
+                        // animation à la fin de la manche.
+                        burnsChip(gs)
                         // Flash mode : les 2 dernières cartes de chaque joueur
                         // sont public et affichées au-dessus du Board 1 jusqu'à
                         // ce qu'on passe au Board 2.
@@ -69,10 +72,10 @@ struct OnlineGameView: View {
                             flashTeaserSection(gs)
                         }
                         ForEach(0..<3, id: \.self) { idx in
-                            boardSection(gs, idx: idx, availableW: availableW)
+                            boardSection(gs, idx: idx, availableW: availableW, availableH: availableH)
                         }
                         ForEach(gs.tiebreakBoards) { tb in
-                            tiebreakBoardSection(gs, tb: tb, availableW: availableW)
+                            tiebreakBoardSection(gs, tb: tb, availableW: availableW, availableH: availableH)
                         }
                         if (gs.phase == .announcing || gs.phase == .tiebreakAnnouncing),
                            let mySeat = mySeat(in: gs),
@@ -89,12 +92,6 @@ struct OnlineGameView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 12)
             }
-            // Timer pinné en haut (sous la nav). Visible pour TOUT LE MONDE
-            // tant qu'un timer d'annonce est actif. Animé in/out à l'apparition.
-            .safeAreaInset(edge: .top) {
-                topTimerBar
-            }
-            .animation(.easeInOut(duration: 0.2), value: shouldShowTopTimer)
             // Ma main pinnée en bas (toujours visible). Bulle flottante en
             // rounded rect liquid glass — rien ne touche les bords de l'écran.
             .safeAreaInset(edge: .bottom) {
@@ -102,7 +99,7 @@ struct OnlineGameView: View {
                    let seat = mySeat(in: gs),
                    gs.hands[seat] != nil,
                    gs.players.first(where: { $0.seat == seat })?.inManche == true {
-                    myHand(gs, availableW: availableW)
+                    myHand(gs, availableW: availableW, availableH: availableH)
                         .padding(.horizontal, handBubbleInnerPadding)
                         .padding(.top, 12)
                         .padding(.bottom, 10)
@@ -117,7 +114,7 @@ struct OnlineGameView: View {
         .toolbar(.hidden, for: .tabBar)      // masque la tabbar pendant la partie
         .toolbar {
             ToolbarItem(placement: .principal) {
-                codeNavPill
+                navTitleView
             }
             ToolbarItem(placement: .topBarLeading) {
                 Button {
@@ -197,76 +194,35 @@ struct OnlineGameView: View {
 
     // MARK: - Sizing helpers
 
-    /// Largeur d'une carte board pour 5 cartes par row, padding inclus.
-    private func boardCardW(_ availableW: CGFloat) -> CGFloat {
+    /// Plafond de hauteur de carte (en % de la hauteur écran) UNIQUEMENT en
+    /// landscape — en portrait on garde le calcul width-based d'origine qui
+    /// donnait des cartes au bon ratio.
+    private let boardCardMaxHeightRatioLandscape: CGFloat = 0.20
+    private let handCardMaxHeightRatioLandscape: CGFloat  = 0.24
+
+    /// Largeur d'une carte board (5 cartes par row). En portrait : basé sur
+    /// la largeur écran. En landscape : on plafonne en plus par la hauteur
+    /// pour que les cards ne dévorent pas l'écran.
+    private func boardCardW(_ availableW: CGFloat, _ availableH: CGFloat) -> CGFloat {
         let usable = availableW - 2 * outerHPadding - boardInnerHPadding
         let gaps = boardCardGap * 4
-        return max(20, floor((usable - gaps) / 5))
+        let widthBased = floor((usable - gaps) / 5)
+        guard availableW > availableH else { return max(20, widthBased) }
+        let heightBased = floor(availableH * boardCardMaxHeightRatioLandscape * 5 / 7)
+        return max(20, min(widthBased, heightBased))
     }
 
-    /// Largeur d'une carte de la main pour 6 cartes — la main est dans une bulle
-    /// rounded-rect flottante au safeAreaInset bottom, on retire donc la marge
-    /// extérieure + le padding interne de la bulle de la largeur dispo.
-    private func handCardW(_ availableW: CGFloat) -> CGFloat {
+    /// Largeur d'une carte de la main (6 par row). Même logique portrait/landscape.
+    private func handCardW(_ availableW: CGFloat, _ availableH: CGFloat) -> CGFloat {
         let usable = availableW - 2 * (handBubbleOuterMargin + handBubbleInnerPadding)
         let gaps = handCardGap * 5
-        return max(20, floor((usable - gaps) / 6))
+        let widthBased = floor((usable - gaps) / 6)
+        guard availableW > availableH else { return max(20, widthBased) }
+        let heightBased = floor(availableH * handCardMaxHeightRatioLandscape * 5 / 7)
+        return max(20, min(widthBased, heightBased))
     }
 
     // MARK: - Phase banner
-
-    @ViewBuilder
-    private func phaseBanner(_ gs: OnlineGameState) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: phaseIcon(gs.phase))
-                .foregroundStyle(Theme.brandRed)
-            Text(phaseLabel(gs.phase))
-                .font(.subheadline.weight(.semibold))
-            Spacer()
-            burnsRow(gs.burnsRevealed)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
-        )
-    }
-
-    /// Barre timer pinnée en safeAreaInset(.top) — toujours visible (sous la
-    /// navbar, au-dessus du scroll) tant qu'un timer d'annonce est actif.
-    @ViewBuilder
-    private var topTimerBar: some View {
-        if shouldShowTopTimer, let deadline = service.room?.gameState?.announceDeadline {
-            TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                let now = ctx.date.timeIntervalSince1970
-                let remaining = max(0, Int(ceil(deadline - now)))
-                let color: Color = remaining <= 5 ? .red : .orange
-                HStack(spacing: 6) {
-                    Image(systemName: "timer")
-                        .font(.caption.weight(.bold))
-                    Text("Annonces · \(remaining)s")
-                        .font(.subheadline.weight(.bold).monospacedDigit())
-                }
-                .foregroundStyle(color)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(color.opacity(0.14))
-                        .overlay(Capsule().stroke(color.opacity(0.30), lineWidth: 1))
-                )
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
-    }
-
-    private var shouldShowTopTimer: Bool {
-        guard let gs = service.room?.gameState else { return false }
-        return gs.announceDeadline != nil
-            && (gs.phase == .announcing || gs.phase == .tiebreakAnnouncing)
-    }
 
     /// Section Flash mode : 2 cartes publiques de chaque joueur en jeu,
     /// affichée au-dessus du Board 1 jusqu'à la fin de ce board.
@@ -282,9 +238,6 @@ struct OnlineGameView: View {
                     .textCase(.uppercase)
                     .tracking(0.6)
                 Spacer()
-                Text("Visible jusqu'à fin du Board 1")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
             VStack(spacing: 6) {
                 ForEach(active) { p in
@@ -316,33 +269,40 @@ struct OnlineGameView: View {
         )
     }
 
+    /// Chip "Brûlées" affichée tout en haut du scroll. 3 cartes face-down
+    /// pendant la manche, retournées face up à `.mancheEnd` (animation flip).
     @ViewBuilder
-    private func burnsRow(_ count: Int) -> some View {
-        HStack(spacing: 3) {
-            ForEach(0..<3, id: \.self) { i in
-                Group {
-                    if i < count {
-                        CardImageView(card: nil, faceDown: true, width: 22)
-                    } else {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .strokeBorder(Color(.tertiaryLabel),
-                                          style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
-                            .frame(width: 22, height: 31)
-                    }
+    private func burnsChip(_ gs: OnlineGameState) -> some View {
+        let revealed = (gs.phase == .mancheEnd)
+        HStack(spacing: 8) {
+            Text("Brûlées")
+                .font(.caption2.weight(.semibold))
+                .textCase(.uppercase)
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
+            HStack(spacing: revealed ? 4 : -6) {
+                ForEach(0..<3, id: \.self) { i in
+                    let burn: Card? = (revealed && i < gs.burns.count) ? gs.burns[i] : nil
+                    CardImageView(card: burn, faceDown: !revealed, width: 24)
+                        .zIndex(Double(i))
                 }
             }
+            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: revealed)
+            Spacer()
         }
+        .padding(.horizontal, 4)
     }
 
     // MARK: - Board section
 
     @ViewBuilder
-    private func boardSection(_ gs: OnlineGameState, idx: Int, availableW: CGFloat) -> some View {
+    private func boardSection(_ gs: OnlineGameState, idx: Int,
+                              availableW: CGFloat, availableH: CGFloat) -> some View {
         let cards = gs.communityCards[idx]
         let result = gs.boardResults[idx]
         let isActive = (gs.phase == .announcing || gs.phase == .boardReveal)
                        && gs.currentBoard == idx
-        let cardW = boardCardW(availableW)
+        let cardW = boardCardW(availableW, availableH)
 
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -461,32 +421,34 @@ struct OnlineGameView: View {
                 }
                 return []
             }()
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text(result.isSplit ? "⚡" : "🏆")
+            HStack(spacing: 10) {
+                Text(result.isSplit ? "⚡" : "🏆")
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(winner.displayName)
                         .font(.subheadline.weight(.bold))
-                    Text(cat.label)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.brandRed)
-                    if cat.multi > 1 {
-                        Text("×\(cat.multi)")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Theme.brandRed)
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Capsule().fill(Theme.brandRed.opacity(0.15)))
-                    }
-                    Spacer()
-                }
-                HStack(spacing: 6) {
+                        .lineLimit(1)
                     HStack(spacing: 4) {
-                        ForEach(displayedCards, id: \.self) { c in
-                            CardImageView(card: c, width: 32)
+                        Text(cat.label)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.brandRed)
+                            .lineLimit(1)
+                        if cat.multi > 1 {
+                            Text("×\(cat.multi)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Theme.brandRed)
+                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                .background(Capsule().fill(Theme.brandRed.opacity(0.15)))
                         }
                     }
-                    Spacer()
-                    autresMainsButton(boardIdx: boardIdx)
                 }
+                HStack(spacing: 3) {
+                    ForEach(displayedCards, id: \.self) { c in
+                        CardImageView(card: c, width: 28)
+                    }
+                }
+                Spacer()
+                autresMainsButton(boardIdx: boardIdx)
             }
         }
     }
@@ -496,10 +458,10 @@ struct OnlineGameView: View {
         Button {
             sheetBoardIdx = boardIdx
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Image(systemName: "rectangle.stack.fill")
                     .font(.caption2)
-                Text("Autres mains")
+                Text("More")
                     .font(.caption.weight(.semibold))
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
@@ -526,9 +488,10 @@ struct OnlineGameView: View {
     // MARK: - My hand (drag-drop + tap-to-select)
 
     @ViewBuilder
-    private func myHand(_ gs: OnlineGameState, availableW: CGFloat) -> some View {
+    private func myHand(_ gs: OnlineGameState,
+                        availableW: CGFloat, availableH: CGFloat) -> some View {
         if let seat = mySeat(in: gs), gs.hands[seat] != nil {
-            let cardW = handCardW(availableW)
+            let cardW = handCardW(availableW, availableH)
             // Sélection libre pendant l'annonce (announce normale OU tie-break).
             // Confirmer reste bloqué tant que catégorie + cartes ne sont pas faits.
             let canSelect: Bool = {
@@ -692,8 +655,9 @@ struct OnlineGameView: View {
     // MARK: - Tie-break board section
 
     @ViewBuilder
-    private func tiebreakBoardSection(_ gs: OnlineGameState, tb: TiebreakBoard, availableW: CGFloat) -> some View {
-        let cardW = boardCardW(availableW)
+    private func tiebreakBoardSection(_ gs: OnlineGameState, tb: TiebreakBoard,
+                                      availableW: CGFloat, availableH: CGFloat) -> some View {
+        let cardW = boardCardW(availableW, availableH)
         let isActive = (gs.phase == .tiebreakAnnouncing || gs.phase == .tiebreakReveal)
                        && gs.tiebreakBoards.last?.id == tb.id
 
@@ -802,6 +766,7 @@ struct OnlineGameView: View {
                 )
             }
 
+
             // Scores
             VStack(spacing: 6) {
                 ForEach(gs.players.sorted { $0.score > $1.score }) { p in
@@ -852,14 +817,28 @@ struct OnlineGameView: View {
     // MARK: - Selection helpers
 
     private func toggleSelection(_ card: Card) {
+        let wasEmpty = selectedCards.isEmpty
         if let i = selectedCards.firstIndex(of: card) {
             selectedCards.remove(at: i)
-        } else if selectedCards.count < 2 {
-            selectedCards.append(card)
-        } else {
-            // Max 2 : remplace la 1ère
+            return
+        }
+        if selectedCards.count >= 2 {
             selectedCards.removeFirst()
             selectedCards.append(card)
+            return
+        }
+        selectedCards.append(card)
+        // Si c'était la 1ère carte sélectionnée → auto-pick le kicker = la
+        // carte de rang le plus haut restante dans la main. L'utilisateur peut
+        // toujours la désélectionner / la remplacer.
+        if wasEmpty,
+           let gs = service.room?.gameState,
+           let seat = mySeat(in: gs),
+           let hole = gs.hands[seat] {
+            let remaining = hole.filter { $0 != card }
+            if let kicker = remaining.max(by: { $0.rank.value < $1.rank.value }) {
+                selectedCards.append(kicker)
+            }
         }
     }
 
@@ -878,35 +857,41 @@ struct OnlineGameView: View {
     }
 
     /// Distribue la main visible 2 cartes à la fois avec un petit suspense
-    /// entre chaque paire. Si toutes les cartes sont déjà présentes, no-op
-    /// (juste reorder). Garde l'ordre utilisateur pour les cartes déjà en main
-    /// (drag-drop préservé).
+    /// entre chaque paire. Garde l'ordre utilisateur pour les cartes déjà en
+    /// main (drag-drop préservé).
+    ///
+    /// IMPORTANT (mode Flash) : les 2 dernières cartes DU DEAL doivent toujours
+    /// apparaître aux 2 dernières positions de la main (les seules face-up).
+    /// On trie les premières cartes par rang desc, mais on garde les 2
+    /// dernières du deal en place à la fin.
     @MainActor
     private func dealHandAnimated(target: [Card]) async {
         let targetSet = Set(target)
-        // Cartes qu'on garde dans leur ordre actuel (encore en main)
         let kept = handOrder.filter { targetSet.contains($0) }
         let keptSet = Set(kept)
-        // Nouvelles cartes à ajouter, triées par rang desc + couleur
+        // Nouvelles cartes (en ordre du deal préservé)
         let added = target.filter { !keptSet.contains($0) }
-            .sorted { sortKey($0) > sortKey($1) }
 
-        // Aucune nouvelle carte → on aligne juste l'ordre (cas où le sync
-        // suit une simple mutation, ou cas dégénéré).
         if added.isEmpty {
             if kept != handOrder { handOrder = kept }
             return
         }
-
-        // Reset à `kept` (le plus souvent vide pour une nouvelle manche),
-        // puis on push les paires de cartes avec un délai entre chaque.
         handOrder = kept
-        var remaining = added
+
+        // Découpe : les 2 dernières du deal (= les publiques en Flash) restent
+        // à la fin, les autres sont triées par rang desc.
+        let tailCount = min(2, added.count)
+        let dealLast = Array(added.suffix(tailCount))
+        let dealFirst = Array(added.dropLast(tailCount))
+            .sorted { sortKey($0) > sortKey($1) }
+        let orderedAdded = dealFirst + dealLast
+
+        var remaining = orderedAdded
         while !remaining.isEmpty {
             let take = min(2, remaining.count)
             let pair = Array(remaining.prefix(take))
             remaining.removeFirst(take)
-            try? await Task.sleep(nanoseconds: 700_000_000) // 0.7s entre paires
+            try? await Task.sleep(nanoseconds: 700_000_000)
             withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) {
                 handOrder.append(contentsOf: pair)
             }
@@ -927,18 +912,43 @@ struct OnlineGameView: View {
         }
     }
 
-    // MARK: - Code pill (nav principal)
+    // MARK: - Nav title dynamique (rythme de la partie)
 
+    /// La nav title donne le rythme : "Distribution" / "Annonces · 27s" /
+    /// "Reveal" / "Fin de manche". Le timer y est intégré directement —
+    /// plus besoin de barre flottante au-dessus du scroll.
     @ViewBuilder
-    private var codeNavPill: some View {
-        if let code = service.room?.code {
-            Text(code)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
-                .tracking(2.5)
-                .foregroundStyle(Color(.systemBackground))
-                .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(Capsule().fill(Color.primary))
+    private var navTitleView: some View {
+        if let gs = service.room?.gameState {
+            if (gs.phase == .announcing || gs.phase == .tiebreakAnnouncing),
+               let deadline = gs.announceDeadline {
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    let now = ctx.date.timeIntervalSince1970
+                    let remaining = max(0, Int(ceil(deadline - now)))
+                    let label = navLabelForActiveBoard(gs)
+                    let bg: Color = remaining <= 5 ? .red : .orange
+                    Text("\(label) · \(remaining)s")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                        .padding(.horizontal, 10).padding(.vertical, 3)
+                        .background(Capsule().fill(bg))
+                }
+            } else {
+                Text(phaseLabel(gs.phase))
+                    .font(.subheadline.weight(.bold))
+            }
         }
+    }
+
+    /// Label de la phase active dans la nav title : "B1"/"B2"/"B3" pour les
+    /// annonces régulières, "Split"/"Split 2"/… pour les rounds de tie-break.
+    private func navLabelForActiveBoard(_ gs: OnlineGameState) -> String {
+        if gs.phase == .tiebreakAnnouncing {
+            let round = gs.tiebreakBoards.last?.round ?? 0
+            return round == 0 ? "Split" : "Split \(round + 1)"
+        }
+        return "B\(gs.currentBoard + 1)"
     }
 
     // MARK: - Spectator popover
