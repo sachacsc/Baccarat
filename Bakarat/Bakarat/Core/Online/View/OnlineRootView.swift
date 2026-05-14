@@ -14,6 +14,8 @@ struct OnlineRootView: View {
     @StateObject private var service = OnlineGameService()
     @State private var path = NavigationPath()
     @State private var joinCode = ""
+    /// Partie host interrompue qu'on propose de reprendre (chargée au appear).
+    @State private var resumableRoom: OnlineRoom? = nil
 
     enum Route: Hashable {
         case createLobby
@@ -25,6 +27,10 @@ struct OnlineRootView: View {
         NavigationStack(path: $path) {
             VStack(spacing: 14) {
                 Spacer().frame(height: 8)
+
+                if let resumable = resumableRoom {
+                    resumeBanner(resumable)
+                }
 
                 bigCard(
                     title: "Créer une partie",
@@ -45,8 +51,11 @@ struct OnlineRootView: View {
                 Spacer()
             }
             .padding(.horizontal, 16)
+            .onAppear {
+                resumableRoom = OnlineGameService.loadResumableHostState()
+            }
             .navigationTitle("Partie en ligne")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .createLobby, .joinedLobby:
@@ -90,6 +99,62 @@ struct OnlineRootView: View {
         if let n = auth.profile?.displayName, !n.isEmpty { return n }
         if let e = auth.userEmail, let local = e.split(separator: "@").first { return String(local) }
         return "Joueur"
+    }
+
+    // MARK: - Resume banner
+
+    @ViewBuilder
+    private func resumeBanner(_ room: OnlineRoom) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.clockwise.circle.fill")
+                .font(.title2)
+                .foregroundStyle(Theme.brandRed)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Partie en cours")
+                    .font(.subheadline.weight(.semibold))
+                let manche = room.gameState?.mancheNumber ?? 1
+                Text("Code \(room.code) · Manche \(manche)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                Task { await resumeGame(room) }
+            } label: {
+                Text("Reprendre")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Capsule().fill(Theme.brandRed))
+            }
+            .buttonStyle(.plain)
+            Button {
+                OnlineGameService.clearResumableHostState()
+                resumableRoom = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Theme.brandRed.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Theme.brandRed.opacity(0.20), lineWidth: 1)
+                )
+        )
+    }
+
+    private func resumeGame(_ room: OnlineRoom) async {
+        guard let uid = auth.userId else { return }
+        let name = displayName()
+        resumableRoom = nil
+        await service.resumeAsHost(savedRoom: room, myUserId: uid, myDisplayName: name)
+        path.append(Route.createLobby)
     }
 
     // MARK: - Components

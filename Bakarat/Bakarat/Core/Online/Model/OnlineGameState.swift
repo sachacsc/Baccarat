@@ -54,6 +54,18 @@ struct OnlineGameState: Codable, Equatable {
     var fullBoardWinnerSeat: Int?
     /// Bluffeurs exclus pour le board courant (perte ferme).
     var excludedThisBoard: [Int]
+    /// Boards de tie-break empilés au fur et à mesure (vide tant qu'aucun split).
+    /// Visuellement affichés ENTRE Board 3 et la main du joueur.
+    /// Les cartes sont tirées au moment du split parmi tout le deck moins les
+    /// hole cards des splitters (cf. `enterTiebreak`).
+    var tiebreakBoards: [TiebreakBoard] = []
+    /// Score des joueurs au début de cette manche (seat → score). Utilisé pour
+    /// calculer le delta par manche envoyé à record_manche pour le ledger
+    /// pairwise. Vide pour la manche 1 (équivalent à 0 partout).
+    var initialScores: [Int: Double] = [:]
+    /// Deadline absolue (timeIntervalSince1970) pour la phase d'annonce ou de
+    /// tie-break courante. nil = pas de timer (option désactivée par l'hôte).
+    var announceDeadline: TimeInterval? = nil
 }
 
 enum GamePhase: String, Codable {
@@ -63,7 +75,27 @@ enum GamePhase: String, Codable {
     case boardReveal   // les annonces du board courant sont révélées
     case turn          // turn révélé (3 cartes ajoutées aux boards)
     case river         // river révélé
+    case tiebreakAnnouncing  // splitters re-sélectionnent leurs cartes
+    case tiebreakReveal      // résultat du tie-break courant
     case mancheEnd     // résolution finale de la manche
+}
+
+/// Un round de tie-break attaché à un board parent qui a splitté.
+struct TiebreakBoard: Codable, Equatable, Identifiable {
+    /// Le board d'origine (0, 1 ou 2) dont on tente de départager les splitters.
+    let parentBoardIdx: Int
+    /// Numéro de round (0 = premier tie-break pour ce parent, 1 = re-split, …).
+    let round: Int
+    /// Les 5 cartes de community pour ce tie-break.
+    let cards: [Card]
+    /// Seats encore en lice pour ce tie-break (sub-set des splitters parents).
+    let eligibleSeats: [Int]
+    /// Soumissions reçues sur ce tie-break.
+    var submissions: [Int: BoardSubmission] = [:]
+    /// Résultat (gagnant ou re-split) — nil tant que pas révélé.
+    var result: BoardResult? = nil
+
+    var id: String { "tb-\(parentBoardIdx)-\(round)" }
 }
 
 struct GamePlayer: Codable, Equatable, Identifiable {
@@ -73,12 +105,16 @@ struct GamePlayer: Codable, Equatable, Identifiable {
     var seat: Int
     /// Score cumulé sur la session online (depuis le début de la partie).
     var score: Double
-    /// Joueur actif à cette manche (false = spectateur).
+    /// Joueur actif à cette manche (false = spectateur sur cette manche).
     var inManche: Bool
     /// Indique si le joueur est encore connecté.
     var connected: Bool
     /// Si déconnecté en cours de manche : à partir de quel board.
     var forfeitFromBoard: Int?
+    /// Préférence durable du joueur — si true, il devient spectateur à la
+    /// MANCHE SUIVANTE (la manche courante n'est pas affectée). Appliqué
+    /// par `startNextManche` qui set `inManche = !wantsToSpectate`.
+    var wantsToSpectate: Bool = false
 
     var id: UUID { userId }
 }

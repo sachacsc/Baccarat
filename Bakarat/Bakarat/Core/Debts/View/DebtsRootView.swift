@@ -50,7 +50,7 @@ struct DebtsRootView: View {
                 .padding(.horizontal, 16)
             }
             .navigationTitle("Dettes")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

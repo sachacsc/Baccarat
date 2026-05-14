@@ -28,7 +28,9 @@ struct OnlineParticipant: Codable, Identifiable, Hashable {
 /// les guests reçoivent les snapshots via broadcast.
 struct OnlineRoom: Codable, Equatable {
     let code: String
-    let hostUserId: UUID
+    /// L'hôte courant. **var** car le rôle peut être transféré en cours de
+    /// partie (déco de l'hôte, ou hôte passant en spectateur).
+    var hostUserId: UUID
     var participants: [OnlineParticipant]
     /// Status simplifié : 'lobby' au début, 'playing' une fois la partie lancée.
     var status: Status
@@ -40,6 +42,14 @@ struct OnlineRoom: Codable, Equatable {
     var announceTimerSeconds: Int = 0
     /// État de la manche en cours. nil tant qu'on est en lobby ou que la partie n'a pas démarré.
     var gameState: OnlineGameState?
+    /// UUID Supabase de la `games` créée à la 1ère manche persistée (retourné par
+    /// `record_manche`). Nil tant qu'aucune manche n'a été sauvegardée. Réutilisé
+    /// pour les manches suivantes.
+    var cloudGameId: UUID? = nil
+    /// Historique des manches terminées (delta par joueur, gagnants par board).
+    /// Visible dans le sheet "Solde & historique" depuis la toolbar de l'écran
+    /// de jeu.
+    var pastManches: [MancheArchive] = []
 
     enum Status: String, Codable {
         case lobby
@@ -49,7 +59,8 @@ struct OnlineRoom: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case code, hostUserId, participants, status,
-             linePrice, flashMode, announceTimerSeconds, gameState
+             linePrice, flashMode, announceTimerSeconds, gameState, cloudGameId,
+             pastManches
     }
 
     init(code: String,
@@ -59,7 +70,9 @@ struct OnlineRoom: Codable, Equatable {
          linePrice: Double = 2.5,
          flashMode: Bool = false,
          announceTimerSeconds: Int = 0,
-         gameState: OnlineGameState? = nil) {
+         gameState: OnlineGameState? = nil,
+         cloudGameId: UUID? = nil,
+         pastManches: [MancheArchive] = []) {
         self.code = code
         self.hostUserId = hostUserId
         self.participants = participants
@@ -68,6 +81,8 @@ struct OnlineRoom: Codable, Equatable {
         self.flashMode = flashMode
         self.announceTimerSeconds = announceTimerSeconds
         self.gameState = gameState
+        self.cloudGameId = cloudGameId
+        self.pastManches = pastManches
     }
 
     // Decoding tolérant : si un client envoie un snapshot sans les nouveaux champs,
@@ -82,7 +97,24 @@ struct OnlineRoom: Codable, Equatable {
         self.flashMode      = try c.decodeIfPresent(Bool.self,   forKey: .flashMode) ?? false
         self.announceTimerSeconds = try c.decodeIfPresent(Int.self, forKey: .announceTimerSeconds) ?? 0
         self.gameState      = try c.decodeIfPresent(OnlineGameState.self, forKey: .gameState)
+        self.cloudGameId    = try c.decodeIfPresent(UUID.self, forKey: .cloudGameId)
+        self.pastManches    = try c.decodeIfPresent([MancheArchive].self, forKey: .pastManches) ?? []
     }
+}
+
+/// Archive d'une manche terminée — gardée dans `OnlineRoom.pastManches` pour
+/// l'historique affiché à l'utilisateur.
+struct MancheArchive: Codable, Equatable, Identifiable {
+    let mancheNumber: Int
+    let dealerSeat: Int
+    /// Delta de score net par seat sur cette manche.
+    let perPlayerDelta: [Int: Double]
+    /// Liste des boards remportés par chaque joueur (seat → [boardIdx]).
+    let boardsWon: [Int: [Int]]
+    /// Seat du full-board winner si applicable.
+    let fullBoardWinnerSeat: Int?
+
+    var id: Int { mancheNumber }
 }
 
 // MARK: - Messages broadcast
@@ -103,6 +135,8 @@ struct OnlineMessage: Codable {
         case start
         /// Guest envoie son annonce pour le board en cours
         case submitAnnounce
+        /// Guest demande à passer en spectateur (ou à rejoindre) pour la prochaine manche
+        case setSpectator
     }
 
     enum Payload: Codable {
@@ -111,6 +145,7 @@ struct OnlineMessage: Codable {
         case leave(userId: UUID)
         case start
         case submitAnnounce(seat: Int, submission: BoardSubmission)
+        case setSpectator(seat: Int, wantsToSpectate: Bool)
 
         // Custom encoding: tag + value (so it's resilient to future variants)
         enum CodingKeys: String, CodingKey { case t, v }
@@ -132,6 +167,9 @@ struct OnlineMessage: Codable {
             case .submitAnnounce(let seat, let submission):
                 try c.encode("submit", forKey: .t)
                 try c.encode(SubmitV(seat: seat, submission: submission), forKey: .v)
+            case .setSpectator(let seat, let wantsToSpectate):
+                try c.encode("spect", forKey: .t)
+                try c.encode(SpectV(seat: seat, wantsToSpectate: wantsToSpectate), forKey: .v)
             }
         }
 
@@ -153,6 +191,9 @@ struct OnlineMessage: Codable {
             case "submit":
                 let v = try c.decode(SubmitV.self, forKey: .v)
                 self = .submitAnnounce(seat: v.seat, submission: v.submission)
+            case "spect":
+                let v = try c.decode(SpectV.self, forKey: .v)
+                self = .setSpectator(seat: v.seat, wantsToSpectate: v.wantsToSpectate)
             default:
                 throw DecodingError.dataCorruptedError(forKey: .t, in: c,
                                                        debugDescription: "Unknown tag \(tag)")
@@ -162,6 +203,7 @@ struct OnlineMessage: Codable {
         private struct HelloV: Codable { let userId: UUID; let displayName: String }
         private struct LeaveV: Codable { let userId: UUID }
         private struct SubmitV: Codable { let seat: Int; let submission: BoardSubmission }
+        private struct SpectV: Codable { let seat: Int; let wantsToSpectate: Bool }
     }
 }
 

@@ -24,12 +24,25 @@ struct OnlineLobbyView: View {
     @FocusState private var priceFieldFocused: Bool
 
     var body: some View {
-        // Router : si la partie a démarré → on bascule sur OnlineGameView
-        if service.room?.status == .playing {
-            OnlineGameView(service: service)
-                .onDisappear { performLeaveIfNeeded() }
-        } else {
-            lobbyContent
+        // Router : si la partie a démarré → on bascule sur OnlineGameView.
+        // On wrap dans un Group pour que le .onDisappear externe ne fire QUE
+        // lorsque la lobby est vraiment retirée du nav stack (pop), pas quand
+        // on transitionne en interne vers OnlineGameView.
+        Group {
+            if service.room?.status == .playing {
+                OnlineGameView(service: service)
+            } else {
+                lobbyContent
+            }
+        }
+        .onDisappear { performLeaveIfNeeded() }
+        .onChange(of: service.phase) { _, newPhase in
+            // Si l'utilisateur tape "Quitter la partie" depuis les settings de
+            // OnlineGameView (qui appelle service.leave), on pop le lobby du
+            // nav stack pour revenir à OnlineRootView.
+            if newPhase == .left {
+                dismiss()
+            }
         }
     }
 
@@ -126,7 +139,8 @@ struct OnlineLobbyView: View {
                 linePriceText = formatPriceForField(v)
             }
         }
-        .onDisappear { performLeaveIfNeeded() }
+        // Note : pas de .onDisappear ici — le leave est géré au niveau du
+        // Group dans `body` pour ne fire qu'au pop réel du nav stack.
     }
 
     // MARK: - Toolbar : Démarrer (host only, opacité faible quand indispo)

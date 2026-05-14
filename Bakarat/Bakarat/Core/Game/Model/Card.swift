@@ -102,13 +102,11 @@ struct Card: Hashable, Codable, CustomStringConvertible {
         try c.encode(description)
     }
 
-    static let CDN = "https://cdn.jsdelivr.net/gh/Xadeck/xCards@master/png"
-    var imageURL: URL {
-        URL(string: "\(Card.CDN)/face/\(rank.rawValue)\(suit.rawValue.uppercased())@2x.png")!
-    }
-    static var backURL: URL {
-        URL(string: "\(CDN)/back/bicycle_blue@2x.png")!
-    }
+    /// Nom de l'asset bundlé (Assets.xcassets/Cards/card_XX.imageset).
+    /// Toutes les cartes xCards sont embarquées localement pour un rendu instantané
+    /// sans dépendance réseau.
+    var assetName: String { "card_\(rank.rawValue)\(suit.rawValue.uppercased())" }
+    static var backAssetName: String { "card_back" }
 }
 
 enum Deck {

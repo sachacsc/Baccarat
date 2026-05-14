@@ -46,7 +46,7 @@ struct CounterRootView: View {
                 }
             }
             .navigationTitle("Compteurs")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
