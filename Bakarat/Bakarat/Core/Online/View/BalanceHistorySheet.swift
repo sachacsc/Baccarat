@@ -17,6 +17,9 @@ struct BalanceHistorySheet: View {
     let room: OnlineRoom
     @Environment(\.dismiss) private var dismiss
 
+    /// Feedback temporaire après copie du solde dans le presse-papier.
+    @State private var justCopiedBalance = false
+
     var body: some View {
         NavigationStack {
             List {
@@ -27,6 +30,17 @@ struct BalanceHistorySheet: View {
             .navigationTitle("Solde & historique")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        copyBalanceSummary()
+                    } label: {
+                        Image(systemName: justCopiedBalance
+                              ? "checkmark.circle.fill"
+                              : "doc.on.clipboard")
+                            .foregroundStyle(justCopiedBalance ? Color.green : Color.primary)
+                            .animation(.easeOut(duration: 0.2), value: justCopiedBalance)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Fermer") { dismiss() }
                         .tint(Theme.brandRed)
@@ -130,11 +144,11 @@ struct BalanceHistorySheet: View {
     private func myMancheRow(_ archive: MancheArchive) -> some View {
         let myDelta = mySeat.map { archive.perPlayerDelta[$0] ?? 0 } ?? 0
         let won = (mySeat.flatMap { archive.boardsWon[$0] } ?? []).sorted()
+        let isFullBoard = (archive.fullBoardWinnerSeat == mySeat) && mySeat != nil
         HStack(spacing: 8) {
             Text("Manche \(archive.mancheNumber)")
                 .font(.subheadline.weight(.semibold))
 
-            // Nombre de joueurs actifs sur cette manche
             if archive.numActive > 0 {
                 HStack(spacing: 2) {
                     Image(systemName: "person.fill")
@@ -146,19 +160,10 @@ struct BalanceHistorySheet: View {
                 .foregroundStyle(.secondary)
             }
 
-            // Chips B1×8 / B2 etc. pour les boards remportés
-            ForEach(won, id: \.self) { boardIdx in
-                let multi = archive.boardMultis[boardIdx] ?? 1
-                Text(multi > 1 ? "B\(boardIdx + 1)×\(multi)" : "B\(boardIdx + 1)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(Theme.brandRed)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(Capsule().fill(Theme.brandRed.opacity(0.12)))
-            }
-
-            if let fb = archive.fullBoardWinnerSeat, fb == mySeat {
-                Text("🌟")
-                    .font(.caption2)
+            // Pilule unique avec tous les boards remportés. Doré si full board,
+            // rouge sinon. Masquée si aucun board gagné.
+            if !won.isEmpty {
+                boardsPill(won: won, multis: archive.boardMultis, isFullBoard: isFullBoard)
             }
 
             Spacer()
@@ -167,6 +172,33 @@ struct BalanceHistorySheet: View {
                 .foregroundStyle(myDelta >= 0 ? Color.green : Color.red)
         }
     }
+
+    /// Pilule unique listant les boards remportés (B1×8 B2 B3). Couleur
+    /// dorée si tous les 3 boards (full board), sinon rouge brand.
+    @ViewBuilder
+    fileprivate static func boardsPill(won: [Int], multis: [Int: Int], isFullBoard: Bool) -> some View {
+        let label = won.map { boardIdx -> String in
+            let m = multis[boardIdx] ?? 1
+            return m > 1 ? "B\(boardIdx + 1)×\(m)" : "B\(boardIdx + 1)"
+        }.joined(separator: " ")
+        let textColor: Color = isFullBoard ? Self.goldDeep : Theme.brandRed
+        let bgColor: Color   = isFullBoard ? Self.goldLight : Theme.brandRed.opacity(0.12)
+        Text(label)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(textColor)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(Capsule().fill(bgColor))
+    }
+
+    /// Instance wrapper pour pouvoir l'utiliser depuis les rows non-static.
+    @ViewBuilder
+    private func boardsPill(won: [Int], multis: [Int: Int], isFullBoard: Bool) -> some View {
+        Self.boardsPill(won: won, multis: multis, isFullBoard: isFullBoard)
+    }
+
+    /// Couleur dorée pour la pilule full-board.
+    fileprivate static let goldDeep = Color(red: 0.62, green: 0.46, blue: 0.05)
+    fileprivate static let goldLight = Color(red: 0.96, green: 0.84, blue: 0.40).opacity(0.35)
 
     private var mySeat: Int? {
         guard let uid = auth.userId else { return nil }
@@ -192,6 +224,34 @@ struct BalanceHistorySheet: View {
         let sign = v >= 0 ? "+" : ""
         return "\(sign)\(String(format: "%.2f", v)) €"
     }
+
+    // MARK: - Copier solde
+
+    private func copyBalanceSummary() {
+        guard let gs = room.gameState else { return }
+        var lines: [String] = []
+        lines.append("Baccarat · Manche \(gs.mancheNumber)")
+        lines.append("Code partie : \(room.code)")
+        lines.append("")
+        // Largeur de nom pour padding gauche (alignement vertical des montants)
+        let maxNameLen = gs.players.map { $0.displayName.count }.max() ?? 0
+        for p in gs.players.sorted(by: { $0.score > $1.score }) {
+            let suffix: String = {
+                if !p.connected { return " (déconnecté)" }
+                if !p.inManche  { return " (spectateur)" }
+                return ""
+            }()
+            let nameField = p.displayName
+                .padding(toLength: maxNameLen, withPad: " ", startingAt: 0)
+            lines.append("\(nameField)\(suffix)   \(formatMoney(p.score))")
+        }
+        UIPasteboard.general.string = lines.joined(separator: "\n")
+        justCopiedBalance = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await MainActor.run { justCopiedBalance = false }
+        }
+    }
 }
 
 // MARK: - Détail par manche (NavigationLink)
@@ -213,18 +273,14 @@ struct MancheDetailView: View {
                                     .font(.system(size: 11, weight: .bold))
                                     .foregroundStyle(.white)
                             )
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(entry.name)
-                                .font(.subheadline.weight(.semibold))
-                            if !entry.boardsWon.isEmpty {
-                                Text(entry.boardsWon.map { "B\($0 + 1)" }.joined(separator: " "))
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(Theme.brandRed)
-                            }
-                        }
-                        if entry.isFullBoardWinner {
-                            Text("🌟")
-                                .font(.caption)
+                        Text(entry.name)
+                            .font(.subheadline.weight(.semibold))
+                        if !entry.boardsWon.isEmpty {
+                            BalanceHistorySheet.boardsPill(
+                                won: entry.boardsWon,
+                                multis: archive.boardMultis,
+                                isFullBoard: entry.isFullBoardWinner
+                            )
                         }
                         Spacer()
                         Text(formatMoney(entry.delta))

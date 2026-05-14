@@ -9,9 +9,23 @@
 
 import SwiftUI
 
+/// Cible du sheet "Autres mains" : soit un des 3 boards réguliers, soit
+/// un round de tie-break (identifié par parentBoardIdx + round).
+enum AllHandsTarget: Identifiable, Hashable {
+    case board(idx: Int)
+    case tiebreak(parent: Int, round: Int)
+
+    var id: String {
+        switch self {
+        case .board(let i):              return "board-\(i)"
+        case .tiebreak(let p, let r):    return "tb-\(p)-\(r)"
+        }
+    }
+}
+
 struct AllHandsSheet: View {
     let gs: OnlineGameState
-    let boardIdx: Int
+    let target: AllHandsTarget
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -25,7 +39,7 @@ struct AllHandsSheet: View {
                 .padding(.top, 14)
                 .padding(.bottom, 24)
             }
-            .navigationTitle("Board \(boardIdx + 1)")
+            .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -33,6 +47,43 @@ struct AllHandsSheet: View {
                         .tint(Theme.brandRed)
                 }
             }
+        }
+    }
+
+    // MARK: - Données dérivées du target
+
+    /// Cartes du board affichées en haut du sheet.
+    private var boardCards: [Card] {
+        switch target {
+        case .board(let idx):
+            return gs.communityCards[idx]
+        case .tiebreak(let parent, let round):
+            return gs.tiebreakBoards.first {
+                $0.parentBoardIdx == parent && $0.round == round
+            }?.cards ?? []
+        }
+    }
+
+    /// Résultat du board (perPlayer = lignes à afficher).
+    private var result: BoardResult? {
+        switch target {
+        case .board(let idx):
+            return gs.boardResults[idx]
+        case .tiebreak(let parent, let round):
+            return gs.tiebreakBoards.first {
+                $0.parentBoardIdx == parent && $0.round == round
+            }?.result
+        }
+    }
+
+    private var navTitle: String {
+        switch target {
+        case .board(let idx):
+            return "Board \(idx + 1)"
+        case .tiebreak(let parent, let round):
+            return round == 0
+                ? "Split B\(parent + 1)"
+                : "Split B\(parent + 1) · round \(round + 1)"
         }
     }
 
@@ -47,7 +98,7 @@ struct AllHandsSheet: View {
                 .tracking(1)
                 .foregroundStyle(.secondary)
             HStack(spacing: 5) {
-                ForEach(gs.communityCards[boardIdx], id: \.self) { c in
+                ForEach(boardCards, id: \.self) { c in
                     CardImageView(card: c, width: 52)
                 }
             }
@@ -141,8 +192,8 @@ struct AllHandsSheet: View {
     /// Lignes triées : valides en premier (par force décroissante), puis bluffs,
     /// puis skip/forfeit/excluded en dernier.
     private var rankedRows: [RankedRow] {
-        guard let result = gs.boardResults[boardIdx] else { return [] }
-        let boardCards = gs.communityCards[boardIdx]
+        guard let result = self.result else { return [] }
+        let boardCards = self.boardCards
         let splitters = Set(result.splitterSeats)
 
         let rows: [RankedRow] = result.perPlayer.compactMap { row in

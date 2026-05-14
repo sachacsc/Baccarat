@@ -39,8 +39,8 @@ struct OnlineGameView: View {
     @State private var selectedCategory: HandCategory? = nil
     /// Cartes sélectionnées pour l'annonce (depuis la main au-dessus).
     @State private var selectedCards: [Card] = []
-    /// Board pour lequel on ouvre le sheet "Autres mains".
-    @State private var sheetBoardIdx: Int? = nil
+    /// Cible du sheet "Autres mains" — board régulier ou tie-break. nil = fermé.
+    @State private var sheetTarget: AllHandsTarget? = nil
     /// Flash mode : cartes face-down peek-révélées localement (jamais broadcast).
     /// Reset à chaque nouvelle manche.
     @State private var localFlippedCards: Set<Card> = []
@@ -54,58 +54,23 @@ struct OnlineGameView: View {
     @State private var showingSettingsSheet = false
     /// Affiche le popover de la liste des spectateurs (toolbar trailing).
     @State private var showingSpectatorsPopover = false
+    /// Incrémenté quand l'utilisateur tape Confirmer sans avoir sélectionné de
+    /// carte requise → déclenche l'animation shake des cartes.
+    @State private var shakeNonce: Int = 0
+    /// Flag transient : cadran rouge sur les cartes pendant ~1.5s après un
+    /// confirm raté (catégorie sélectionnée mais 0 carte). Auto-clear.
+    @State private var promptCardSelection: Bool = false
 
     var body: some View {
         GeometryReader { geo in
             let availableW = geo.size.width
             let availableH = geo.size.height
-            ScrollView {
-                VStack(spacing: 14) {
-                    if let gs = service.room?.gameState {
-                        // Brûlées (3 dos) visibles dès le début, révélées en
-                        // animation à la fin de la manche.
-                        burnsChip(gs)
-                        // Flash mode : les 2 dernières cartes de chaque joueur
-                        // sont public et affichées au-dessus du Board 1 jusqu'à
-                        // ce qu'on passe au Board 2.
-                        if (service.room?.flashMode == true) && gs.currentBoard == 0 {
-                            flashTeaserSection(gs)
-                        }
-                        ForEach(0..<3, id: \.self) { idx in
-                            boardSection(gs, idx: idx, availableW: availableW, availableH: availableH)
-                        }
-                        ForEach(gs.tiebreakBoards) { tb in
-                            tiebreakBoardSection(gs, tb: tb, availableW: availableW, availableH: availableH)
-                        }
-                        if (gs.phase == .announcing || gs.phase == .tiebreakAnnouncing),
-                           let mySeat = mySeat(in: gs),
-                           gs.players.first(where: { $0.seat == mySeat })?.inManche == true {
-                            announcePanel(gs)
-                        } else if gs.phase == .mancheEnd {
-                            mancheEndPanel(gs)
-                        }
-                    } else {
-                        ProgressView().padding(.top, 60)
-                    }
-                }
-                .padding(.horizontal, outerHPadding)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
-            }
-            // Ma main pinnée en bas (toujours visible). Bulle flottante en
-            // rounded rect liquid glass — rien ne touche les bords de l'écran.
-            .safeAreaInset(edge: .bottom) {
-                if let gs = service.room?.gameState,
-                   let seat = mySeat(in: gs),
-                   gs.hands[seat] != nil,
-                   gs.players.first(where: { $0.seat == seat })?.inManche == true {
-                    myHand(gs, availableW: availableW, availableH: availableH)
-                        .padding(.horizontal, handBubbleInnerPadding)
-                        .padding(.top, 12)
-                        .padding(.bottom, 10)
-                        .modifier(HandBubbleLiquidGlass(cornerRadius: handBubbleCornerRadius))
-                        .padding(.horizontal, handBubbleOuterMargin)
-                        .padding(.bottom, 8)
+            let isLandscape = availableW > availableH
+            Group {
+                if isLandscape {
+                    landscapeBody(availableW: availableW, availableH: availableH)
+                } else {
+                    portraitBody(availableW: availableW, availableH: availableH)
                 }
             }
         }
@@ -182,44 +147,31 @@ struct OnlineGameView: View {
             // Nouvelle manche → reset les cartes flippées localement (Flash mode).
             localFlippedCards = []
         }
-        .sheet(isPresented: Binding(
-            get: { sheetBoardIdx != nil },
-            set: { newValue in if !newValue { sheetBoardIdx = nil } }
-        )) {
-            if let idx = sheetBoardIdx, let gs = service.room?.gameState {
-                AllHandsSheet(gs: gs, boardIdx: idx)
+        .sheet(item: $sheetTarget) { target in
+            if let gs = service.room?.gameState {
+                AllHandsSheet(gs: gs, target: target)
             }
         }
     }
 
     // MARK: - Sizing helpers
 
-    /// Plafond de hauteur de carte (en % de la hauteur écran) UNIQUEMENT en
-    /// landscape — en portrait on garde le calcul width-based d'origine qui
-    /// donnait des cartes au bon ratio.
-    private let boardCardMaxHeightRatioLandscape: CGFloat = 0.20
-    private let handCardMaxHeightRatioLandscape: CGFloat  = 0.24
-
-    /// Largeur d'une carte board (5 cartes par row). En portrait : basé sur
-    /// la largeur écran. En landscape : on plafonne en plus par la hauteur
-    /// pour que les cards ne dévorent pas l'écran.
+    /// Largeur d'une carte board (5 cartes par row). Calcul width-based pur :
+    /// en landscape le body split contraint déjà la largeur de la colonne, pas
+    /// besoin de cap par hauteur.
     private func boardCardW(_ availableW: CGFloat, _ availableH: CGFloat) -> CGFloat {
         let usable = availableW - 2 * outerHPadding - boardInnerHPadding
         let gaps = boardCardGap * 4
         let widthBased = floor((usable - gaps) / 5)
-        guard availableW > availableH else { return max(20, widthBased) }
-        let heightBased = floor(availableH * boardCardMaxHeightRatioLandscape * 5 / 7)
-        return max(20, min(widthBased, heightBased))
+        return max(20, widthBased)
     }
 
-    /// Largeur d'une carte de la main (6 par row). Même logique portrait/landscape.
+    /// Largeur d'une carte de la main (6 par row).
     private func handCardW(_ availableW: CGFloat, _ availableH: CGFloat) -> CGFloat {
         let usable = availableW - 2 * (handBubbleOuterMargin + handBubbleInnerPadding)
         let gaps = handCardGap * 5
         let widthBased = floor((usable - gaps) / 6)
-        guard availableW > availableH else { return max(20, widthBased) }
-        let heightBased = floor(availableH * handCardMaxHeightRatioLandscape * 5 / 7)
-        return max(20, min(widthBased, heightBased))
+        return max(20, widthBased)
     }
 
     // MARK: - Phase banner
@@ -269,25 +221,41 @@ struct OnlineGameView: View {
         )
     }
 
-    /// Chip "Brûlées" affichée tout en haut du scroll. 3 cartes face-down
-    /// pendant la manche, retournées face up à `.mancheEnd` (animation flip).
+    /// Chip "Brûlées" affichée en haut du scroll. Les 3 cartes apparaissent
+    /// PROGRESSIVEMENT (1 avant le flop, 1 avant le turn, 1 avant le river)
+    /// via gs.burnsRevealed. À mancheEnd, elles flippent face up.
     @ViewBuilder
     private func burnsChip(_ gs: OnlineGameState) -> some View {
-        let revealed = (gs.phase == .mancheEnd)
+        let revealedFaceUp = (gs.phase == .mancheEnd)
+        let burnW: CGFloat = 32
+        let burnH: CGFloat = burnW * 7 / 5
         HStack(spacing: 8) {
             Text("Brûlées")
                 .font(.caption2.weight(.semibold))
                 .textCase(.uppercase)
                 .tracking(0.6)
                 .foregroundStyle(.secondary)
-            HStack(spacing: revealed ? 4 : -6) {
+            HStack(spacing: 6) {
                 ForEach(0..<3, id: \.self) { i in
-                    let burn: Card? = (revealed && i < gs.burns.count) ? gs.burns[i] : nil
-                    CardImageView(card: burn, faceDown: !revealed, width: 24)
-                        .zIndex(Double(i))
+                    Group {
+                        if i < gs.burnsRevealed {
+                            if revealedFaceUp && i < gs.burns.count {
+                                CardImageView(card: gs.burns[i], width: burnW)
+                            } else {
+                                CardImageView(card: nil, faceDown: true, width: burnW)
+                            }
+                        } else {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .strokeBorder(Color(.tertiaryLabel),
+                                              style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
+                                .frame(width: burnW, height: burnH)
+                        }
+                    }
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
                 }
             }
-            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: revealed)
+            .animation(.spring(response: 0.55, dampingFraction: 0.7), value: gs.burnsRevealed)
+            .animation(.spring(response: 0.55, dampingFraction: 0.7), value: revealedFaceUp)
             Spacer()
         }
         .padding(.horizontal, 4)
@@ -403,7 +371,23 @@ struct OnlineGameView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                autresMainsButton(boardIdx: boardIdx)
+                autresMainsButton(target: .board(idx: boardIdx))
+            }
+        } else if result.isSplit && result.winnerSeat == nil {
+            // Le board est en cours de résolution via tie-break. On affiche
+            // un état "Split" clair en attendant que le tiebreak résolve.
+            HStack(spacing: 10) {
+                Text("⚡").font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Split")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Theme.brandRed)
+                    Text("Tie-break en cours…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                autresMainsButton(target: .board(idx: boardIdx))
             }
         } else if let winnerSeat = result.winnerSeat,
                   let winner = gs.players.first(where: { $0.seat == winnerSeat }),
@@ -448,15 +432,15 @@ struct OnlineGameView: View {
                     }
                 }
                 Spacer()
-                autresMainsButton(boardIdx: boardIdx)
+                autresMainsButton(target: .board(idx: boardIdx))
             }
         }
     }
 
     @ViewBuilder
-    private func autresMainsButton(boardIdx: Int) -> some View {
+    private func autresMainsButton(target: AllHandsTarget) -> some View {
         Button {
-            sheetBoardIdx = boardIdx
+            sheetTarget = target
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "rectangle.stack.fill")
@@ -485,75 +469,76 @@ struct OnlineGameView: View {
         .background(Capsule().fill(Color(.tertiarySystemBackground)))
     }
 
-    // MARK: - My hand (drag-drop + tap-to-select)
+    // MARK: - Hand bubble (drag-drop + tap-to-select + announce intégré)
 
+    /// Contenu de la bulle : main au-dessus, annonce (grille 3×3 + Confirmer)
+    /// en dessous. Identique en portrait et en landscape — en landscape la
+    /// bulle vit dans la colonne droite (~40% de l'écran), assez large pour
+    /// la grille 3×3.
     @ViewBuilder
-    private func myHand(_ gs: OnlineGameState,
-                        availableW: CGFloat, availableH: CGFloat) -> some View {
-        if let seat = mySeat(in: gs), gs.hands[seat] != nil {
-            let cardW = handCardW(availableW, availableH)
-            // Sélection libre pendant l'annonce (announce normale OU tie-break).
-            // Confirmer reste bloqué tant que catégorie + cartes ne sont pas faits.
-            let canSelect: Bool = {
-                if gs.phase == .announcing && gs.submissions[seat] == nil {
-                    return true
-                }
-                if gs.phase == .tiebreakAnnouncing,
-                   let tb = gs.tiebreakBoards.last,
-                   tb.eligibleSeats.contains(seat),
-                   tb.submissions[seat] == nil {
-                    return true
-                }
-                return false
-            }()
-
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("Ta main")
-                        .font(.subheadline.weight(.semibold))
-                    if seat == gs.dealerSeat {
-                        Text("DONNEUR")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Theme.brandRed)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Capsule().fill(Theme.brandRed.opacity(0.10)))
-                    }
-                    Spacer()
-                    if let me = gs.players.first(where: { $0.seat == seat }) {
-                        Text(formatScore(me.score))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(me.score >= 0 ? .green : .red)
-                    }
-                }
-                .padding(.horizontal, 4)
-
-                let flashMode = service.room?.flashMode ?? false
-                HStack(spacing: handCardGap) {
-                    ForEach(Array(handOrder.enumerated()), id: \.element) { idx, c in
-                        // Flash mode : seules les cartes du set `publicCards`
-                        // (= les 2 dernières dealt) sont face-up. Les autres
-                        // sont face-down jusqu'à click-to-flip local.
-                        let isFaceDown = flashMode
-                                         && !publicCards.contains(c)
-                                         && !localFlippedCards.contains(c)
-                        handCardView(c, width: cardW, idx: idx,
-                                     canSelect: canSelect, faceDown: isFaceDown)
-                    }
-                }
+    private func handBubble(_ gs: OnlineGameState, seat: Int,
+                            availableW: CGFloat, availableH: CGFloat) -> some View {
+        let showAnnounce = (gs.phase == .announcing || gs.phase == .tiebreakAnnouncing)
+        VStack(alignment: .leading, spacing: 12) {
+            handCardsRow(gs, seat: seat, availableW: availableW, availableH: availableH)
+            if showAnnounce {
+                announceContent(gs, seat: seat, isLandscape: false)
             }
-            .padding(.top, 2)
         }
+    }
+
+    /// La rangée de cartes de la main (sans header — le score et le badge
+    /// donneur ne sont plus dans la bulle, ils sont visibles via le bouton
+    /// solde en haut à droite et au mancheEnd).
+    @ViewBuilder
+    private func handCardsRow(_ gs: OnlineGameState, seat: Int,
+                              availableW: CGFloat, availableH: CGFloat) -> some View {
+        let cardW = handCardW(availableW, availableH)
+        let canSelect: Bool = {
+            if gs.phase == .announcing && gs.submissions[seat] == nil { return true }
+            if gs.phase == .tiebreakAnnouncing,
+               let tb = gs.tiebreakBoards.last,
+               tb.eligibleSeats.contains(seat),
+               tb.submissions[seat] == nil { return true }
+            return false
+        }()
+        let flashMode = service.room?.flashMode ?? false
+        // Le cadran rouge n'apparaît qu'après un confirm raté (catégorie ≠
+        // Hauteur + 0 carte). Auto-clear via `promptCardSelection`. Pas de
+        // signal continu — on laisse le joueur libre tant qu'il n'a pas tenté
+        // de confirmer.
+        let needsCards = canSelect && promptCardSelection
+        HStack(spacing: handCardGap) {
+            ForEach(Array(handOrder.enumerated()), id: \.element) { idx, c in
+                let isFaceDown = flashMode
+                                 && !publicCards.contains(c)
+                                 && !localFlippedCards.contains(c)
+                handCardView(c, width: cardW, idx: idx,
+                             canSelect: canSelect, faceDown: isFaceDown,
+                             needsAction: needsCards)
+            }
+        }
+        // Padding top pour que la levée -10pt des cartes sélectionnées ne
+        // dépasse pas le bord supérieur de la bulle liquid-glass.
+        .padding(.top, 12)
+        .modifier(ShakeEffect(animatableData: CGFloat(shakeNonce)))
     }
 
     @ViewBuilder
     private func handCardView(_ c: Card, width: CGFloat, idx: Int,
-                              canSelect: Bool, faceDown: Bool) -> some View {
+                              canSelect: Bool, faceDown: Bool,
+                              needsAction: Bool = false) -> some View {
         let isSelected = selectedCards.contains(c)
+        let borderColor: Color = {
+            if isSelected { return Theme.brandRed }
+            if needsAction { return Color.red.opacity(0.65) }
+            return .clear
+        }()
+        let borderWidth: CGFloat = isSelected ? 2.5 : (needsAction ? 2 : 0)
         CardImageView(card: c, faceDown: faceDown, width: width)
             .overlay(
                 RoundedRectangle(cornerRadius: max(4, width * 0.075), style: .continuous)
-                    .stroke(isSelected ? Theme.brandRed : Color.clear,
-                            lineWidth: 2.5)
+                    .stroke(borderColor, lineWidth: borderWidth)
             )
             .offset(y: isSelected ? -10 : 0)
             .animation(.easeOut(duration: 0.15), value: isSelected)
@@ -577,32 +562,27 @@ struct OnlineGameView: View {
     // MARK: - Announce panel
 
     @ViewBuilder
-    private func announcePanel(_ gs: OnlineGameState) -> some View {
-        if let seat = mySeat(in: gs) {
-            let isTiebreak = gs.phase == .tiebreakAnnouncing
-            let lockedCat: HandCategory? = isTiebreak ? tiebreakLockedCategory(gs) : nil
-            let activeTb = gs.tiebreakBoards.last
-            let alreadySubmitted: Bool = isTiebreak
-                ? (activeTb?.submissions[seat] != nil)
-                : (gs.submissions[seat] != nil)
-            let isEligible: Bool = isTiebreak
-                ? (activeTb?.eligibleSeats.contains(seat) ?? false)
-                : true
+    private func announceContent(_ gs: OnlineGameState, seat: Int,
+                                 isLandscape: Bool) -> some View {
+        let isTiebreak = gs.phase == .tiebreakAnnouncing
+        let lockedCat: HandCategory? = isTiebreak ? tiebreakLockedCategory(gs) : nil
+        let activeTb = gs.tiebreakBoards.last
+        let alreadySubmitted: Bool = isTiebreak
+            ? (activeTb?.submissions[seat] != nil)
+            : (gs.submissions[seat] != nil)
+        let isEligible: Bool = isTiebreak
+            ? (activeTb?.eligibleSeats.contains(seat) ?? false)
+            : true
 
+        Group {
             if isTiebreak && !isEligible {
-                // Spectateur sur ce tie-break (n'était pas dans les splitters)
                 HStack(spacing: 8) {
                     Image(systemName: "eye").foregroundStyle(.secondary)
                     Text("Tu n'es pas concerné par ce tie-break.")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(.secondarySystemBackground))
-                )
             } else {
                 let boardCardsForAnnounce = isTiebreak
                     ? (activeTb?.cards ?? [])
@@ -616,15 +596,41 @@ struct OnlineGameView: View {
                     selectedCategory: $selectedCategory,
                     selectedCards: selectedCards,
                     onConfirm: {
-                        // Si pas de catégorie : auto-Hauteur avec les 2 plus hautes
-                        // cartes de la main (top by rank desc).
                         let cat = lockedCat ?? selectedCategory ?? .highcard
+                        // Si la catégorie nécessite des cartes mais aucune
+                        // sélectionnée → on bloque le submit, on shake les
+                        // cartes ET on active le cadran rouge transient.
+                        if cat != .highcard && selectedCards.isEmpty {
+                            withAnimation(.linear(duration: 0.4)) {
+                                shakeNonce += 1
+                            }
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                promptCardSelection = true
+                            }
+                            Task {
+                                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                await MainActor.run {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        promptCardSelection = false
+                                    }
+                                }
+                            }
+                            return
+                        }
                         let cards: [Card] = {
+                            let hole = gs.hands[seat] ?? []
+                            // Hauteur + 0 carte → auto-pick top 2 de la main
                             if cat == .highcard && selectedCards.isEmpty {
-                                let hole = gs.hands[seat] ?? []
                                 return Array(
                                     hole.sorted { $0.rank.value > $1.rank.value }.prefix(2)
                                 )
+                            }
+                            // 1 seule carte → kicker = plus haute carte restante
+                            if cat != .highcard && selectedCards.count == 1 {
+                                let remaining = hole.filter { !selectedCards.contains($0) }
+                                if let kicker = remaining.max(by: { $0.rank.value < $1.rank.value }) {
+                                    return selectedCards + [kicker]
+                                }
                             }
                             return selectedCards
                         }()
@@ -634,12 +640,9 @@ struct OnlineGameView: View {
                     onSkip: {
                         let submission = BoardSubmission(categoryId: "skip", cards: [])
                         Task { await service.submitAnnounce(submission: submission, mySeat: seat) }
-                    }
-                )
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(.secondarySystemBackground))
+                    },
+                    showSkip: false,
+                    isLandscape: isLandscape
                 )
             }
         }
@@ -682,7 +685,7 @@ struct OnlineGameView: View {
             }
 
             if let result = tb.result {
-                tiebreakResultFooter(gs: gs, result: result)
+                tiebreakResultFooter(gs: gs, tb: tb, result: result)
             } else if isActive && gs.phase == .tiebreakAnnouncing {
                 tiebreakSubmissionRow(gs: gs, tb: tb)
             }
@@ -714,25 +717,67 @@ struct OnlineGameView: View {
     }
 
     @ViewBuilder
-    private func tiebreakResultFooter(gs: OnlineGameState, result: BoardResult) -> some View {
+    private func tiebreakResultFooter(gs: OnlineGameState,
+                                      tb: TiebreakBoard,
+                                      result: BoardResult) -> some View {
+        let target: AllHandsTarget = .tiebreak(parent: tb.parentBoardIdx, round: tb.round)
         if result.isSplit {
-            HStack(spacing: 6) {
+            HStack(spacing: 10) {
                 Image(systemName: "bolt.fill").foregroundStyle(.orange)
-                Text("Re-split — nouveau round nécessaire")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Re-split")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.orange)
+                    Text("Nouveau round nécessaire")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
+                autresMainsButton(target: target)
             }
         } else if let winnerSeat = result.winnerSeat,
-                  let winner = gs.players.first(where: { $0.seat == winnerSeat }) {
-            HStack(spacing: 6) {
-                Text("🏆")
-                Text(winner.displayName)
-                    .font(.subheadline.weight(.bold))
-                Text("remporte le tie-break")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                  let winner = gs.players.first(where: { $0.seat == winnerSeat }),
+                  let catId = result.winningCategoryId,
+                  let cat = HandCategory.from(id: catId) {
+            // Mêmes éléments que pour un board régulier : trophée + nom +
+            // catégorie + multi + cartes annoncées du winner + bouton More.
+            let winnerRow = result.perPlayer.first(where: { $0.seat == winnerSeat })
+            let displayedCards: [Card] = {
+                if let row = winnerRow, !row.cards.isEmpty { return row.cards }
+                if let hole = gs.hands[winnerSeat] {
+                    return HandEvaluator.autoPickCards(announced: cat,
+                                                       hole: hole,
+                                                       board: tb.cards) ?? []
+                }
+                return []
+            }()
+            HStack(spacing: 10) {
+                Text("🏆").font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(winner.displayName)
+                        .font(.subheadline.weight(.bold))
+                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(cat.label)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.brandRed)
+                            .lineLimit(1)
+                        if cat.multi > 1 {
+                            Text("×\(cat.multi)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Theme.brandRed)
+                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                .background(Capsule().fill(Theme.brandRed.opacity(0.15)))
+                        }
+                    }
+                }
+                HStack(spacing: 3) {
+                    ForEach(displayedCards, id: \.self) { c in
+                        CardImageView(card: c, width: 28)
+                    }
+                }
                 Spacer()
+                autresMainsButton(target: target)
             }
         }
     }
@@ -817,28 +862,13 @@ struct OnlineGameView: View {
     // MARK: - Selection helpers
 
     private func toggleSelection(_ card: Card) {
-        let wasEmpty = selectedCards.isEmpty
         if let i = selectedCards.firstIndex(of: card) {
             selectedCards.remove(at: i)
-            return
-        }
-        if selectedCards.count >= 2 {
+        } else if selectedCards.count < 2 {
+            selectedCards.append(card)
+        } else {
             selectedCards.removeFirst()
             selectedCards.append(card)
-            return
-        }
-        selectedCards.append(card)
-        // Si c'était la 1ère carte sélectionnée → auto-pick le kicker = la
-        // carte de rang le plus haut restante dans la main. L'utilisateur peut
-        // toujours la désélectionner / la remplacer.
-        if wasEmpty,
-           let gs = service.room?.gameState,
-           let seat = mySeat(in: gs),
-           let hole = gs.hands[seat] {
-            let remaining = hole.filter { $0 != card }
-            if let kicker = remaining.max(by: { $0.rank.value < $1.rank.value }) {
-                selectedCards.append(kicker)
-            }
         }
     }
 
@@ -909,6 +939,169 @@ struct OnlineGameView: View {
         case .hearts:   3
         case .diamonds: 2
         case .clubs:    1
+        }
+    }
+
+    // MARK: - Body layouts
+
+    /// Portrait : scroll vertical avec boards, bulle bottom en safeAreaInset.
+    @ViewBuilder
+    private func portraitBody(availableW: CGFloat, availableH: CGFloat) -> some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                scrollContent(availableW: availableW, availableH: availableH)
+            }
+            .padding(.horizontal, outerHPadding)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let gs = service.room?.gameState,
+               let seat = mySeat(in: gs),
+               gs.hands[seat] != nil,
+               gs.players.first(where: { $0.seat == seat })?.inManche == true {
+                handBubble(gs, seat: seat,
+                           availableW: availableW, availableH: availableH)
+                    .padding(.horizontal, handBubbleInnerPadding)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .modifier(HandBubbleLiquidGlass(cornerRadius: handBubbleCornerRadius))
+                    .padding(.horizontal, handBubbleOuterMargin)
+                    .padding(.bottom, 8)
+            }
+        }
+    }
+
+    /// Landscape (Option A) : split vertical 50/50 — boards scrollables à
+    /// gauche, panneau info + bulle main/annonce à droite. Quand on n'est
+    /// PAS en phase d'annonce, un panneau "scores en cours" remplit la moitié
+    /// haute du right column, en dehors de la bulle liquid-glass.
+    @ViewBuilder
+    private func landscapeBody(availableW: CGFloat, availableH: CGFloat) -> some View {
+        let halfWidth = availableW / 2
+        HStack(alignment: .top, spacing: 0) {
+            ScrollView {
+                VStack(spacing: 12) {
+                    scrollContent(availableW: halfWidth, availableH: availableH)
+                }
+                .padding(.horizontal, outerHPadding)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+            }
+            .frame(width: halfWidth)
+
+            landscapeRightColumn(availableW: halfWidth, availableH: availableH)
+                .frame(width: halfWidth)
+        }
+    }
+
+    /// Colonne droite en landscape : info panel (top) + bulle hand/annonce (bottom).
+    @ViewBuilder
+    private func landscapeRightColumn(availableW: CGFloat, availableH: CGFloat) -> some View {
+        let isAnnouncing = service.room?.gameState?.phase == .announcing
+                           || service.room?.gameState?.phase == .tiebreakAnnouncing
+        VStack(spacing: 8) {
+            if !isAnnouncing, let gs = service.room?.gameState {
+                landscapeInfoPanel(gs)
+                    .padding(.horizontal, handBubbleOuterMargin)
+                    .padding(.top, 8)
+            }
+            Spacer(minLength: 0)
+            if let gs = service.room?.gameState,
+               let seat = mySeat(in: gs),
+               gs.hands[seat] != nil,
+               gs.players.first(where: { $0.seat == seat })?.inManche == true {
+                handBubble(gs, seat: seat,
+                           availableW: availableW, availableH: availableH)
+                    .padding(.horizontal, handBubbleInnerPadding)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .modifier(HandBubbleLiquidGlass(cornerRadius: handBubbleCornerRadius))
+                    .padding(.horizontal, handBubbleOuterMargin)
+                    .padding(.bottom, 18)
+            }
+        }
+    }
+
+    /// Panneau info à droite (hors bulle) : manche en cours + scores des joueurs.
+    /// Affiché uniquement en landscape, et uniquement quand on n'est PAS en
+    /// phase d'annonce (la bulle prend toute la place sinon).
+    @ViewBuilder
+    private func landscapeInfoPanel(_ gs: OnlineGameState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "list.number")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.brandRed)
+                Text("Manche \(gs.mancheNumber) · Scores")
+                    .font(.caption.weight(.bold))
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            VStack(spacing: 4) {
+                ForEach(gs.players.sorted { $0.score > $1.score }) { p in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Theme.brandGradient)
+                            .frame(width: 22, height: 22)
+                            .overlay(
+                                Text(String(p.displayName.prefix(1)).uppercased())
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.white)
+                            )
+                            .opacity((!p.inManche || !p.connected) ? 0.4 : 1)
+                        Text(p.displayName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle((!p.inManche || !p.connected) ? .secondary : .primary)
+                            .lineLimit(1)
+                        if !p.connected {
+                            Image(systemName: "wifi.slash")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.orange)
+                        } else if !p.inManche {
+                            Text("Spec")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(formatScore(p.score))
+                            .font(.subheadline.weight(.bold).monospacedDigit())
+                            .foregroundStyle((!p.inManche || !p.connected)
+                                             ? Color.secondary
+                                             : (p.score >= 0 ? Color.green : Color.red))
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+
+    /// Contenu commun aux deux body layouts : brûlées + flash teaser + boards
+    /// + tiebreaks + mancheEnd panel.
+    @ViewBuilder
+    private func scrollContent(availableW: CGFloat, availableH: CGFloat) -> some View {
+        if let gs = service.room?.gameState {
+            burnsChip(gs)
+            if (service.room?.flashMode == true) && gs.currentBoard == 0 {
+                flashTeaserSection(gs)
+            }
+            ForEach(0..<3, id: \.self) { idx in
+                boardSection(gs, idx: idx, availableW: availableW, availableH: availableH)
+            }
+            ForEach(gs.tiebreakBoards) { tb in
+                tiebreakBoardSection(gs, tb: tb, availableW: availableW, availableH: availableH)
+            }
+            if gs.phase == .mancheEnd {
+                mancheEndPanel(gs)
+            }
+        } else {
+            ProgressView().padding(.top, 60)
         }
     }
 
@@ -1114,6 +1307,20 @@ struct OnlineGameView: View {
         case .tiebreakReveal:      return "bolt.fill"
         case .mancheEnd:           return "checkmark.circle"
         }
+    }
+}
+
+/// GeometryEffect qui translate horizontalement en sinusoïdale — utilisé pour
+/// secouer les cartes quand l'utilisateur tape Confirmer sans avoir sélectionné
+/// les cartes requises.
+struct ShakeEffect: GeometryEffect {
+    var amount: CGFloat = 9
+    var shakesPerUnit: CGFloat = 3
+    var animatableData: CGFloat
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let x = amount * sin(animatableData * .pi * shakesPerUnit)
+        return ProjectionTransform(CGAffineTransform(translationX: x, y: 0))
     }
 }
 

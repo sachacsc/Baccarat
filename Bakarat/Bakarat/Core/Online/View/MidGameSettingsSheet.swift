@@ -19,6 +19,8 @@ struct MidGameSettingsSheet: View {
 
     @State private var linePriceText: String = ""
     @FocusState private var priceFieldFocused: Bool
+    /// Feedback visuel temporaire après copie du code (icône check verte 1.5s).
+    @State private var justCopiedCode: Bool = false
 
     private static let minPrice: Double = 0.5
     private static let maxPrice: Double = 50
@@ -31,20 +33,29 @@ struct MidGameSettingsSheet: View {
         NavigationStack {
             List {
                 Section {
-                    HStack {
-                        Image(systemName: "number")
-                            .foregroundStyle(Theme.brandRed)
-                        Text("Code de la partie")
-                        Spacer()
-                        if let code = service.room?.code {
-                            Text(code)
-                                .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                .tracking(2.5)
-                                .foregroundStyle(Color(.systemBackground))
-                                .padding(.horizontal, 10).padding(.vertical, 4)
-                                .background(Capsule().fill(Color.primary))
+                    Button {
+                        copyCode()
+                    } label: {
+                        HStack {
+                            Image(systemName: justCopiedCode
+                                  ? "checkmark.circle.fill"
+                                  : "doc.on.clipboard")
+                                .foregroundStyle(justCopiedCode ? Color.green : Color.primary)
+                                .animation(.easeOut(duration: 0.2), value: justCopiedCode)
+                            Text("Copier code")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if let code = service.room?.code {
+                                Text(code)
+                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .tracking(2.5)
+                                    .foregroundStyle(Color(.systemBackground))
+                                    .padding(.horizontal, 10).padding(.vertical, 4)
+                                    .background(Capsule().fill(Color.primary))
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
                 }
 
                 if isHost {
@@ -224,6 +235,16 @@ struct MidGameSettingsSheet: View {
         dismiss()
         guard let uid = auth.userId else { return }
         Task { await service.leave(myUserId: uid) }
+    }
+
+    private func copyCode() {
+        guard let code = service.room?.code else { return }
+        UIPasteboard.general.string = code
+        justCopiedCode = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await MainActor.run { justCopiedCode = false }
+        }
     }
 
     // MARK: - Bindings & helpers

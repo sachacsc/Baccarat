@@ -30,6 +30,13 @@ struct AnnouncePanel: View {
     let onConfirm: () -> Void
     /// Skip ce board.
     let onSkip: () -> Void
+    /// Affiche le bouton Skip (true par défaut pour compat). Quand le panel
+    /// est embarqué dans la bulle, on cache Skip (le user peut valider sans
+    /// sélection → Hauteur auto).
+    var showSkip: Bool = true
+    /// Mode landscape : grille 2×5 avec le bouton Confirmer en 10ème cellule.
+    /// En portrait (false), la grille reste en 3×3 + bouton Confirmer séparé en dessous.
+    var isLandscape: Bool = false
 
     /// Catégorie effective : lockedCategory en priorité, sinon selectedCategory.
     private var effectiveCategory: HandCategory? {
@@ -37,19 +44,20 @@ struct AnnouncePanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             if alreadySubmitted {
                 submittedView
             } else {
                 if let locked = lockedCategory {
                     lockedHeader(locked)
-                } else {
-                    Text("Choisis ton annonce")
-                        .font(.subheadline.weight(.semibold))
-                    categoriesGrid
                 }
+                categoriesGrid
                 hintLine
-                actions
+                // En landscape le bouton Confirmer est intégré au grid 2×5 →
+                // pas d'actions séparées. En portrait on garde les actions.
+                if !isLandscape {
+                    actions
+                }
             }
         }
     }
@@ -101,45 +109,90 @@ struct AnnouncePanel: View {
 
     @ViewBuilder
     private var categoriesGrid: some View {
-        // 3 colonnes × 3 lignes — Hauteur retirée (= default auto si rien
-        // n'est sélectionné). Labels raccourcis pour tenir sur 1 ligne.
-        let cols = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
         let categories = HandCategory.allCases.filter { $0 != .highcard }
+        // 3 cols × 3 rows en portrait, 5 cols × 2 rows en landscape (avec
+        // bouton Confirmer en 10ème cellule).
+        let colCount = isLandscape ? 5 : 3
+        let cols = Array(repeating: GridItem(.flexible(), spacing: 6),
+                         count: colCount)
         LazyVGrid(columns: cols, spacing: 6) {
             ForEach(categories, id: \.self) { cat in
-                Button {
-                    selectedCategory = cat
-                } label: {
-                    VStack(spacing: 2) {
-                        Text(shortLabel(cat))
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        if cat.multi > 1 {
-                            Text("×\(cat.multi)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(Theme.brandRed)
-                        }
-                    }
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, minHeight: 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(selectedCategory == cat
-                                  ? Theme.brandRed.opacity(0.16)
-                                  : Color(.tertiarySystemBackground))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(selectedCategory == cat ? Theme.brandRed : .clear,
-                                    lineWidth: 1.5)
-                    )
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
+                categoryButton(cat)
+            }
+            if isLandscape {
+                inlineConfirmCell
             }
         }
+    }
+
+    @ViewBuilder
+    private func categoryButton(_ cat: HandCategory) -> some View {
+        Button {
+            // Toggle : re-tap sur la catégorie sélectionnée la désélectionne
+            // → retour au mode Hauteur auto par défaut.
+            if selectedCategory == cat {
+                selectedCategory = nil
+            } else {
+                selectedCategory = cat
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(shortLabel(cat))
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if cat.multi > 1 {
+                    Text("×\(cat.multi)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Theme.brandRed)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(selectedCategory == cat
+                          ? Theme.brandRed.opacity(0.14)
+                          : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        selectedCategory == cat
+                            ? Theme.brandRed
+                            : Color(.systemGray3),
+                        lineWidth: selectedCategory == cat ? 1.5 : 1
+                    )
+            )
+            // Toute la pilule est tappable, pas juste le label texte.
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+    }
+
+    /// Bouton Confirmer placé en 10ème cellule de la grille 2×5 (landscape).
+    @ViewBuilder
+    private var inlineConfirmCell: some View {
+        Button(action: onConfirm) {
+            VStack(spacing: 2) {
+                Text("Confirmer")
+                    .font(.caption.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(canConfirm ? Theme.brandRed : Theme.brandRed.opacity(0.35))
+            )
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canConfirm)
     }
 
     /// Labels compacts pour la grille (les labels normaux passent en label de
@@ -161,55 +214,45 @@ struct AnnouncePanel: View {
 
     // MARK: - Hint + actions
 
+    /// Plus de hint sur les cartes — un shake des cartes (orchestré côté
+    /// OnlineGameView via cardShakeNudge) + un cadran rouge transient
+    /// indiqueront qu'il faut sélectionner.
     @ViewBuilder
-    private var hintLine: some View {
-        let txt: String? = {
-            guard let cat = effectiveCategory else { return nil }
-            if cat == .highcard {
-                return "Hauteur — pas besoin de toucher tes cartes."
-            }
-            switch selectedCards.count {
-            case 0: return "Sélectionne 1 ou 2 cartes dans ta main."
-            case 1: return "1 carte sélectionnée — tu peux en ajouter une 2e."
-            default: return "\(selectedCards.count) cartes sélectionnées."
-            }
-        }()
-        if let txt {
-            Text(txt)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
+    private var hintLine: some View { EmptyView() }
 
     @ViewBuilder
     private var actions: some View {
         VStack(spacing: 10) {
             Button(action: onConfirm) {
                 Text(confirmLabel)
-            }
-            .modifier(PrimaryButtonStyle())
-            .disabled(!canConfirm)
-            .opacity(canConfirm ? 1 : 0.5)
-
-            Button(action: onSkip) {
-                Text("Skip ce board")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Theme.brandRed)
+                    )
             }
             .buttonStyle(.plain)
+
+            if showSkip {
+                Button(action: onSkip) {
+                    Text("Skip ce board")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .padding(.top, 6)
+        .padding(.top, 4)
     }
 
-    private var canConfirm: Bool {
-        // Aucune catégorie sélectionnée → on autorise la confirmation (= Hauteur
-        // auto avec les 2 plus hautes cartes). Si Hauteur explicite → toujours OK.
-        // Sinon : au moins 1 carte sélectionnée requise.
-        guard let cat = effectiveCategory else { return true }
-        if cat == .highcard { return true }
-        return selectedCards.count >= 1
-    }
+    /// Toujours `true` — le bouton Confirmer reste cliquable même quand la
+    /// catégorie nécessite des cartes ; le parent (OnlineGameView) déclenche
+    /// un shake animation sur la main pour signaler l'action manquante.
+    private var canConfirm: Bool { true }
 
     private var confirmLabel: String {
         guard let cat = effectiveCategory else {
