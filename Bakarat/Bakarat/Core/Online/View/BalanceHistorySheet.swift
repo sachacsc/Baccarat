@@ -15,10 +15,17 @@ import SwiftUI
 struct BalanceHistorySheet: View {
     @EnvironmentObject private var auth: AuthService
     let room: OnlineRoom
+    /// L'utilisateur courant est l'hôte → débloque l'option "Exclure" via
+    /// long-press / context-menu sur les rows.
+    var isHost: Bool = false
+    /// Callback déclenché par le context-menu "Exclure" (seat à kick).
+    var onKick: ((Int) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     /// Feedback temporaire après copie du solde dans le presse-papier.
     @State private var justCopiedBalance = false
+    /// Confirmation d'exclusion (host) avant d'envoyer le kick.
+    @State private var kickConfirm: (seat: Int, name: String)? = nil
 
     var body: some View {
         NavigationStack {
@@ -46,6 +53,21 @@ struct BalanceHistorySheet: View {
                         .tint(Theme.brandRed)
                 }
             }
+            .alert("Exclure \(kickConfirm?.name ?? "") ?",
+                   isPresented: Binding(
+                    get: { kickConfirm != nil },
+                    set: { if !$0 { kickConfirm = nil } }
+                   )) {
+                Button("Annuler", role: .cancel) {}
+                Button("Exclure", role: .destructive) {
+                    if let seat = kickConfirm?.seat {
+                        onKick?(seat)
+                    }
+                    kickConfirm = nil
+                }
+            } message: {
+                Text("Le joueur sera marqué comme déconnecté et exclu des manches suivantes. Son solde est conservé.")
+            }
         }
     }
 
@@ -56,10 +78,30 @@ struct BalanceHistorySheet: View {
         Section {
             ForEach(allRows) { row in
                 balanceRow(row)
+                    .contextMenu {
+                        if canKick(row.player) {
+                            Button(role: .destructive) {
+                                kickConfirm = (row.player.seat, row.player.displayName)
+                            } label: {
+                                Label("Exclure de la partie",
+                                      systemImage: "person.crop.circle.badge.xmark")
+                            }
+                        }
+                    }
             }
         } header: {
             sectionHeader(icon: "creditcard.fill", title: "Solde courant", color: Theme.brandRed)
+        } footer: {
+            if isHost {
+                Text("Appui long sur un joueur pour l'exclure si sa déconnexion n'a pas été détectée.")
+                    .font(.caption)
+            }
         }
+    }
+
+    private func canKick(_ p: GamePlayer) -> Bool {
+        guard isHost else { return false }
+        return p.userId != auth.userId
     }
 
     @ViewBuilder

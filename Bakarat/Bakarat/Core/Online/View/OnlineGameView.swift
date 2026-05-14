@@ -120,7 +120,13 @@ struct OnlineGameView: View {
         }
         .sheet(isPresented: $showingBalanceSheet) {
             if let room = service.room {
-                BalanceHistorySheet(room: room)
+                BalanceHistorySheet(
+                    room: room,
+                    isHost: service.role == .host,
+                    onKick: { seat in
+                        Task { await service.kickPlayer(seat: seat) }
+                    }
+                )
             }
         }
         .sheet(isPresented: $showingSettingsSheet) {

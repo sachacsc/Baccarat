@@ -354,6 +354,36 @@ final class OnlineGameService: ObservableObject {
         room?.gameState
     }
 
+    /// Host uniquement : exclut un joueur de la partie (force-disconnect).
+    /// Utile quand la présence Realtime n'a pas détecté la déconnexion (joueur
+    /// figé / en airplane mode mais channel encore actif). Effet :
+    ///  - connected = false
+    ///  - forfeit du board courant (paye comme un loser sur les boards restants)
+    ///  - wantsToSpectate = true (retiré des manches suivantes ; peut revenir
+    ///    via le popover spectateurs s'il se reconnecte)
+    /// Le solde du joueur est conservé.
+    func kickPlayer(seat: Int) async {
+        guard role == .host, let myId = myUserIdCache else { return }
+        guard var current = room, var gs = current.gameState else { return }
+        guard let i = gs.players.firstIndex(where: { $0.seat == seat }) else { return }
+        // Pas de kick sur soi-même (l'hôte utilise "Quitter la partie").
+        guard gs.players[i].userId != myId else { return }
+
+        let name = gs.players[i].displayName
+        gs.players[i].connected = false
+        if gs.players[i].inManche,
+           gs.players[i].forfeitFromBoard == nil,
+           gs.phase != .mancheEnd {
+            gs.players[i].forfeitFromBoard = gs.currentBoard
+        }
+        gs.players[i].wantsToSpectate = true
+        current.gameState = gs
+        room = current
+        log("kickPlayer: seat=\(seat) (\(name))")
+        await broadcastSnapshot()
+        await checkAutoRevealAfterDisconnect()
+    }
+
     /// Host : applique la préférence spectateur d'un seat (broadcast snapshot).
     private func applySpectatorChange(seat: Int, wantsToSpectate: Bool) async {
         guard role == .host, var current = room, var gs = current.gameState else { return }
@@ -443,6 +473,11 @@ final class OnlineGameService: ObservableObject {
     func revealBoard() async {
         guard role == .host, var current = room, var gs = current.gameState else { return }
         guard gs.phase == .announcing else { return }
+        // Annule le timer dès l'entrée : empêche une seconde fire pendant le
+        // sleep/broadcast qui suit (race entre handleRegularSubmission "tous
+        // soumis → reveal" et timerExpired qui auto-skip).
+        announceTimerTask?.cancel()
+        announceTimerTask = nil
 
         let boardIdx = gs.currentBoard
         let boardCards = gs.communityCards[boardIdx]
@@ -644,6 +679,8 @@ final class OnlineGameService: ObservableObject {
     private func revealTiebreakBoard() async {
         guard role == .host, var current = room, var gs = current.gameState else { return }
         guard gs.phase == .tiebreakAnnouncing else { return }
+        announceTimerTask?.cancel()
+        announceTimerTask = nil
         guard var tb = gs.tiebreakBoards.last,
               let parentResult = gs.boardResults[tb.parentBoardIdx],
               let catId = parentResult.winningCategoryId,
@@ -951,14 +988,30 @@ final class OnlineGameService: ObservableObject {
     /// les joueurs encore actifs + connectés). Si c'est moi → je prends la main.
     private func electNewHost() async {
         guard let myId = myUserIdCache, let current = room, let gs = current.gameState else { return }
-        let candidates = gs.players
+        // 1) Priorité : un joueur actif et connecté (autre que l'ex-hôte).
+        let active = gs.players
             .filter { $0.inManche && $0.connected && $0.userId != current.hostUserId }
             .sorted { $0.seat < $1.seat }
-        guard let newHost = candidates.first else {
+        // 2) Sinon : n'importe quel spectateur connecté (participant), pour
+        //    éviter une partie figée si tous les joueurs actifs sont déco.
+        let spectatorFallback = current.participants
+            .filter { $0.userId != current.hostUserId }
+            .map { p -> (UUID, String) in (p.userId, p.displayName) }
+        let newHost: (userId: UUID, displayName: String)?
+        if let a = active.first {
+            newHost = (a.userId, a.displayName)
+        } else if let s = spectatorFallback.first {
+            newHost = s
+        } else {
+            newHost = nil
+        }
+        guard let newHost else {
             log("electNewHost: aucun candidat, partie en attente")
+            // On est seul·e : informe l'UI pour éviter un état "figé sans raison".
+            lastError = "Hôte déconnecté — aucun autre joueur disponible."
             return
         }
-        log("electNewHost: candidate = \(newHost.displayName) (seat \(newHost.seat))")
+        log("electNewHost: candidate = \(newHost.displayName) (\(newHost.userId.uuidString.prefix(8)))")
         if newHost.userId == myId {
             await becomeHost(via: "election after host disconnect")
         }
