@@ -7,10 +7,29 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct BakaratApp: App {
     @StateObject private var auth = AuthService()
+
+    /// Container SwiftData (compteurs locaux). Recréé à la volée si l'init
+    /// throw — un wipe & recreate vaut mieux qu'un crash de l'app au launch.
+    private let modelContainer: ModelContainer = {
+        let schema = Schema([
+            Counter.self,
+            CounterPlayer.self,
+            CounterManche.self,
+        ])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        do {
+            return try ModelContainer(for: schema, configurations: [config])
+        } catch {
+            print("[SwiftData] container init failed: \(error). Falling back to in-memory.")
+            let memConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            return try! ModelContainer(for: schema, configurations: [memConfig])
+        }
+    }()
 
     var body: some Scene {
         WindowGroup {
@@ -21,5 +40,6 @@ struct BakaratApp: App {
                     await auth.restoreSessionIfNeeded()
                 }
         }
+        .modelContainer(modelContainer)
     }
 }
