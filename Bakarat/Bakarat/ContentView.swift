@@ -12,7 +12,10 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if auth.isSignedIn {
+            if !auth.didFinishInitialRestore {
+                SplashView()
+                    .transition(.opacity)
+            } else if auth.isSignedIn {
                 MainTabView()
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
             } else {
@@ -21,5 +24,6 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: auth.isSignedIn)
+        .animation(.easeInOut(duration: 0.25), value: auth.didFinishInitialRestore)
     }
 }

@@ -78,12 +78,10 @@ struct CounterRootView: View {
                 NavigationLink(value: c.id) {
                     CounterRow(counter: c)
                 }
-                .listRowBackground(Color(.secondarySystemBackground))
             }
             .onDelete(perform: deleteCounter)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
+        .listStyle(.insetGrouped)
     }
 
     // MARK: - Mutations
@@ -147,51 +145,52 @@ struct CreateCounterSheet: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var name = ""
-    @State private var linePriceText = "1"
-    @State private var currency = "€"
+    @State private var linePriceText = "2,5"
     /// Actifs : toujours au moins 1 ligne vide en fin (auto-reveal).
     @State private var actives: [PlayerDraft] = [PlayerDraft()]
-    /// Inactifs : peuplé uniquement par paste/import. Pas d'édition manuelle ici.
-    @State private var inactives: [PlayerDraft] = []
-    /// Nom de joueur à utiliser comme dealer initial (depuis paste, sinon nil).
-    @State private var importedDealerName: String? = nil
-    /// État après tentative de paste. Affiche un bandeau confirmation/erreur.
-    @State private var pasteFeedback: PasteFeedback? = nil
     @FocusState private var focusedField: Field?
+    @FocusState private var priceFieldFocused: Bool
 
     enum Field: Hashable {
-        case name, price, player(UUID)
+        case name, player(UUID)
     }
 
-    enum PasteFeedback: Equatable {
-        case success(activeCount: Int, inactiveCount: Int)
-        case failure
-    }
+    // Prix : bornes et pas, alignés sur le lobby online.
+    private static let minPrice: Double = 0.5
+    private static let maxPrice: Double = 50
+    private static let priceStep: Double = 0.5
 
     var body: some View {
         NavigationStack {
             List {
-                pasteSection
-
-                Section("Nom du compteur") {
-                    TextField("Soirée chez Alex", text: $name)
+                Section{
+                    TextField("Nom du compteur", text: $name)
                         .focused($focusedField, equals: .name)
                         .submitLabel(.next)
-                        .onSubmit { focusedField = .price }
-                }
-
-                Section("Prix d'une ligne") {
+                    
                     HStack {
-                        TextField("1", text: $linePriceText)
-                            .keyboardType(.decimalPad)
-                            .focused($focusedField, equals: .price)
-                        Picker("", selection: $currency) {
-                            ForEach(["€", "$", "£", "CHF"], id: \.self) { c in
-                                Text(c).tag(c)
-                            }
+                        Text("Prix de la ligne")
+                        Spacer()
+                        HStack(spacing: 6) {
+                            TextField("2,5", text: $linePriceText)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.center)
+                                .font(.system(size: 17, weight: .semibold))
+                                .focused($priceFieldFocused)
+                                .frame(width: 64)
+                                .padding(.vertical, 8)
+                                .background(Color(.systemGray6))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .onChange(of: linePriceText) { _, new in
+                                    sanitizePriceText(new)
+                                }
+                                .onChange(of: priceFieldFocused) { _, focused in
+                                    if !focused { syncPriceTextFromParsed() }
+                                }
+                            Text("€")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.secondary)
                         }
-                        .pickerStyle(.segmented)
-                        .frame(width: 180)
                     }
                 }
 
@@ -210,12 +209,6 @@ struct CreateCounterSheet: View {
                                 .onChange(of: p.name) { _, _ in
                                     ensureTrailingEmpty()
                                 }
-                            if abs(p.initialScore) > 0.001 {
-                                Text(formatSignedScore(p.initialScore))
-                                    .font(.caption.weight(.semibold))
-                                    .monospacedDigit()
-                                    .foregroundStyle(p.initialScore > 0 ? .green : .red)
-                            }
                         }
                     }
                     .onMove(perform: moveActives)
@@ -225,33 +218,8 @@ struct CreateCounterSheet: View {
                 } footer: {
                     Text("Glisse pour réorganiser. Une nouvelle ligne s'ajoute automatiquement quand tu remplis la dernière.")
                 }
-
-                if !inactives.isEmpty {
-                    Section {
-                        ForEach(inactives) { p in
-                            HStack {
-                                Text(p.name)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                if abs(p.initialScore) > 0.001 {
-                                    Text(formatSignedScore(p.initialScore))
-                                        .font(.caption.weight(.semibold))
-                                        .monospacedDigit()
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .onDelete(perform: deleteInactive)
-                    } header: {
-                        Text("Joueurs inactifs")
-                    } footer: {
-                        Text("Importés depuis le presse-papier — soldes conservés. Tu pourras les réintégrer depuis les Réglages.")
-                    }
-                }
             }
             .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
             .environment(\.editMode, .constant(.active))
             .navigationTitle("Nouveau compteur")
             .navigationBarTitleDisplayMode(.inline)
@@ -265,90 +233,99 @@ struct CreateCounterSheet: View {
                         .disabled(!canCommit)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if priceFieldFocused {
+                    priceKeyboardBar
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: priceFieldFocused)
             .onAppear { focusedField = .name }
         }
     }
 
-    // MARK: - Paste section
+    // MARK: - Price keyboard bar (style lobby online)
 
     @ViewBuilder
-    private var pasteSection: some View {
-        Section {
-            Button(action: pasteFromClipboard) {
-                HStack(spacing: 12) {
-                    Image(systemName: "doc.on.clipboard")
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(Theme.brandRed)
-                        )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Coller un état existant")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        Text("Reprend des comptes notés à la main ou exportés depuis un autre compteur.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
+    private var priceKeyboardBar: some View {
+        let cur = parsedLinePrice ?? 2.5
+        let canDec = cur > Self.minPrice
+        let canInc = cur < Self.maxPrice
+        HStack(spacing: 8) {
+            Button {
+                let new = min(Self.maxPrice, cur + Self.priceStep)
+                linePriceText = formatPriceForField(new)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(canInc ? .primary : .secondary.opacity(0.4))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            if let pasteFeedback {
-                pasteFeedbackRow(pasteFeedback)
+            .disabled(!canInc)
+
+            Button {
+                let new = max(Self.minPrice, cur - Self.priceStep)
+                linePriceText = formatPriceForField(new)
+            } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(canDec ? .primary : .secondary.opacity(0.4))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .disabled(!canDec)
+
+            Spacer()
+
+            Button {
+                syncPriceTextFromParsed()
+                priceFieldFocused = false
+            } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Theme.brandRed)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .modifier(LiquidGlassPill())
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func sanitizePriceText(_ raw: String) {
+        var seenSep = false
+        var filtered = ""
+        for c in raw {
+            if c.isNumber {
+                filtered.append(c)
+            } else if (c == "," || c == ".") && !seenSep {
+                seenSep = true
+                filtered.append(",")
+            }
+        }
+        if filtered != raw { linePriceText = filtered }
+    }
+
+    private func syncPriceTextFromParsed() {
+        if let v = parsedLinePrice {
+            linePriceText = formatPriceForField(v)
+        } else {
+            linePriceText = "2,5"
         }
     }
 
-    @ViewBuilder
-    private func pasteFeedbackRow(_ feedback: PasteFeedback) -> some View {
-        switch feedback {
-        case .success(let a, let i):
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                Text("État importé : \(a) actif\(a > 1 ? "s" : "")\(i > 0 ? " + \(i) inactif\(i > 1 ? "s" : "")" : ""). Donne-lui un nom puis tape Créer.")
-                    .font(.caption)
-            }
-        case .failure:
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                Text("Format non reconnu. Le presse-papier doit contenir au moins 2 lignes “Nom : montant”.")
-                    .font(.caption)
-            }
+    private func formatPriceForField(_ p: Double) -> String {
+        if p.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(format: "%.0f", p)
         }
-    }
-
-    private func pasteFromClipboard() {
-        guard let raw = UIPasteboard.general.string,
-              !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            pasteFeedback = .failure
-            return
-        }
-        guard let parsed = CounterStateExporter.parse(raw) else {
-            pasteFeedback = .failure
-            return
-        }
-        if let n = parsed.name { name = n }
-        linePriceText = String(parsed.linePrice).replacingOccurrences(of: ".0", with: "")
-        currency = parsed.currency
-        actives = parsed.activePlayers.map {
-            PlayerDraft(name: $0.name, initialScore: $0.score)
-        }
-        inactives = parsed.inactivePlayers.map {
-            PlayerDraft(name: $0.name, initialScore: $0.score)
-        }
-        importedDealerName = parsed.dealerName
-        ensureTrailingEmpty()
-        pasteFeedback = .success(activeCount: actives.filter {
-            !$0.name.trimmingCharacters(in: .whitespaces).isEmpty
-        }.count,
-                                  inactiveCount: inactives.count)
-        if name.isEmpty {
-            focusedField = .name
-        }
+        return String(format: "%.1f", p).replacingOccurrences(of: ".", with: ",")
     }
 
     // MARK: - Players list management
@@ -376,10 +353,6 @@ struct CreateCounterSheet: View {
     private func deleteActive(at offsets: IndexSet) {
         actives.remove(atOffsets: offsets)
         ensureTrailingEmpty()
-    }
-
-    private func deleteInactive(at offsets: IndexSet) {
-        inactives.remove(atOffsets: offsets)
     }
 
     private func focusNext(after id: UUID) {
@@ -424,47 +397,21 @@ struct CreateCounterSheet: View {
 
         let counter = Counter(name: cleanName,
                               linePrice: price,
-                              currency: currency,
+                              currency: "€",
                               dealerIdx: 0,
                               configured: true)
         modelContext.insert(counter)
 
-        // Actifs : seats 0..N-1
         for (i, p) in cleanActives.enumerated() {
             let player = CounterPlayer(seat: i,
                                        name: p.name.trimmingCharacters(in: .whitespaces),
-                                       score: p.initialScore,
+                                       score: 0,
                                        isActive: true)
             player.counter = counter
             modelContext.insert(player)
         }
-        // Inactifs (depuis paste) : seats N..N+M-1
-        let activeCount = cleanActives.count
-        for (offset, p) in inactives.enumerated() {
-            let player = CounterPlayer(seat: activeCount + offset,
-                                       name: p.name,
-                                       score: p.initialScore,
-                                       isActive: false)
-            player.counter = counter
-            modelContext.insert(player)
-        }
-
-        // Dealer initial : si paste a indiqué un nom, on le retrouve dans les actifs.
-        if let dn = importedDealerName,
-           let idx = cleanActives.firstIndex(where: { $0.name.caseInsensitiveCompare(dn) == .orderedSame }) {
-            counter.dealerIdx = idx
-        }
 
         try? modelContext.save()
         dismiss()
-    }
-
-    private func formatSignedScore(_ v: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
-        let n = formatter.string(from: NSNumber(value: abs(v))) ?? "\(abs(v))"
-        return v > 0 ? "+\(n) \(currency)" : "−\(n) \(currency)"
     }
 }

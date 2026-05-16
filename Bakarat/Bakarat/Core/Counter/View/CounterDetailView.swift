@@ -61,33 +61,35 @@ struct CounterDetailView: View {
     @ViewBuilder
     private var menu: some View {
         Menu {
-            Button {
-                showingSettings = true
-            } label: {
-                Label("Réglages du compteur", systemImage: "gear")
+            // Items non-destructives : icônes noires comme le texte.
+            Group {
+                Button {
+                    showingSettings = true
+                } label: {
+                    Label("Réglages du compteur", systemImage: "gear")
+                }
+                NavigationLink {
+                    CounterHistoryView(counter: counter)
+                } label: {
+                    Label("Solde & Historique", systemImage: "clock.arrow.circlepath")
+                }
             }
-            NavigationLink {
-                CounterHistoryView(counter: counter)
-            } label: {
-                Label("Solde & Historique", systemImage: "clock.arrow.circlepath")
-            }
+            .tint(.primary)
+
             Divider()
+
+            // Destructive : laissé sans tint → iOS rend automatiquement texte
+            // ET icône en rouge système (role .destructive).
             Button(role: .destructive) {
                 showingDeleteConfirm = true
             } label: {
-                Label {
-                    Text("Supprimer le compteur")
-                } icon: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(.red)
-                }
+                Label("Supprimer le compteur", systemImage: "trash")
             }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.body.weight(.medium))
                 .foregroundStyle(Theme.brandRed)
         }
-        .tint(.primary)
     }
 }
 

@@ -22,6 +22,10 @@ final class AuthService: ObservableObject {
     @Published private(set) var profile: UserProfile?
     @Published var isLoading = false
     @Published var lastError: String?
+    /// True une fois que `restoreSessionIfNeeded()` a fini (succès ou échec).
+    /// Permet d'afficher un splash écran au boot tant qu'on n'a pas décidé si
+    /// l'utilisateur est connecté ou non — évite le flash login → tabbar.
+    @Published private(set) var didFinishInitialRestore = false
 
     private let client = SupabaseClientProvider.shared
     private var observationTask: Task<Void, Never>?
@@ -70,6 +74,7 @@ final class AuthService: ObservableObject {
         } catch {
             // No cached session — stay signed out
         }
+        didFinishInitialRestore = true
     }
 
     // MARK: - Profile

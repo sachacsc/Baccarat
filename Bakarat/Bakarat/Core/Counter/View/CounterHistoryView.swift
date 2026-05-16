@@ -122,7 +122,7 @@ struct CounterHistoryView: View {
                     } label: {
                         mancheRow(m)
                     }
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .listRowInsets(EdgeInsets(top: 18, leading: 16, bottom: 18, trailing: 16))
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
                             deleteManche(m)
@@ -341,7 +341,7 @@ struct CounterMancheDetailView: View {
             },
             subtitle: {
                 if !row.splitBoardsWon.isEmpty {
-                    Text("Split sur " + row.splitBoardsWon.map { "B\($0 + 1)" }.joined(separator: ", "))
+                    Text(splitSubtitle(row: row))
                         .font(.caption2)
                         .foregroundStyle(CounterHistoryView.goldDeep)
                 }
@@ -380,6 +380,8 @@ struct CounterMancheDetailView: View {
         let isFullBoardWinner: Bool
         /// Boards où ce joueur a gagné après un tie-break (split).
         let splitBoardsWon: [Int]
+        /// Pour chaque split board gagné : noms des autres splitters.
+        let splitPartnersByBoard: [Int: [String]]
         var id: Int { seat }
     }
 
@@ -387,9 +389,9 @@ struct CounterMancheDetailView: View {
         let deltas = manche.perPlayerDeltas
         let results = manche.boardResults
 
-        // boardsWon[seat] = [boardIdx, …] + boardsSplit[seat] = idx où il a remporté un split.
         var wonBy: [Int: [Int]] = [:]
         var splitWonBy: [Int: [Int]] = [:]
+        var splitPartnersByBoardPerSeat: [Int: [Int: [String]]] = [:]
         var multiBy: [Int: Int] = [:]
         for b in results {
             if let s = b.winnerSeat {
@@ -397,6 +399,10 @@ struct CounterMancheDetailView: View {
                 multiBy[b.board] = b.multi
                 if let splitters = b.splitterSeats, !splitters.isEmpty {
                     splitWonBy[s, default: []].append(b.board)
+                    let partnerNames = splitters
+                        .filter { $0 != s }
+                        .compactMap { nameFor(seat: $0) }
+                    splitPartnersByBoardPerSeat[s, default: [:]][b.board] = partnerNames
                 }
             }
         }
@@ -416,7 +422,8 @@ struct CounterMancheDetailView: View {
                     boardsWon: wonBy[seat]?.sorted() ?? [],
                     boardMultis: multiBy,
                     isFullBoardWinner: fbWinner == seat,
-                    splitBoardsWon: splitWonBy[seat]?.sorted() ?? []
+                    splitBoardsWon: splitWonBy[seat]?.sorted() ?? [],
+                    splitPartnersByBoard: splitPartnersByBoardPerSeat[seat] ?? [:]
                 )
             }
             .sorted { $0.delta > $1.delta }
@@ -424,6 +431,18 @@ struct CounterMancheDetailView: View {
 
     private func nameFor(seat: Int) -> String? {
         counter.players.first(where: { $0.seat == seat })?.name
+    }
+
+    /// Construit la ligne "Split sur B1 avec Hugo · B3 avec Lola, Antho".
+    /// Une seule ligne, segments séparés par " · " si plusieurs boards.
+    private func splitSubtitle(row: DeltaRow) -> String {
+        row.splitBoardsWon.map { boardIdx -> String in
+            let partners = row.splitPartnersByBoard[boardIdx] ?? []
+            if partners.isEmpty {
+                return "Split sur B\(boardIdx + 1)"
+            }
+            return "Split sur B\(boardIdx + 1) avec \(partners.joined(separator: ", "))"
+        }.joined(separator: " · ")
     }
 
     private func formatMoney(_ v: Double) -> String {

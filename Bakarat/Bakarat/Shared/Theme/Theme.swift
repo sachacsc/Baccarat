@@ -37,6 +37,12 @@ struct FormFieldStyle: ViewModifier {
     }
 }
 
+/// Style "CTA principal" : pilule rouge pleine largeur, hauteur 48pt, padding
+/// horizontal 24pt. Implémenté comme ViewModifier (legacy) — applique le style
+/// au CONTENU intérieur du Button (Text) pour garantir que toute la zone
+/// visible soit tappable, pas uniquement le texte.
+///
+/// Usage : `Button { ... } label: { Text("X").modifier(PrimaryButtonStyle()) }`
 struct PrimaryButtonStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -46,6 +52,7 @@ struct PrimaryButtonStyle: ViewModifier {
             .frame(height: 48)
             .background(Theme.brandGradient)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .shadow(color: Theme.brandRed.opacity(0.25), radius: 10, x: 0, y: 4)
             .padding(.horizontal, 24)
     }

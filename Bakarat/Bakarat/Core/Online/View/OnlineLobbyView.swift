@@ -73,10 +73,13 @@ struct OnlineLobbyView: View {
                             .font(.subheadline)
                             .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
-                        Button("Retour") {
+                        Button {
                             dismiss()
+                        } label: {
+                            Text("Retour")
+                                .modifier(PrimaryButtonStyle())
                         }
-                        .modifier(PrimaryButtonStyle())
+                        .buttonStyle(.plain)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
@@ -516,15 +519,3 @@ struct OnlineLobbyView: View {
 
 /// Pilule liquid glass : utilise `.glassEffect` sur iOS 26+, fallback matériau
 /// `.ultraThinMaterial` sur les versions antérieures.
-private struct LiquidGlassPill: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.glassEffect(.regular, in: Capsule())
-        } else {
-            content.background(
-                Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-        }
-    }
-}

@@ -54,6 +54,7 @@ struct MidGameSettingsSheet: View {
                                     .background(Capsule().fill(Color.primary))
                             }
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -105,18 +106,14 @@ struct MidGameSettingsSheet: View {
                     Button("Fermer") { dismiss() }
                         .tint(Theme.brandRed)
                 }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button {
-                        syncPriceFromService()
-                        priceFieldFocused = false
-                    } label: {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 15, weight: .bold))
-                    }
-                    .tint(Theme.brandRed)
+            }
+            .safeAreaInset(edge: .bottom) {
+                if priceFieldFocused {
+                    keyboardAccessoryBar
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .animation(.easeInOut(duration: 0.2), value: priceFieldFocused)
             .onAppear {
                 if linePriceText.isEmpty {
                     linePriceText = formatPriceForField(service.room?.linePrice ?? 2.5)
@@ -130,31 +127,67 @@ struct MidGameSettingsSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var keyboardAccessoryBar: some View {
+        let cur = service.room?.linePrice ?? 2.5
+        let canDec = isHost && cur > Self.minPrice
+        let canInc = isHost && cur < Self.maxPrice
+        HStack(spacing: 8) {
+            Button {
+                let new = min(Self.maxPrice, cur + Self.priceStep)
+                commitPrice(new)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(canInc ? .primary : .secondary.opacity(0.4))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canInc)
+
+            Button {
+                let new = max(Self.minPrice, cur - Self.priceStep)
+                commitPrice(new)
+            } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(canDec ? .primary : .secondary.opacity(0.4))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canDec)
+
+            Spacer()
+
+            Button {
+                syncPriceFromService()
+                priceFieldFocused = false
+            } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Theme.brandRed)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .modifier(LiquidGlassPill())
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
     // MARK: - Rows
 
     @ViewBuilder
     private var priceRow: some View {
-        let cur = service.room?.linePrice ?? 2.5
-        let canDec = isHost && cur > Self.minPrice
-        let canInc = isHost && cur < Self.maxPrice
         HStack {
             Text("Prix de la ligne")
             Spacer()
-            HStack(spacing: 8) {
-                Button {
-                    let new = max(Self.minPrice, cur - Self.priceStep)
-                    commitPrice(new)
-                } label: {
-                    Image(systemName: "minus")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(canDec ? .primary : .secondary.opacity(0.4))
-                        .frame(width: 30, height: 30)
-                        .background(Color(.systemGray5))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!canDec)
-
+            HStack(spacing: 6) {
                 TextField("2,5", text: $linePriceText)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.center)
@@ -162,27 +195,16 @@ struct MidGameSettingsSheet: View {
                     .focused($priceFieldFocused)
                     .disabled(!isHost)
                     .frame(width: 64)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 8)
                     .background(Color(.systemGray6))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .onChange(of: linePriceText) { _, new in handlePriceTextChange(new) }
                     .onChange(of: priceFieldFocused) { _, focused in
                         if !focused { syncPriceFromService() }
                     }
-
-                Button {
-                    let new = min(Self.maxPrice, cur + Self.priceStep)
-                    commitPrice(new)
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(canInc ? .primary : .secondary.opacity(0.4))
-                        .frame(width: 30, height: 30)
-                        .background(Color(.systemGray5))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!canInc)
+                Text("€")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
         }
     }

@@ -59,9 +59,12 @@ struct ForgotPasswordView: View {
             }
 
             Button(action: submit) {
-                if isSubmitting { ProgressView().tint(.white) } else { Text("Envoyer le lien") }
+                Group {
+                    if isSubmitting { ProgressView().tint(.white) } else { Text("Envoyer le lien") }
+                }
+                .modifier(PrimaryButtonStyle())
             }
-            .modifier(PrimaryButtonStyle())
+            .buttonStyle(.plain)
             .disabled(!email.contains("@") || isSubmitting)
             .opacity(email.contains("@") && !isSubmitting ? 1 : 0.5)
             .padding(.top, 18)

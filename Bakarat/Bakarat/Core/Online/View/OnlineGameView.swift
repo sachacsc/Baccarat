@@ -186,7 +186,13 @@ struct OnlineGameView: View {
     /// affichée au-dessus du Board 1 jusqu'à la fin de ce board.
     @ViewBuilder
     private func flashTeaserSection(_ gs: OnlineGameState) -> some View {
-        let active = gs.players.filter { $0.inManche && (gs.hands[$0.seat]?.count ?? 0) >= 2 }
+        // Exclut le current user — il voit déjà sa main complète en bas.
+        let myUid = auth.userId
+        let active = gs.players.filter {
+            $0.inManche &&
+            (gs.hands[$0.seat]?.count ?? 0) >= 2 &&
+            $0.userId != myUid
+        }
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "eye.fill")
@@ -818,9 +824,11 @@ struct OnlineGameView: View {
             }
 
 
-            // Scores
+            // Scores — delta de la manche + cumul total entre parenthèses.
             VStack(spacing: 6) {
                 ForEach(gs.players.sorted { $0.score > $1.score }) { p in
+                    let initial = gs.initialScores[p.seat] ?? p.score
+                    let delta = p.score - initial
                     HStack(spacing: 10) {
                         Circle()
                             .fill(Theme.brandGradient)
@@ -832,9 +840,14 @@ struct OnlineGameView: View {
                             )
                         Text(p.displayName).font(.subheadline)
                         Spacer()
-                        Text(formatScore(p.score))
-                            .font(.subheadline.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(p.score >= 0 ? .green : .red)
+                        HStack(spacing: 4) {
+                            Text(formatSignedDelta(delta))
+                                .font(.subheadline.monospacedDigit().weight(.bold))
+                                .foregroundStyle(deltaColor(delta))
+                            Text("(Total \(formatScore(p.score)))")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(
@@ -849,8 +862,9 @@ struct OnlineGameView: View {
                     Task { await service.startNextManche() }
                 } label: {
                     Text("Manche suivante")
+                        .modifier(PrimaryButtonStyle())
                 }
-                .modifier(PrimaryButtonStyle())
+                .buttonStyle(.plain)
             } else {
                 Label("En attente que l'hôte démarre la suivante…", systemImage: "hourglass")
                     .font(.subheadline)
@@ -1285,6 +1299,19 @@ struct OnlineGameView: View {
     private func formatScore(_ v: Double) -> String {
         let sign = v >= 0 ? "+" : ""
         return "\(sign)\(String(format: "%.2f", v))€"
+    }
+
+    /// Delta signé "+X,XX€" / "−X,XX€" / "0€" — pour la fluctuation d'une manche.
+    private func formatSignedDelta(_ v: Double) -> String {
+        if abs(v) < 0.005 { return "0€" }
+        let sign = v > 0 ? "+" : "−"
+        return "\(sign)\(String(format: "%.2f", abs(v)))€"
+    }
+
+    /// Couleur : vert si gain, rouge si perte, gris si nul.
+    private func deltaColor(_ v: Double) -> Color {
+        if abs(v) < 0.005 { return .secondary }
+        return v > 0 ? .green : .red
     }
 
     private func phaseLabel(_ p: GamePhase) -> String {

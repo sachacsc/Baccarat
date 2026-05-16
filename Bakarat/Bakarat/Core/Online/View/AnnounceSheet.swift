@@ -154,7 +154,7 @@ struct AnnouncePanel: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(selectedCategory == cat
                           ? Theme.brandRed.opacity(0.14)
-                          : Color.clear)
+                          : Color(.tertiarySystemBackground))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)

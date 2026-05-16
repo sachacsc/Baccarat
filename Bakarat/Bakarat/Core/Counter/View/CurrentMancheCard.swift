@@ -105,6 +105,7 @@ struct CurrentMancheCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .font(.subheadline.weight(.semibold))
+                .padding(.top, 10)
 
             let candidates = candidatePlayers(allowedSeats: allowedSeats)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),

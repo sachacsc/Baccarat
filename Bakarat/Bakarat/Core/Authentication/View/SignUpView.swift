@@ -72,13 +72,16 @@ struct SignUpView: View {
             }
 
             Button(action: submit) {
-                if isSubmitting {
-                    ProgressView().tint(.white)
-                } else {
-                    Text("Créer mon compte")
+                Group {
+                    if isSubmitting {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Créer mon compte")
+                    }
                 }
+                .modifier(PrimaryButtonStyle())
             }
-            .modifier(PrimaryButtonStyle())
+            .buttonStyle(.plain)
             .disabled(!isFormValid || isSubmitting)
             .opacity(isFormValid && !isSubmitting ? 1 : 0.5)
             .padding(.top, 18)

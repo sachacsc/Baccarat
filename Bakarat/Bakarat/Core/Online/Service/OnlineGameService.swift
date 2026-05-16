@@ -1226,8 +1226,8 @@ final class OnlineGameService: ObservableObject {
             let seat = newState.players[i].seat
             newState.players[i].score = oldScores[seat] ?? 0
         }
-        // Snapshot des scores au début de la manche (utilisé pour le delta de
-        // record_manche).
+        // Snapshot des scores au début de la manche (utilisé pour calculer
+        // les deltas dans le mancheEndPanel et dans record_manche).
         newState.initialScores = Dictionary(uniqueKeysWithValues: newState.players.map { ($0.seat, $0.score) })
 
         current.gameState = newState
@@ -1293,7 +1293,7 @@ final class OnlineGameService: ObservableObject {
 
         guard let community = OnlineDealer.dealCommunity(deck: &deck) else { return nil }
 
-        return OnlineGameState(
+        var state = OnlineGameState(
             mancheNumber: mancheNumber,
             linePrice: linePrice,
             players: players,
@@ -1314,8 +1314,13 @@ final class OnlineGameService: ObservableObject {
             excludedThisBoard: [],
             tiebreakBoards: []
         )
-        // Note : on conserve community.flop séparément pour le passage à `.flop`
-        //        (geré dans la fonction `revealFlop()` à venir Phase 2.2).
+        // Snapshot des scores au début de la manche (manche 1 : tout le monde
+        // à 0). Permet de calculer le delta de la manche dans le mancheEndPanel
+        // et le payload de record_manche.
+        state.initialScores = Dictionary(
+            uniqueKeysWithValues: players.map { ($0.seat, $0.score) }
+        )
+        return state
     }
 
     // MARK: - Channel lifecycle

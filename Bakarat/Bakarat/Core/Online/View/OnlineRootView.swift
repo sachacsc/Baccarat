@@ -12,50 +12,61 @@ import SwiftUI
 struct OnlineRootView: View {
     @EnvironmentObject private var auth: AuthService
     @StateObject private var service = OnlineGameService()
+    @StateObject private var historyService = OnlineHistoryService()
     @State private var path = NavigationPath()
     @State private var joinCode = ""
     /// Partie host interrompue qu'on propose de reprendre (chargée au appear).
     @State private var resumableRoom: OnlineRoom? = nil
+    /// Lock pour empêcher la double-création d'un salon en cas de tap rapide.
+    @State private var isCreatingGame = false
 
     enum Route: Hashable {
         case createLobby
         case enterCode
         case joinedLobby
+        case history
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            VStack(spacing: 14) {
-                Spacer().frame(height: 8)
-
+            List {
+                actionsSection
                 if let resumable = resumableRoom {
-                    resumeBanner(resumable)
+                    resumeBannerSection(resumable)
                 }
-
-                bigCard(
-                    title: "Créer une partie",
-                    description: "Tu deviens l'hôte. Donne le code à 4 caractères aux autres.",
-                    systemImage: "plus",
-                    primary: true,
-                    action: { Task { await createGame() } }
-                )
-
-                bigCard(
-                    title: "Rejoindre une partie",
-                    description: "Entre le code à 4 caractères donné par l'hôte.",
-                    systemImage: "arrow.right",
-                    primary: false,
-                    action: { path.append(Route.enterCode) }
-                )
-
-                Spacer()
+                historySectionList
             }
-            .padding(.horizontal, 16)
+            .listStyle(.insetGrouped)
             .onAppear {
                 resumableRoom = OnlineGameService.loadResumableHostState()
             }
-            .navigationTitle("Partie en ligne")
+            .task {
+                if let uid = auth.userId {
+                    await historyService.load(myUserId: uid)
+                }
+            }
+            // Refresh dès qu'on revient à la racine (pop d'une partie ou du
+            // lobby) — capte les manches qui viennent d'être enregistrées
+            // par record_manche pendant la session.
+            .onChange(of: path.count) { _, newCount in
+                guard newCount == 0 else { return }
+                resumableRoom = OnlineGameService.loadResumableHostState()
+                if let uid = auth.userId {
+                    Task { await historyService.load(myUserId: uid) }
+                }
+            }
+            .refreshable {
+                if let uid = auth.userId {
+                    await historyService.load(myUserId: uid)
+                }
+            }
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    BrandLogo(size: 30)
+                }
+            }
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .createLobby, .joinedLobby:
@@ -67,18 +78,243 @@ struct OnlineRootView: View {
                     ) {
                         Task { await joinGame() }
                     } onCodeChange: {
-                        // Efface l'erreur dès que l'utilisateur retape
                         if service.lastError != nil { service.lastError = nil }
                     }
+                case .history:
+                    OnlineHistoryView(injectedService: historyService)
                 }
             }
         }
     }
 
+    // MARK: - Actions section (Créer above Rejoindre, native List rows)
+
+    @ViewBuilder
+    private var actionsSection: some View {
+        Section {
+            Button {
+                Task { await createGame() }
+            } label: {
+                actionRowContent(
+                    title: isCreatingGame ? "Création du salon…" : "Créer une partie",
+                    subtitle: "Donne le code aux autres",
+                    systemImage: "plus.circle.fill",
+                    onPrimary: true
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isCreatingGame)
+            .listRowBackground(Theme.brandGradient)
+            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+            .listRowSeparator(.hidden)
+
+            Button {
+                path.append(Route.enterCode)
+            } label: {
+                actionRowContent(
+                    title: "Rejoindre une partie",
+                    subtitle: "Entre le code à 4 caractères de l'hôte",
+                    systemImage: "arrow.right.circle.fill",
+                    onPrimary: false
+                )
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+        }
+    }
+
+    @ViewBuilder
+    private func actionRowContent(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        onPrimary: Bool
+    ) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(onPrimary ? .white : Theme.brandRed)
+                .frame(width: 44, height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(onPrimary
+                              ? Color.white.opacity(0.18)
+                              : Theme.brandRed.opacity(0.10))
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(onPrimary ? .white : Color.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(onPrimary ? .white.opacity(0.85) : Color.secondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(onPrimary ? Color.white.opacity(0.7) : Color(.tertiaryLabel))
+        }
+        .contentShape(Rectangle())
+    }
+
+    // MARK: - Resume banner section
+
+    @ViewBuilder
+    private func resumeBannerSection(_ room: OnlineRoom) -> some View {
+        Section {
+            resumeBanner(room)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                .listRowSeparator(.hidden)
+        }
+    }
+
+    // MARK: - History section
+
+    @ViewBuilder
+    private var historySectionList: some View {
+        Section {
+            historyContent
+        } header: {
+            HStack {
+                Text("Historique")
+                Spacer()
+                if showBilan {
+                    Text("Bilan : \(formatBalance(totalBalance, currency: historyService.games.first?.currency ?? "EUR"))")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(balanceColor(totalBalance))
+                        .textCase(.none)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var historyContent: some View {
+        if historyService.isLoading && historyService.games.isEmpty {
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .padding(.vertical, 8)
+        } else if historyService.games.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.title2)
+                    .foregroundStyle(.tertiary)
+                Text("Aucune partie pour l'instant")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Tes parties online apparaîtront ici")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .listRowSeparator(.hidden)
+        } else {
+            ForEach(Array(historyService.games.prefix(5))) { game in
+                historyRow(game)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+            }
+            Button {
+                path.append(Route.history)
+            } label: {
+                HStack(spacing: 5) {
+                    Spacer()
+                    Text("Voir plus")
+                    Image(systemName: "arrow.right")
+                        .font(.caption.weight(.bold))
+                    Spacer()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.brandRed)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+        }
+    }
+
+    @ViewBuilder
+    private func historyRow(_ game: GameHistoryItem) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(game.isOngoing ? Color.green : Color.clear)
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(dateLabel(game))
+                    .font(.subheadline.weight(.semibold))
+                Text(subtitle(for: game))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(formatBalance(game.myBalance, currency: game.currency))
+                .font(.subheadline.weight(.bold).monospacedDigit())
+                .foregroundStyle(balanceColor(game.myBalance))
+        }
+    }
+
+    /// Cache le bilan quand il n'y a pas de parties OU quand le total est nul.
+    private var showBilan: Bool {
+        !historyService.games.isEmpty && abs(totalBalance) >= 0.005
+    }
+
+    // MARK: - Helpers
+
+    private var totalBalance: Double {
+        historyService.games.reduce(0) { $0 + $1.myBalance }
+    }
+
+    private func dateLabel(_ g: GameHistoryItem) -> String {
+        let date = g.lastMancheAt ?? g.createdAt
+        return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+    }
+
+    private func subtitle(for g: GameHistoryItem) -> String {
+        var parts: [String] = []
+        if g.numParticipants > 0 {
+            parts.append("\(g.numParticipants) joueur\(g.numParticipants > 1 ? "s" : "")")
+        }
+        if g.numManches > 0 {
+            parts.append("\(g.numManches) manche\(g.numManches > 1 ? "s" : "")")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func formatBalance(_ v: Double, currency: String) -> String {
+        let sym = currencySymbol(currency)
+        if abs(v) < 0.005 { return "0 \(sym)" }
+        let sign = v > 0 ? "+" : "−"
+        return "\(sign)\(String(format: "%.2f", abs(v))) \(sym)"
+    }
+
+    private func currencySymbol(_ c: String) -> String {
+        switch c.uppercased() {
+        case "EUR": return "€"
+        case "USD": return "$"
+        case "GBP": return "£"
+        case "CHF": return "CHF"
+        default:    return c
+        }
+    }
+
+    private func balanceColor(_ v: Double) -> Color {
+        if abs(v) < 0.005 { return .secondary }
+        return v > 0 ? .green : .red
+    }
+
     // MARK: - Actions
 
     private func createGame() async {
+        guard !isCreatingGame else { return }
         guard let uid = auth.userId else { return }
+        isCreatingGame = true
+        defer { isCreatingGame = false }
         let name = displayName()
         await service.createRoom(myUserId: uid, myDisplayName: name)
         path.append(Route.createLobby)
@@ -159,53 +395,6 @@ struct OnlineRootView: View {
 
     // MARK: - Components
 
-    @ViewBuilder
-    private func bigCard(
-        title: String,
-        description: String,
-        systemImage: String,
-        primary: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(primary ? .white : Theme.brandRed)
-                    .frame(width: 48, height: 48)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(primary ? Color.white.opacity(0.18) : Theme.brandRed.opacity(0.10))
-                    )
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(primary ? .white : Color(.label))
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(primary ? .white.opacity(0.85) : Color(.secondaryLabel))
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: 6)
-                Image(systemName: "chevron.right")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(primary ? .white.opacity(0.7) : Color(.tertiaryLabel))
-            }
-            .padding(16)
-            .background(
-                Group {
-                    if primary {
-                        Theme.brandGradient
-                    } else {
-                        Color(.secondarySystemBackground)
-                    }
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .shadow(color: primary ? Theme.brandRed.opacity(0.25) : .clear, radius: 8, x: 0, y: 4)
-        }
-        .buttonStyle(.plain)
-    }
 }
 
 // MARK: - Join code form
@@ -282,8 +471,9 @@ struct OnlineJoinView: View {
                 onSubmit()
             } label: {
                 Text("Rejoindre")
+                    .modifier(PrimaryButtonStyle())
             }
-            .modifier(PrimaryButtonStyle())
+            .buttonStyle(.plain)
             .disabled(code.count != 4)
             .opacity(code.count == 4 ? 1 : 0.5)
             .padding(.horizontal, 16)

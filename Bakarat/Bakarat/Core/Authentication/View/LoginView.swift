@@ -63,13 +63,16 @@ struct LoginView: View {
             }
 
             Button(action: submit) {
-                if isSubmitting {
-                    ProgressView().tint(.white)
-                } else {
-                    Text("Se connecter")
+                Group {
+                    if isSubmitting {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Se connecter")
+                    }
                 }
+                .modifier(PrimaryButtonStyle())
             }
-            .modifier(PrimaryButtonStyle())
+            .buttonStyle(.plain)
             .disabled(!isFormValid || isSubmitting)
             .opacity(isFormValid && !isSubmitting ? 1 : 0.5)
             .padding(.top, 18)
