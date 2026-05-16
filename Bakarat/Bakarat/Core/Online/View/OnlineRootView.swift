@@ -43,17 +43,20 @@ struct OnlineRootView: View {
             .task {
                 if let uid = auth.userId {
                     await historyService.load(myUserId: uid)
+                    await historyService.startLiveUpdates(myUserId: uid)
                 }
             }
-            // Refresh dès qu'on revient à la racine (pop d'une partie ou du
-            // lobby) — capte les manches qui viennent d'être enregistrées
-            // par record_manche pendant la session.
+            // Au pop d'une partie/lobby on rafraîchit explicitement (au cas
+            // où le live update a manqué un event — best-effort).
             .onChange(of: path.count) { _, newCount in
                 guard newCount == 0 else { return }
                 resumableRoom = OnlineGameService.loadResumableHostState()
                 if let uid = auth.userId {
                     Task { await historyService.load(myUserId: uid) }
                 }
+            }
+            .onDisappear {
+                Task { await historyService.stopLiveUpdates() }
             }
             .refreshable {
                 if let uid = auth.userId {

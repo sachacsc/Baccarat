@@ -255,11 +255,9 @@ struct AnnouncePanel: View {
     private var canConfirm: Bool { true }
 
     private var confirmLabel: String {
-        guard let cat = effectiveCategory else {
-            return "Confirmer : Hauteur (auto)"
-        }
-        if cat == .highcard { return "Confirmer : Hauteur (auto)" }
+        let label = effectiveCategory?.label ?? "Hauteur"
         let n = selectedCards.count
-        return "Confirmer : \(cat.label) (\(n) carte\(n > 1 ? "s" : ""))"
+        if n == 0 { return "Confirmer : \(label)" }
+        return "Confirmer : \(label) (\(n) carte\(n > 1 ? "s" : ""))"
     }
 }

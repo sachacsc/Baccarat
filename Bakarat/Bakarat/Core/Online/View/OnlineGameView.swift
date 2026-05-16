@@ -609,10 +609,10 @@ struct OnlineGameView: View {
                     selectedCards: selectedCards,
                     onConfirm: {
                         let cat = lockedCat ?? selectedCategory ?? .highcard
-                        // Si la catégorie nécessite des cartes mais aucune
-                        // sélectionnée → on bloque le submit, on shake les
-                        // cartes ET on active le cadran rouge transient.
-                        if cat != .highcard && selectedCards.isEmpty {
+                        // Toute catégorie — y compris Hauteur — exige au moins
+                        // 1 carte sélectionnée pour éviter les taps accidentels.
+                        // 0 carte → shake les cartes + cadran rouge transient.
+                        if selectedCards.isEmpty {
                             withAnimation(.linear(duration: 0.4)) {
                                 shakeNonce += 1
                             }
@@ -631,14 +631,9 @@ struct OnlineGameView: View {
                         }
                         let cards: [Card] = {
                             let hole = gs.hands[seat] ?? []
-                            // Hauteur + 0 carte → auto-pick top 2 de la main
-                            if cat == .highcard && selectedCards.isEmpty {
-                                return Array(
-                                    hole.sorted { $0.rank.value > $1.rank.value }.prefix(2)
-                                )
-                            }
-                            // 1 seule carte → kicker = plus haute carte restante
-                            if cat != .highcard && selectedCards.count == 1 {
+                            // 1 seule carte (Hauteur ou autre) → kicker = plus
+                            // haute carte restante de la main.
+                            if selectedCards.count == 1 {
                                 let remaining = hole.filter { !selectedCards.contains($0) }
                                 if let kicker = remaining.max(by: { $0.rank.value < $1.rank.value }) {
                                     return selectedCards + [kicker]

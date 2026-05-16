@@ -14,6 +14,7 @@
 import Foundation
 import Combine
 import Supabase
+import Realtime
 
 @MainActor
 final class OnlineHistoryService: ObservableObject {
@@ -23,10 +24,17 @@ final class OnlineHistoryService: ObservableObject {
 
     private let client = SupabaseClientProvider.shared
 
+    // Live updates (Realtime postgres_changes)
+    private var realtimeChannel: RealtimeChannelV2?
+    private var subscribeTasks: [Task<Void, Never>] = []
+    private var debounceTask: Task<Void, Never>?
+    private var currentUserId: UUID?
+
     func load(myUserId: UUID) async {
         isLoading = true
         loadError = nil
         defer { isLoading = false }
+        let userTag = myUserId.uuidString.prefix(8)
 
         do {
             // Étape 1 : récupère mes seats par game_id.
@@ -36,6 +44,10 @@ final class OnlineHistoryService: ObservableObject {
                 .eq("user_id", value: myUserId.uuidString)
                 .execute()
                 .value
+
+            #if DEBUG
+            print("[OnlineHistoryService] load(\(userTag)) — found \(myParticipations.count) participations")
+            #endif
 
             guard !myParticipations.isEmpty else {
                 games = []
@@ -51,12 +63,12 @@ final class OnlineHistoryService: ObservableObject {
             let gameRows: [GameRow] = try await client
                 .from("games")
                 .select("""
-                    id,status,line_price,currency,created_at,finished_at,mode,
+                    id,status,line_price,currency,created_at,finished_at,last_active_at,mode,
                     manches(id,manche_number,created_at,manche_results(seat_index,delta))
                     """)
                 .in("id", values: gameIds.map { $0.uuidString })
                 .eq("mode", value: "online")
-                .order("created_at", ascending: false)
+                .order("last_active_at", ascending: false)
                 .execute()
                 .value
 
@@ -101,6 +113,7 @@ final class OnlineHistoryService: ObservableObject {
                     createdAt: parseDate(row.created_at) ?? .now,
                     finishedAt: row.finished_at.flatMap { parseDate($0) },
                     lastMancheAt: lastMancheDate,
+                    lastActiveAt: parseDate(row.last_active_at),
                     myBalance: myBalance,
                     numManches: numManches,
                     numParticipants: participantCount[row.id] ?? 0
@@ -114,12 +127,90 @@ final class OnlineHistoryService: ObservableObject {
                 let bD = b.lastMancheAt ?? b.createdAt
                 return aD > bD
             }
+            #if DEBUG
+            let ongoing = games.filter { $0.isOngoing }.count
+            print("[OnlineHistoryService] load(\(userTag)) DONE — \(games.count) games (\(ongoing) en cours)")
+            #endif
         } catch {
             loadError = error.localizedDescription
             games = []
             #if DEBUG
-            print("[OnlineHistoryService] load failed: \(error)")
+            print("[OnlineHistoryService] load(\(userTag)) FAILED: \(error)")
             #endif
+        }
+    }
+
+    // MARK: - Live updates (Supabase Realtime)
+
+    /// Ouvre un channel Realtime qui écoute les INSERT/UPDATE sur les tables
+    /// games, manches, manche_results, game_participants. RLS filtre déjà :
+    /// on ne reçoit que les events pour les parties auxquelles on participe.
+    /// À chaque event, on debounce 500ms puis on relance un `load()` complet.
+    func startLiveUpdates(myUserId: UUID) async {
+        // Évite les doubles subscriptions.
+        if let active = currentUserId, active == myUserId, realtimeChannel != nil {
+            return
+        }
+        await stopLiveUpdates()
+        currentUserId = myUserId
+
+        let channelName = "history-\(myUserId.uuidString.prefix(8))"
+        let ch = client.realtimeV2.channel(channelName)
+        realtimeChannel = ch
+
+        // Bind les streams AVANT subscribe.
+        let tables = ["games", "manches", "manche_results", "game_participants"]
+        var streams: [(table: String, stream: AsyncStream<AnyAction>)] = []
+        for table in tables {
+            let s = ch.postgresChange(AnyAction.self, schema: "public", table: table)
+            streams.append((table, s))
+        }
+
+        do {
+            try await ch.subscribeWithError()
+            #if DEBUG
+            print("[OnlineHistoryService] live channel subscribed: \(channelName)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[OnlineHistoryService] subscribe failed: \(error)")
+            #endif
+            return
+        }
+
+        for (table, stream) in streams {
+            let task = Task { [weak self] in
+                for await _ in stream {
+                    #if DEBUG
+                    print("[OnlineHistoryService] event on \(table) → reload scheduled")
+                    #endif
+                    await self?.scheduleReload()
+                }
+            }
+            subscribeTasks.append(task)
+        }
+    }
+
+    /// Ferme le channel + cancel les tâches d'écoute. Idempotent.
+    func stopLiveUpdates() async {
+        debounceTask?.cancel()
+        debounceTask = nil
+        for t in subscribeTasks { t.cancel() }
+        subscribeTasks = []
+        if let ch = realtimeChannel {
+            await ch.unsubscribe()
+        }
+        realtimeChannel = nil
+        currentUserId = nil
+    }
+
+    private func scheduleReload() {
+        debounceTask?.cancel()
+        let uid = currentUserId
+        debounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self, !Task.isCancelled, let uid else { return }
+            await self.load(myUserId: uid)
         }
     }
 
@@ -151,6 +242,7 @@ private struct GameRow: Decodable {
     let currency: String
     let created_at: String
     let finished_at: String?
+    let last_active_at: String?
     let mode: String
     let manches: [MancheRow]?
 }
@@ -177,18 +269,17 @@ struct GameHistoryItem: Identifiable, Hashable {
     let createdAt: Date
     let finishedAt: Date?
     let lastMancheAt: Date?
+    let lastActiveAt: Date?
     let myBalance: Double
     let numManches: Int
     let numParticipants: Int
 
-    /// Heuristique "en cours" : status active ET dernière manche < 24h
-    /// (les games "active" sans manche récente sont en pratique abandonnées).
+    /// "En cours" : status active ET un heartbeat reçu il y a < 5 min.
+    /// Le `last_active_at` est bump par les clients connectés toutes les 30s,
+    /// donc absence de bump = plus personne dans le salon.
     var isOngoing: Bool {
         guard status == "active" else { return false }
-        guard let last = lastMancheAt else {
-            // Pas encore de manche : on regarde la date de création.
-            return Date().timeIntervalSince(createdAt) < 24 * 3600
-        }
-        return Date().timeIntervalSince(last) < 24 * 3600
+        let lastSignal = lastActiveAt ?? lastMancheAt ?? createdAt
+        return Date().timeIntervalSince(lastSignal) < 5 * 60
     }
 }

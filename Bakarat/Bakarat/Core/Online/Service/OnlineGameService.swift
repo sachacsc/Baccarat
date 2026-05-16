@@ -55,7 +55,13 @@ final class OnlineGameService: ObservableObject {
     private var helloRetryTask: Task<Void, Never>?
     private var announceTimerTask: Task<Void, Never>?
     private var presenceTask: Task<Void, Never>?
+    /// Task qui bump `last_active_at` côté Supabase toutes les 30s pour
+    /// signaler que le salon est encore vivant (côté histoire / "En cours").
+    private var touchActiveTask: Task<Void, Never>?
     private var myUserIdCache: UUID?
+
+    /// Intervalle de heartbeat du touch_game_active.
+    private static let touchInterval: TimeInterval = 30
 
     // MARK: - Logging
 
@@ -82,6 +88,10 @@ final class OnlineGameService: ObservableObject {
         self.room = OnlineRoom(code: code, hostUserId: myUserId, participants: [me], status: .lobby)
         log("createRoom code=\(code) user=\(myDisplayName) (\(myUserId.uuidString.prefix(8)))")
         await openChannel(code: code, myUserId: myUserId, myDisplayName: myDisplayName)
+        // Crée la game dans Supabase dès la création du lobby — elle apparaîtra
+        // dans l'historique immédiatement, avant la 1re manche.
+        await ensureGameInCloud()
+        startTouchActiveLoop()
     }
 
     /// Rejoint une room existante en tant que guest.
@@ -104,26 +114,38 @@ final class OnlineGameService: ObservableObject {
 
     /// Quitte la room (broadcast de leave + unsubscribe).
     func leave(myUserId: UUID) async {
-        log("leave")
+        let code = room?.code ?? "?"
+        let cloudId = room?.cloudGameId?.uuidString.prefix(8) ?? "nil"
+        log("leave START — code=\(code) cloudGameId=\(cloudId) role=\(String(describing: role))")
         if role == .host {
             clearHostState()
         }
         if let channel {
-            // Best-effort leave broadcast
-            try? await sendMessage(.init(kind: .leave, payload: .leave(userId: myUserId)))
+            // Best-effort leave broadcast — important pour que les autres
+            // clients voient le départ.
+            do {
+                try await sendMessage(.init(kind: .leave, payload: .leave(userId: myUserId)))
+                log("  leave broadcast sent OK")
+            } catch {
+                log("  leave broadcast FAILED: \(error.localizedDescription)")
+            }
             await channel.unsubscribe()
+            log("  channel unsubscribed")
         }
         listenerTask?.cancel()
         subscribeTask?.cancel()
         helloRetryTask?.cancel()
         announceTimerTask?.cancel()
         presenceTask?.cancel()
+        touchActiveTask?.cancel()
+        touchActiveTask = nil
         channel = nil
         room = nil
         role = nil
         phase = .left
         pendingChannelCode = nil
         helloAttempt = 0
+        log("leave END")
     }
 
     /// Host : met à jour les réglages de la room en lobby (prix, flash, timer) et broadcast.
@@ -138,6 +160,12 @@ final class OnlineGameService: ObservableObject {
         room = current
         log("updateSettings price=\(current.linePrice) flash=\(current.flashMode) timer=\(current.announceTimerSeconds)")
         await broadcastSnapshot()
+        // Sync les nouveaux settings dans Supabase (linePrice, flash_mode,
+        // timer) — les guests qui regardent l'historique verront les valeurs
+        // à jour.
+        if current.cloudGameId != nil {
+            await ensureGameInCloud()
+        }
     }
 
     /// Host uniquement : démarre la 1ère manche (génère le deck, distribue les
@@ -1032,6 +1060,8 @@ final class OnlineGameService: ObservableObject {
         log("becomeHost: \(reason)")
         await broadcastSnapshot()
         await resumeFromCurrentPhase()
+        // Garantit que le heartbeat tourne (idempotent — restart si déjà actif).
+        startTouchActiveLoop()
     }
 
     /// Le nouvel hôte (élu ou reçu via snapshot) doit faire avancer la phase
@@ -1178,6 +1208,91 @@ final class OnlineGameService: ObservableObject {
             // Pas de retry — la manche reste affichée localement, on tente la
             // prochaine manche normalement (cloudGameId reste nil, donc la
             // prochaine sauvegarde crée la game).
+        }
+    }
+
+    // MARK: - Lifecycle cloud (ensure + touch)
+
+    /// Host uniquement : crée la game dans Supabase (si encore inexistante)
+    /// ou synchronise ses participants. Appelé à la création du lobby et à
+    /// chaque join d'un nouveau guest. Apparaît immédiatement dans
+    /// l'historique des participants.
+    private func ensureGameInCloud() async {
+        guard role == .host, var current = room else {
+            log("ensureGameInCloud SKIP — role=\(String(describing: role)) hasRoom=\(room != nil)")
+            return
+        }
+
+        let participantsPayload = current.participants.enumerated().map { idx, p in
+            EnsureGameParticipant(
+                seat_index: idx,
+                user_id: p.userId.uuidString,
+                guest_name: nil
+            )
+        }
+        let settings = RecordMancheSettings(
+            flash_mode: current.flashMode,
+            announce_timer_seconds: current.announceTimerSeconds
+        )
+        let params = EnsureGameParams(
+            p_game_id: current.cloudGameId?.uuidString,
+            p_mode: "online",
+            p_line_price: current.linePrice,
+            p_currency: "EUR",
+            p_settings_json: settings,
+            p_participants: participantsPayload
+        )
+        log("ensure_game CALL — gameId=\(current.cloudGameId?.uuidString.prefix(8) ?? "nil") participants=\(participantsPayload.count)")
+        do {
+            let response = try await client.rpc(
+                "ensure_game_and_participants", params: params
+            ).execute()
+            let returnedGameId = try JSONDecoder().decode(UUID.self, from: response.data)
+            if current.cloudGameId == nil {
+                current.cloudGameId = returnedGameId
+                room = current
+                await broadcastSnapshot()
+                log("ensure_game CREATED \(returnedGameId.uuidString.prefix(8))")
+            } else {
+                log("ensure_game SYNCED \(returnedGameId.uuidString.prefix(8))")
+            }
+        } catch {
+            log("ensure_game FAILED: \(error.localizedDescription) — \(error)")
+        }
+    }
+
+    /// Démarre le heartbeat qui bump `last_active_at` côté Supabase toutes
+    /// les `touchInterval` secondes. Renouvelle l'ancien Task si déjà actif.
+    private func startTouchActiveLoop() {
+        let wasActive = touchActiveTask != nil
+        touchActiveTask?.cancel()
+        log("startTouchActiveLoop (renewed=\(wasActive)) every \(Int(Self.touchInterval))s")
+        touchActiveTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await self.touchActiveOnce()
+                try? await Task.sleep(nanoseconds: UInt64(Self.touchInterval * 1_000_000_000))
+            }
+        }
+    }
+
+    /// Un appel `touch_game_active`. Silencieux en cas d'erreur (best-effort).
+    private func touchActiveOnce() async {
+        guard let gameId = room?.cloudGameId else {
+            log("touch_game_active SKIP — no cloudGameId")
+            return
+        }
+        struct TouchParams: Encodable { let p_game_id: String }
+        do {
+            _ = try await client.rpc(
+                "touch_game_active",
+                params: TouchParams(p_game_id: gameId.uuidString)
+            ).execute()
+            #if DEBUG
+            log("touch_game_active OK \(gameId.uuidString.prefix(8))")
+            #endif
+        } catch {
+            log("touch_game_active FAILED: \(error.localizedDescription)")
         }
     }
 
@@ -1493,23 +1608,26 @@ final class OnlineGameService: ObservableObject {
             // Côté host : on ajoute le guest à la liste, ou marque la reconnexion
             // si déjà connu.
             guard role == .host, var current = room else {
-                log("hello ignored: role=\(String(describing: role)) room=\(room == nil ? "nil" : "set")")
+                log("hello IGNORED: role=\(String(describing: role)) room=\(room == nil ? "nil" : "set")")
                 return
             }
             if current.participants.contains(where: { $0.userId == userId }) {
-                log("hello reconnect: \(displayName)")
-                // Marque comme reconnecté dans gs.players (s'il y est).
+                let wasConnected = current.gameState?.players.first(where: { $0.userId == userId })?.connected ?? true
+                log("hello RECONNECT: \(displayName) (\(userId.uuidString.prefix(8))) — wasConnected=\(wasConnected)")
                 if var gs = current.gameState,
                    let pIdx = gs.players.firstIndex(where: { $0.userId == userId }) {
                     if !gs.players[pIdx].connected {
                         gs.players[pIdx].connected = true
+                        log("  marked seat \(gs.players[pIdx].seat) as reconnected")
                     }
                     current.gameState = gs
                     room = current
                 }
                 await broadcastSnapshot()
+                // Sync DB pour bump last_active_at + repush participants (idempotent UPSERT).
+                await ensureGameInCloud()
             } else {
-                log("hello new guest \(displayName) (\(userId.uuidString.prefix(8))), adding")
+                log("hello NEW guest \(displayName) (\(userId.uuidString.prefix(8))) — adding, status=\(current.status.rawValue)")
                 current.participants.append(
                     OnlineParticipant(userId: userId, displayName: displayName, isHost: false)
                 )
@@ -1517,18 +1635,28 @@ final class OnlineGameService: ObservableObject {
                 // il reste spectateur jusqu'à la prochaine manche.
                 room = current
                 await broadcastSnapshot()
+                // Sync le nouveau participant côté Supabase pour qu'il
+                // apparaisse dans son propre historique tout de suite.
+                await ensureGameInCloud()
             }
 
         case .snapshot(let snapshot):
             // Côté guest (ou rejoin) : on prend le snapshot du host
             if role == .guest {
                 let phaseStr = snapshot.gameState?.phase.rawValue ?? "—"
-                log("snapshot received (\(snapshot.participants.count) participants, status=\(snapshot.status.rawValue), phase=\(phaseStr))")
+                let cloudTag = snapshot.cloudGameId?.uuidString.prefix(8) ?? "nil"
+                log("snapshot received (\(snapshot.participants.count) participants, status=\(snapshot.status.rawValue), phase=\(phaseStr), cloudGameId=\(cloudTag))")
+                let wasNilCloudId = (self.room?.cloudGameId == nil)
                 self.room = snapshot
                 if snapshot.status == .playing {
                     self.phase = .playing
                 }
                 helloRetryTask?.cancel()
+                // Dès qu'on connaît le cloudGameId, on démarre le heartbeat
+                // local pour qu'on apparaisse en "En cours" dans notre historique.
+                if wasNilCloudId && snapshot.cloudGameId != nil {
+                    startTouchActiveLoop()
+                }
                 // Si le snapshot désigne MON userId comme hôte → je claim le rôle
                 // (cas typique : ex-hôte a déco / passé en spec, m'a transféré).
                 if snapshot.hostUserId == myUserId {
@@ -1550,10 +1678,38 @@ final class OnlineGameService: ObservableObject {
         case .leave(let userId):
             guard role == .host, var current = room else { return }
             if userId == myUserId { return } // jamais soi-même
-            log("guest \(userId.uuidString.prefix(8)) left")
-            current.participants.removeAll { $0.userId == userId }
-            room = current
-            await broadcastSnapshot()
+            let name = current.participants.first { $0.userId == userId }?.displayName ?? "?"
+            let phase = current.gameState?.phase.rawValue ?? "—"
+            log("leave received from \(name) (\(userId.uuidString.prefix(8))) — status=\(current.status.rawValue) phase=\(phase)")
+
+            if current.status == .playing, var gs = current.gameState,
+               let i = gs.players.firstIndex(where: { $0.userId == userId }) {
+                // En cours de partie : on GARDE le participant (salon persistant)
+                // mais on le marque comme déconnecté et forfeit pour les boards
+                // restants de la manche. Il pourra revenir via hello.
+                gs.players[i].connected = false
+                if gs.phase != .mancheEnd, gs.players[i].forfeitFromBoard == nil {
+                    gs.players[i].forfeitFromBoard = gs.currentBoard
+                    log("  marked seat \(gs.players[i].seat) as forfeit from board \(gs.currentBoard)")
+                } else {
+                    log("  marked seat \(gs.players[i].seat) as disconnected (mancheEnd or already forfeit)")
+                }
+                current.gameState = gs
+                room = current
+                await broadcastSnapshot()
+                await checkAutoRevealAfterDisconnect()
+            } else {
+                // En lobby (avant 1re manche) ou non-trouvé : on libère le slot.
+                let before = current.participants.count
+                current.participants.removeAll { $0.userId == userId }
+                let after = current.participants.count
+                log("  lobby cleanup : participants \(before) → \(after)")
+                room = current
+                await broadcastSnapshot()
+                // Sync l'état participants côté Supabase pour refléter le départ
+                // (mais on ne supprime pas les game_participants — ils restent
+                // pour préserver la row historique de la personne partie).
+            }
 
         case .start:
             log("start received")
@@ -1580,7 +1736,8 @@ final class OnlineGameService: ObservableObject {
 
     private func broadcastSnapshot() async {
         guard let snapshot = room else { return }
-        log("broadcasting snapshot (status=\(snapshot.status.rawValue), \(snapshot.participants.count) participants)")
+        let cloudTag = snapshot.cloudGameId?.uuidString.prefix(8) ?? "nil"
+        log("→ broadcast snapshot (status=\(snapshot.status.rawValue), \(snapshot.participants.count) participants, cloudGameId=\(cloudTag))")
         try? await sendMessage(.init(kind: .roomSnapshot, payload: .snapshot(snapshot)))
         // Persistance locale du host pour la "Reprendre la partie" banner.
         if role == .host {
@@ -1640,6 +1797,10 @@ final class OnlineGameService: ObservableObject {
         // Le snapshot est broadcasté automatiquement quand un guest envoie un hello.
         // On force aussi un broadcast immédiat pour rafraîchir les guests connectés.
         await broadcastSnapshot()
+        // Reprend le heartbeat (côté lifecycle Supabase) — la game existait
+        // déjà avec son cloudGameId persisté dans savedRoom.
+        await ensureGameInCloud()
+        startTouchActiveLoop()
     }
 }
 
@@ -1690,4 +1851,63 @@ private struct RecordMancheParams: Encodable {
     let p_board_results: [RecordMancheBoardResult]
     let p_full_board_seat: Int?
     let p_results_per_seat: [RecordMancheResultPerSeat]
+
+    enum CodingKeys: String, CodingKey {
+        case p_game_id, p_mode, p_line_price, p_currency, p_settings_json,
+             p_participants, p_manche_number, p_dealer_seat, p_num_active,
+             p_board_results, p_full_board_seat, p_results_per_seat
+    }
+
+    // ⚠️ encode `null` explicite (pas `encodeIfPresent`) pour que PostgREST
+    // matche la signature à 12 paramètres. Sinon la résolution de la fonction
+    // échoue avec PGRST202 ("function not found in schema cache").
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(p_game_id, forKey: .p_game_id)
+        try c.encode(p_mode, forKey: .p_mode)
+        try c.encode(p_line_price, forKey: .p_line_price)
+        try c.encode(p_currency, forKey: .p_currency)
+        try c.encode(p_settings_json, forKey: .p_settings_json)
+        try c.encode(p_participants, forKey: .p_participants)
+        try c.encode(p_manche_number, forKey: .p_manche_number)
+        try c.encode(p_dealer_seat, forKey: .p_dealer_seat)
+        try c.encode(p_num_active, forKey: .p_num_active)
+        try c.encode(p_board_results, forKey: .p_board_results)
+        try c.encode(p_full_board_seat, forKey: .p_full_board_seat)
+        try c.encode(p_results_per_seat, forKey: .p_results_per_seat)
+    }
+}
+
+// MARK: - RPC ensure_game_and_participants payload types
+
+private struct EnsureGameParticipant: Encodable {
+    let seat_index: Int
+    let user_id: String?
+    let guest_name: String?
+}
+
+private struct EnsureGameParams: Encodable {
+    let p_game_id: String?
+    let p_mode: String
+    let p_line_price: Double
+    let p_currency: String
+    let p_settings_json: RecordMancheSettings
+    let p_participants: [EnsureGameParticipant]
+
+    enum CodingKeys: String, CodingKey {
+        case p_game_id, p_mode, p_line_price, p_currency,
+             p_settings_json, p_participants
+    }
+
+    // Force `null` pour `p_game_id` quand nil — sinon PostgREST ne trouve pas
+    // la fonction à 6 paramètres et renvoie PGRST202.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(p_game_id, forKey: .p_game_id)
+        try c.encode(p_mode, forKey: .p_mode)
+        try c.encode(p_line_price, forKey: .p_line_price)
+        try c.encode(p_currency, forKey: .p_currency)
+        try c.encode(p_settings_json, forKey: .p_settings_json)
+        try c.encode(p_participants, forKey: .p_participants)
+    }
 }
