@@ -27,10 +27,17 @@ struct BalanceHistorySheet: View {
     @State private var justCopiedBalance = false
     /// Confirmation d'exclusion (host) avant d'envoyer le kick.
     @State private var kickConfirm: (seat: Int, name: String)? = nil
-    /// Sheet d'édition des soldes (host only).
-    @State private var showEditBalances = false
     /// Service cloud chargé à l'ouverture pour permettre Modifier (soldes + manche).
     @StateObject private var editService = OnlineGameEditService()
+    /// Mode édition inline des soldes (host only). Le bouton menu devient
+    /// "Done" et chaque row de solde devient un TextField focusable.
+    @State private var isEditingBalances = false
+    @State private var balanceTexts: [Int: String] = [:]
+    @FocusState private var focusedSeat: Int?
+    @State private var isSavingBalances = false
+    @State private var saveError: String?
+
+    private static let balanceStep: Double = 0.5
 
     var body: some View {
         NavigationStack {
@@ -45,39 +52,40 @@ struct BalanceHistorySheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Fermer") { dismiss() }
                         .tint(Theme.brandRed)
+                        .disabled(isEditingBalances)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        if isHost, room.cloudGameId != nil {
-                            Button {
-                                showEditBalances = true
-                            } label: {
-                                Label("Modifier les soldes", systemImage: "pencil")
+                    if isEditingBalances {
+                        Button(action: commitBalances) {
+                            if isSavingBalances { ProgressView() }
+                            else { Text("Done").fontWeight(.semibold) }
+                        }
+                        .tint(Theme.brandRed)
+                        .disabled(isSavingBalances)
+                    } else {
+                        Menu {
+                            if isHost, room.cloudGameId != nil {
+                                Button {
+                                    startEditingBalances()
+                                } label: {
+                                    Label("Modifier les soldes", systemImage: "pencil")
+                                }
                             }
-                        }
-                        Button {
-                            copyBalanceSummary()
+                            Button {
+                                copyBalanceSummary()
+                            } label: {
+                                Label(justCopiedBalance ? "Copié !" : "Copier les comptes",
+                                      systemImage: justCopiedBalance
+                                      ? "checkmark.circle.fill"
+                                      : "doc.on.clipboard")
+                            }
                         } label: {
-                            Label(justCopiedBalance ? "Copié !" : "Copier les comptes",
-                                  systemImage: justCopiedBalance
-                                  ? "checkmark.circle.fill"
-                                  : "doc.on.clipboard")
+                            Image(systemName: "line.3.horizontal")
+                                .foregroundStyle(Color.primary)
                         }
-                    } label: {
-                        Image(systemName: "line.3.horizontal")
-                            .foregroundStyle(Color.primary)
+                        .tint(.primary)
+                        .accessibilityLabel("Options")
                     }
-                    .tint(.primary)
-                    .accessibilityLabel("Options")
-                }
-            }
-            .sheet(isPresented: $showEditBalances) {
-                if let gameId = room.cloudGameId {
-                    OnlineEditBalancesSheet(
-                        service: editService,
-                        gameId: gameId,
-                        currentScores: currentScoresBySeat
-                    )
                 }
             }
             .task {
@@ -85,6 +93,13 @@ struct BalanceHistorySheet: View {
                     await editService.load(gameId: gameId)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if isEditingBalances, focusedSeat != nil {
+                    balanceKeyboardBar
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: focusedSeat)
             .alert("Exclure \(kickConfirm?.name ?? "") ?",
                    isPresented: Binding(
                     get: { kickConfirm != nil },
@@ -163,12 +178,165 @@ struct BalanceHistorySheet: View {
                 }
             }
             Spacer()
-            Text(formatMoney(row.player.score))
-                .font(.subheadline.weight(.bold).monospacedDigit())
-                .foregroundStyle(row.isInactive
-                                 ? Color.secondary
-                                 : (row.player.score >= 0 ? Color.green : Color.red))
+            if isEditingBalances, row.player.userId != nil {
+                balanceEditField(seat: row.player.seat)
+            } else {
+                Text(formatMoney(row.player.score))
+                    .font(.subheadline.weight(.bold).monospacedDigit())
+                    .foregroundStyle(row.isInactive
+                                     ? Color.secondary
+                                     : (row.player.score >= 0 ? Color.green : Color.red))
+            }
         }
+    }
+
+    @ViewBuilder
+    private func balanceEditField(seat: Int) -> some View {
+        HStack(spacing: 4) {
+            TextField("0",
+                      text: Binding(
+                          get: { balanceTexts[seat] ?? "" },
+                          set: { balanceTexts[seat] = $0 }
+                      ))
+                .keyboardType(.numbersAndPunctuation)
+                .multilineTextAlignment(.trailing)
+                .focused($focusedSeat, equals: seat)
+                .font(.subheadline.weight(.bold).monospacedDigit())
+                .frame(maxWidth: 100)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(.systemGray6))
+                )
+            Text("€")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Edit balances helpers
+
+    private func startEditingBalances() {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 2
+        f.minimumFractionDigits = 0
+        var dict: [Int: String] = [:]
+        if let gs = room.gameState {
+            for p in gs.players where p.userId != nil {
+                dict[p.seat] = f.string(from: NSNumber(value: p.score)) ?? "\(p.score)"
+            }
+        }
+        balanceTexts = dict
+        saveError = nil
+        isEditingBalances = true
+    }
+
+    private func parsedBalance(seat: Int) -> Double? {
+        guard let s = balanceTexts[seat] else { return nil }
+        let normalized = s
+            .replacingOccurrences(of: ",", with: ".")
+            .replacingOccurrences(of: "−", with: "-")
+            .trimmingCharacters(in: .whitespaces)
+        if normalized.isEmpty { return 0 }
+        return Double(normalized)
+    }
+
+    private func commitBalances() {
+        guard !isSavingBalances else { return }
+        focusedSeat = nil
+        guard let gameId = room.cloudGameId, let gs = room.gameState else {
+            withAnimation { isEditingBalances = false }
+            return
+        }
+        var deltas: [Int: Double] = [:]
+        for p in gs.players where p.userId != nil {
+            let new = parsedBalance(seat: p.seat) ?? p.score
+            let delta = new - p.score
+            if abs(delta) > 0.001 { deltas[p.seat] = delta }
+        }
+        if deltas.isEmpty {
+            withAnimation { isEditingBalances = false }
+            return
+        }
+        isSavingBalances = true
+        Task {
+            do {
+                let transfers = OnlineAdjustmentSheet.pairwiseTransfers(deltas: deltas)
+                _ = try await editService.recordAdjustment(
+                    gameId: gameId,
+                    transfers: transfers,
+                    perSeatDeltas: deltas
+                )
+                await editService.load(gameId: gameId)
+                await MainActor.run {
+                    isSavingBalances = false
+                    withAnimation { isEditingBalances = false }
+                }
+            } catch {
+                await MainActor.run {
+                    isSavingBalances = false
+                    saveError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var balanceKeyboardBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                bumpFocused(by: Self.balanceStep)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                bumpFocused(by: -Self.balanceStep)
+            } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button {
+                focusedSeat = nil
+            } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Theme.brandRed)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .modifier(LiquidGlassPill())
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func bumpFocused(by delta: Double) {
+        guard let seat = focusedSeat else { return }
+        let current = parsedBalance(seat: seat) ?? 0
+        let next = current + delta
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 2
+        f.minimumFractionDigits = 0
+        balanceTexts[seat] = f.string(from: NSNumber(value: next)) ?? "\(next)"
     }
 
     private struct PlayerRow: Identifiable {
@@ -353,7 +521,12 @@ struct MancheDetailView: View {
     /// correspondante au tap "Modifier".
     @ObservedObject var editService: OnlineGameEditService
 
-    @State private var showEditSheet = false
+    /// État éditable des 3 boards inline (sous la section gains/pertes).
+    /// Initialisé à partir de la cloud row au load ; reset à chaque save.
+    @State private var editBoards: [OnlineBoardEdit] = (0..<3).map { OnlineBoardEdit(id: $0) }
+    @State private var initialBoards: [OnlineBoardEdit] = []
+    @State private var isSaving = false
+    @State private var saveError: String?
 
     /// Ligne cloud correspondant à `archive` (match par manche_number).
     /// Si pas encore chargée → on attend ; le bouton Modifier est désactivé.
@@ -361,8 +534,9 @@ struct MancheDetailView: View {
         editService.manches.first(where: { $0.mancheNumber == archive.mancheNumber })
     }
 
-    private var canEdit: Bool {
-        isHost && cloudManche != nil && room.cloudGameId != nil
+    private var isDirty: Bool { editBoards != initialBoards }
+    private var canSave: Bool {
+        isHost && cloudManche != nil && isDirty && !isSaving
     }
 
     var body: some View {
@@ -399,6 +573,14 @@ struct MancheDetailView: View {
                 Text("Donneur : \(nameFor(seat: archive.dealerSeat) ?? "Seat \(archive.dealerSeat)")")
                     .font(.caption)
             }
+
+            if isHost, cloudManche != nil {
+                boardsEditSection
+            }
+
+            if let err = saveError {
+                Section { Text(err).foregroundStyle(.red).font(.footnote) }
+            }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Manche \(archive.mancheNumber)")
@@ -406,21 +588,191 @@ struct MancheDetailView: View {
         .toolbar {
             if isHost {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Modifier") { showEditSheet = true }
-                        .tint(Theme.brandRed)
-                        .disabled(!canEdit)
+                    Button(action: commit) {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text(isDirty ? "Save" : "Modifier")
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .tint(Theme.brandRed)
+                    .disabled(!canSave)
                 }
             }
         }
-        .sheet(isPresented: $showEditSheet) {
-            if let cm = cloudManche {
-                EditOnlineMancheSheet(service: editService, manche: cm) {
-                    if let gameId = room.cloudGameId {
-                        Task { await editService.load(gameId: gameId) }
+        .onChange(of: cloudManche?.id) { _, _ in load() }
+        .onAppear(perform: load)
+    }
+
+    // MARK: - Boards editor (inline)
+
+    @ViewBuilder
+    private var boardsEditSection: some View {
+        Section {
+            VStack(spacing: 0) {
+                ForEach(Array($editBoards.enumerated()), id: \.element.id) { idx, $b in
+                    if idx > 0 { Divider().padding(.vertical, 12) }
+                    boardBlock(label: "Board \(idx + 1)", board: $b)
+                }
+            }
+            .padding(.vertical, 4)
+            .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
+        } header: {
+            Text("Boards")
+        } footer: {
+            Text("Modifie le gagnant et le multi pour recalculer les soldes de cette manche.")
+                .font(.caption)
+        }
+    }
+
+    @ViewBuilder
+    private func boardBlock(label: String, board: Binding<OnlineBoardEdit>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8)],
+                      spacing: 8) {
+                ForEach(editService.participants) { p in
+                    playerCell(name: p.displayName,
+                               isSelected: board.wrappedValue.winnerSeat == p.seat) {
+                        board.wrappedValue.winnerSeat =
+                            (board.wrappedValue.winnerSeat == p.seat) ? nil : p.seat
                     }
                 }
+                playerCell(name: "Abandonné",
+                           isSelected: board.wrappedValue.winnerSeat == nil,
+                           italic: true) {
+                    board.wrappedValue.winnerSeat = nil
+                }
+            }
+
+            multiPicker(board.multi)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func playerCell(name: String,
+                            isSelected: Bool,
+                            italic: Bool = false,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(name)
+                .font(.subheadline.weight(.semibold))
+                .italic(italic)
+                .foregroundStyle(isSelected ? .white : .primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(isSelected ? Theme.brandRed : Color(.tertiarySystemBackground))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color(.systemGray4).opacity(isSelected ? 0 : 1), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func multiPicker(_ multi: Binding<OnlineMulti>) -> some View {
+        HStack(spacing: 6) {
+            ForEach(OnlineMulti.allCases) { m in
+                Button {
+                    multi.wrappedValue = m
+                } label: {
+                    Text(m.displayLabel)
+                        .font(.caption.weight(.bold).monospacedDigit())
+                        .foregroundStyle(multi.wrappedValue == m ? .white : .primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(multi.wrappedValue == m ? Theme.brandRed : Color(.tertiarySystemBackground))
+                        )
+                }
+                .buttonStyle(.plain)
             }
         }
+        .padding(.top, 2)
+    }
+
+    // MARK: - Load / commit
+
+    private func load() {
+        guard let cm = cloudManche else { return }
+        var newBoards: [OnlineBoardEdit] = (0..<3).map { OnlineBoardEdit(id: $0) }
+        for br in cm.boardResults {
+            // SQL convention : board_num est 1-indexé, et boards 1/2/3 → idx 0/1/2.
+            let raw = br.board_num
+            let idx: Int = (1...3).contains(raw) ? raw - 1 : raw
+            guard (0...2).contains(idx) else { continue }
+            newBoards[idx].winnerSeat = br.final_winner_seat
+            newBoards[idx].multi = OnlineMulti.from(br.final_multi)
+        }
+        editBoards = newBoards
+        initialBoards = newBoards
+        saveError = nil
+    }
+
+    private func commit() {
+        guard let cm = cloudManche, isDirty, !isSaving else { return }
+        isSaving = true
+        saveError = nil
+        Task {
+            do {
+                let raws: [BoardResultRaw] = editBoards.map { b in
+                    BoardResultRaw(
+                        board_num: b.id + 1,
+                        winner_seat: b.winnerSeat,
+                        final_winner_seat: b.winnerSeat,
+                        multi: b.multi.rawValue,
+                        final_multi: b.multi.rawValue,
+                        is_split: false,
+                        splitter_seats: []
+                    )
+                }
+                let fb = detectedFullBoardSeat()
+                let activeSeats = editService.participants.map { $0.seat }
+                let deltas = EditOnlineMancheSheet.computeDeltas(
+                    boards: editBoards,
+                    activeSeats: activeSeats,
+                    linePrice: editService.linePrice,
+                    fullBoardSeat: fb
+                )
+                try await editService.updateManche(
+                    mancheId: cm.id,
+                    boardResults: raws,
+                    fullBoardSeat: fb,
+                    perSeatDeltas: deltas
+                )
+                if let gameId = room.cloudGameId {
+                    await editService.load(gameId: gameId)
+                }
+                await MainActor.run {
+                    isSaving = false
+                    initialBoards = editBoards
+                }
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    saveError = "Erreur : \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func detectedFullBoardSeat() -> Int? {
+        let winners = editBoards.compactMap { $0.winnerSeat }
+        guard winners.count == 3 else { return nil }
+        return Set(winners).count == 1 ? winners.first : nil
     }
 
     private struct DeltaRow: Identifiable {
