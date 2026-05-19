@@ -808,6 +808,24 @@ final class OnlineGameService: ObservableObject {
         guard var parentResult = gs.boardResults[parentBoardIdx] else { return }
         parentResult.winnerSeat = winnerSeat
         parentResult.isSplit = false
+
+        // Bug fix : pendant les splits, on lock la catégorie annoncée à celle
+        // du parent (les joueurs ne peuvent pas re-annoncer plus bas). Mais
+        // pour le SCORING, on doit utiliser la VRAIE meilleure main du gagnant
+        // sur le board de split — si l'annonce parent était une "suite" et que
+        // le gagnant fait en réalité un "carré" sur le tie-break, il doit
+        // toucher × 8 pas × 1.
+        if let lastTb = gs.tiebreakBoards.last,
+           let winnerHole = gs.hands[winnerSeat],
+           let best = HandEvaluator.evaluateBest(winnerHole + lastTb.cards) {
+            let upgradedCat = best.category
+            if upgradedCat.multi > parentResult.finalMulti {
+                log("finalizeParentBoard: upgrading multi from ×\(parentResult.finalMulti) (\(parentResult.winningCategoryId ?? "?")) → ×\(upgradedCat.multi) (\(upgradedCat.id)) — winner's real best hand")
+                parentResult.winningCategoryId = upgradedCat.id
+                parentResult.finalMulti = upgradedCat.multi
+            }
+        }
+
         gs.boardResults[parentBoardIdx] = parentResult
         applyBoardScoring(gs: &gs, result: parentResult)
         gs.phase = .boardReveal
