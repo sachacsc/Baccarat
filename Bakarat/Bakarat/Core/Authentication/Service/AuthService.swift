@@ -135,7 +135,11 @@ final class AuthService: ObservableObject {
 
         // Downsize + re-encode JPEG.
         let optimized = Self.downsizeAndEncode(imageData) ?? imageData
-        let path = "\(userID.uuidString)/avatar.jpg"
+        // Path doit être LOWERCASE : la RLS compare auth.uid()::text (que
+        // Postgres renvoie toujours en minuscules) à storage.foldername(name)[1].
+        // Swift UUID.uuidString renvoie en MAJUSCULES → mismatch silencieux,
+        // d'où "new row violates row-level security policy".
+        let path = "\(userID.uuidString.lowercased())/avatar.jpg"
 
         // Upload (upsert = remplace l'existant).
         _ = try await client.storage

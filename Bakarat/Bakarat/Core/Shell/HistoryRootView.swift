@@ -278,7 +278,7 @@ struct HistoryRootView: View {
     private func swipeLabel(_ row: UnifiedSessionRow) -> String {
         switch row {
         case .local: return "Delete"
-        case .cloud(let s): return s.iAmOwner ? "Delete" : "Leave"
+        case .cloud: return "Remove"
         }
     }
 
@@ -312,11 +312,11 @@ struct HistoryRootView: View {
         case .cloud(let session):
             Task {
                 do {
-                    if session.iAmOwner {
-                        try await CloudGameActions.deleteGame(gameId: session.gameId)
-                    } else {
-                        try await CloudGameActions.leaveGame(gameId: session.gameId)
-                    }
+                    // Toujours leave_game maintenant — le revert ne touche
+                    // que mes soldes, les autres gardent leur historique +
+                    // leurs balances entre eux. Si j'étais owner, la partie
+                    // devient orpheline (plus d'édition possible).
+                    try await CloudGameActions.leaveGame(gameId: session.gameId)
                     if let uid = auth.userId {
                         await sessionsService.load(myUserId: uid)
                         await debts.load(myUserId: uid)
@@ -331,7 +331,7 @@ struct HistoryRootView: View {
     private func confirmTitle(for row: UnifiedSessionRow) -> String {
         switch row {
         case .local: return "Delete this counter?"
-        case .cloud(let s): return s.iAmOwner ? "Delete this game?" : "Leave this game?"
+        case .cloud: return "Remove from your history?"
         }
     }
 
@@ -339,19 +339,15 @@ struct HistoryRootView: View {
         switch row {
         case .local:
             return "All rounds and balances will be removed from this device. This cannot be undone."
-        case .cloud(let s):
-            if s.iAmOwner {
-                return "Everyone will lose access to this game and its history. Outstanding debts in it will disappear from all players' accounts. This cannot be undone."
-            } else {
-                return "Your debts in this game will be removed from your Accounts. Other players still see the game. This cannot be undone."
-            }
+        case .cloud:
+            return "Your balance contributions in this game will be reverted, and the game will disappear from your history. Other players keep their balances unchanged. This cannot be undone."
         }
     }
 
     private func confirmActionTitle(for row: UnifiedSessionRow) -> String {
         switch row {
         case .local: return "Delete"
-        case .cloud(let s): return s.iAmOwner ? "Delete" : "Leave"
+        case .cloud: return "Remove"
         }
     }
 

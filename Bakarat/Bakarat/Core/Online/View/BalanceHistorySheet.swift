@@ -592,8 +592,7 @@ struct MancheDetailView: View {
                         if isSaving {
                             ProgressView()
                         } else {
-                            Text(isDirty ? "Save" : "Modifier")
-                                .fontWeight(.semibold)
+                            Text("Save").fontWeight(.semibold)
                         }
                     }
                     .tint(Theme.brandRed)

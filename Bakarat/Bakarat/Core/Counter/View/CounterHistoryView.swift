@@ -506,12 +506,10 @@ struct CounterMancheDetailView: View {
         .toolbar {
             if !manche.isManualAdjustment {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isDirty ? "Save" : "Modifier") {
-                        if canCommit { commit() }
-                    }
-                    .fontWeight(.semibold)
-                    .tint(Theme.brandRed)
-                    .disabled(!canCommit)
+                    Button("Save") { commit() }
+                        .fontWeight(.semibold)
+                        .tint(Theme.brandRed)
+                        .disabled(!canCommit)
                 }
             }
         }
