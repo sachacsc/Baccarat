@@ -4,16 +4,20 @@
 //
 
 import SwiftUI
+import AuthenticationServices
 
 struct LoginView: View {
     var onTapSignUp: () -> Void
     var onTapForgot: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var auth: AuthService
     @State private var email = ""
     @State private var password = ""
     @State private var errorMessage: String?
     @State private var isSubmitting = false
+    @State private var appleSignIn = AppleSignInService()
+    @State private var isAppleSubmitting = false
     @FocusState private var focus: Field?
 
     enum Field { case email, password }
@@ -36,7 +40,7 @@ struct LoginView: View {
                     .onSubmit { focus = .password }
                     .modifier(FormFieldStyle())
 
-                SecureField("Mot de passe", text: $password)
+                SecureField("Password", text: $password)
                     .textContentType(.password)
                     .focused($focus, equals: .password)
                     .submitLabel(.go)
@@ -46,7 +50,7 @@ struct LoginView: View {
 
             HStack {
                 Spacer()
-                Button("Mot de passe oublié ?", action: onTapForgot)
+                Button("Forgot password?", action: onTapForgot)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Theme.brandRed)
                     .padding(.top, 4)
@@ -67,7 +71,7 @@ struct LoginView: View {
                     if isSubmitting {
                         ProgressView().tint(.white)
                     } else {
-                        Text("Se connecter")
+                        Text("Sign in")
                     }
                 }
                 .modifier(PrimaryButtonStyle())
@@ -77,13 +81,37 @@ struct LoginView: View {
             .opacity(isFormValid && !isSubmitting ? 1 : 0.5)
             .padding(.top, 18)
 
+            // Apple Sign-In : petit rectangle noir, plus espacé du red CTA.
+            Button {
+                Task { await submitWithApple() }
+            } label: {
+                HStack(spacing: 8) {
+                    if isAppleSubmitting {
+                        ProgressView().tint(.white).scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "apple.logo")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    Text("Continue with Apple")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(isAppleSubmitting)
+            .padding(.top, 36)
+
             Spacer()
         }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 5) {
-                Text("Pas encore de compte ?")
+                Text("No account yet?")
                     .foregroundStyle(.secondary)
-                Button("S'inscrire", action: onTapSignUp)
+                Button("Sign up", action: onTapSignUp)
                     .fontWeight(.semibold)
                     .foregroundStyle(Theme.brandRed)
             }
@@ -113,6 +141,24 @@ struct LoginView: View {
                 errorMessage = friendlyAuthMessage(error)
             }
             isSubmitting = false
+        }
+    }
+
+    private func submitWithApple() async {
+        isAppleSubmitting = true
+        errorMessage = nil
+        defer { isAppleSubmitting = false }
+        do {
+            let result = try await appleSignIn.signIn()
+            try await auth.signInWithApple(
+                idToken: result.idToken,
+                rawNonce: result.rawNonce,
+                fullName: result.fullName
+            )
+        } catch AppleSignInError.userCancelled {
+            // silencieux : l'user a annulé exprès
+        } catch {
+            errorMessage = friendlyAuthMessage(error)
         }
     }
 }

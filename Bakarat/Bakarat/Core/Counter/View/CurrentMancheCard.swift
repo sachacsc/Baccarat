@@ -58,6 +58,10 @@ struct CurrentMancheCard: View {
     @Bindable var counter: Counter
     @Environment(\.modelContext) private var modelContext
 
+    /// Closure appelée après chaque validation pour que le parent (CounterDetailView)
+    /// puisse remonter la ScrollView en haut + déclencher la sync cloud.
+    var onValidated: ((CounterManche) -> Void)? = nil
+
     @State private var mainBoards: [MainBoardState] = (0..<3).map { MainBoardState(id: $0) }
 
     var body: some View {
@@ -81,9 +85,20 @@ struct CurrentMancheCard: View {
                 splitBlock(globalIndex: idx + 1, ref: ref)
             }
 
+            // Full Board banner : apparait quand le même joueur est sélectionné
+            // comme gagnant final des 3 boards. Le scoring l'applique automatiquement
+            // à la validation ; ce bandeau sert juste de confirmation visuelle.
+            if let fbSeat = currentFullBoardSeat,
+               let player = counter.players.first(where: { $0.seat == fbSeat }) {
+                fullBoardBanner(player: player)
+                    .padding(.top, 16)
+                    .transition(.opacity.combined(with: .scale))
+            }
+
             validateButton
                 .padding(.top, 16)
         }
+        .animation(.snappy, value: currentFullBoardSeat)
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -279,6 +294,54 @@ struct CurrentMancheCard: View {
         }
         .buttonStyle(.plain)
         .disabled(!canValidate)
+    }
+
+    // MARK: - Full Board detection (UI indicator avant validation)
+
+    /// Gagnant final d'un board en l'état courant de la sélection.
+    /// Renvoie nil si abandonné ou tant que la chaîne de splits n'a pas
+    /// résolu à un seul winner.
+    private func finalWinner(for mb: MainBoardState) -> Int? {
+        if mb.winners.count == 1 { return mb.winners.first }
+        if mb.winners.count >= 2, let last = mb.splits.last, last.winners.count == 1 {
+            return last.winners.first
+        }
+        return nil
+    }
+
+    /// Seat qui remporte les 3 boards (Full Board) en l'état actuel, ou nil.
+    private var currentFullBoardSeat: Int? {
+        let winners = mainBoards.map { finalWinner(for: $0) }
+        guard let w0 = winners[0], let w1 = winners[1], let w2 = winners[2] else { return nil }
+        return (w0 == w1 && w1 == w2) ? w0 : nil
+    }
+
+    @ViewBuilder
+    private func fullBoardBanner(player: CounterPlayer) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "star.fill")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Self.goldDeep)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Full Board")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Self.goldDeep)
+                Text("\(player.name) wins all 3 boards. Bonus applied on validation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Self.goldDeep.opacity(0.10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Self.goldDeep.opacity(0.35), lineWidth: 1)
+                )
+        )
     }
 
     // MARK: - Helpers (candidates / split allowed seats)
@@ -547,8 +610,11 @@ struct CurrentMancheCard: View {
         counter.lastUsedAt = .now
         try? modelContext.save()
 
-        // Reset.
+        // Reset des boards pour la prochaine manche.
         mainBoards = (0..<3).map { MainBoardState(id: $0) }
+
+        // Le parent gère scroll-to-top + sync cloud.
+        onValidated?(manche)
     }
 
     // MARK: - Format

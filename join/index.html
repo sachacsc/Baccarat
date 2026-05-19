@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Join a counter · Bakarat</title>
+<style>
+  :root { --bg: #fff; --fg: #1c1c1e; --muted: #6b6b70; --accent: #c1262f; --soft: #f5f5f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f5f5f7; --muted: #aaa; --accent: #ff6b6b; --soft: #2c2c2e; } }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+  }
+  .card {
+    max-width: 380px;
+    width: 100%;
+    background: var(--soft);
+    border-radius: 18px;
+    padding: 30px 24px;
+  }
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+  p { color: var(--muted); font-size: 15px; margin: 6px 0; }
+  .code {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--fg);
+    padding: 12px 0;
+    background: var(--bg);
+    border-radius: 10px;
+    margin: 16px 0;
+  }
+  .cta {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 12px 22px;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 15px;
+    border-radius: 12px;
+  }
+  .small { font-size: 13px; color: var(--muted); margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Join the counter</h1>
+  <p>You've been invited to a Bakarat counter.</p>
+  <div class="code" id="codeDisplay">—</div>
+  <a id="openApp" class="cta" href="#">Open in Bakarat</a>
+  <p class="small" id="hint">If nothing happens, install Bakarat from the App Store and tap this link again.</p>
+</div>
+<script>
+  (function () {
+    // Code peut venir soit du query (?code=ABC), soit du path (/join/ABC).
+    var params = new URLSearchParams(window.location.search);
+    var code = params.get('code');
+    if (!code) {
+      var parts = window.location.pathname.split('/').filter(Boolean);
+      var i = parts.indexOf('join');
+      if (i >= 0 && parts[i + 1]) code = parts[i + 1];
+    }
+    code = (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+    if (code.length === 6) {
+      var formatted = code.substring(0, 3) + '-' + code.substring(3);
+      document.getElementById('codeDisplay').textContent = formatted;
+      var deepLink = 'com.sacha.bakarat://join/' + code;
+      document.getElementById('openApp').setAttribute('href', deepLink);
+      // Auto-redirect après 200ms — si l'app est installée elle se lance,
+      // sinon Safari reste sur cette page et l'utilisateur peut tap "Open in Bakarat".
+      setTimeout(function () { window.location.href = deepLink; }, 200);
+    } else {
+      document.getElementById('codeDisplay').textContent = 'invalid';
+      document.getElementById('hint').textContent = 'This invitation link looks incomplete. Ask the host to share it again.';
+      document.getElementById('openApp').style.display = 'none';
+    }
+  })();
+</script>
+</body>
+</html>

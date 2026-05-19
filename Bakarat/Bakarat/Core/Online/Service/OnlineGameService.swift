@@ -29,6 +29,10 @@ final class OnlineGameService: ObservableObject {
     /// Numéro de tentative actuel du helloFromGuest (0 = pas de retry en cours).
     /// Permet d'afficher "Tentative N/X" pendant que le guest attend le snapshot.
     @Published private(set) var helloAttempt: Int = 0
+    /// Texte humain du dernier statut WebSocket du channel Realtime. Sert au
+    /// diagnostic dans l'UI lobby si la connexion ne se fait pas
+    /// (joined / errored / closed / etc.).
+    @Published private(set) var channelStatusLabel: String? = nil
     /// Code du channel sur lequel on a tenté de se connecter (utile pour
     /// afficher "Recherche du salon XXXX" pendant l'attente du snapshot).
     @Published private(set) var pendingChannelCode: String?
@@ -88,6 +92,9 @@ final class OnlineGameService: ObservableObject {
         self.room = OnlineRoom(code: code, hostUserId: myUserId, participants: [me], status: .lobby)
         log("createRoom code=\(code) user=\(myDisplayName) (\(myUserId.uuidString.prefix(8)))")
         await openChannel(code: code, myUserId: myUserId, myDisplayName: myDisplayName)
+        // Si openChannel a échoué, role/room ont été nilés par
+        // finishConnectFailure : on n'a rien d'autre à faire ici.
+        guard role == .host, room != nil else { return }
         // Crée la game dans Supabase dès la création du lobby — elle apparaîtra
         // dans l'historique immédiatement, avant la 1re manche.
         await ensureGameInCloud()
@@ -145,6 +152,7 @@ final class OnlineGameService: ObservableObject {
         phase = .left
         pendingChannelCode = nil
         helloAttempt = 0
+        channelStatusLabel = nil
         log("leave END")
     }
 
@@ -1444,8 +1452,28 @@ final class OnlineGameService: ObservableObject {
         phase = .connecting
         pendingChannelCode = code
         myUserIdCache = myUserId
+        lastError = nil
         let name = "online:\(code)"
         log("openChannel name=\(name)")
+
+        // Refresh la session AVANT d'ouvrir le channel : les JWT anonymous
+        // expirent en 1h et le SDK Realtime hang silencieusement si le token
+        // est pourri. Refresh est best-effort — si ça échoue (pas de session
+        // du tout), on tente un sign-in anonymous en fallback.
+        do {
+            _ = try await client.auth.refreshSession()
+            log("openChannel: session refreshed")
+        } catch {
+            log("openChannel: refresh failed (\(error.localizedDescription)) — trying anonymous sign-in")
+            do {
+                try await client.auth.signInAnonymously()
+                log("openChannel: anonymous sign-in OK")
+            } catch {
+                log("openChannel: anonymous sign-in FAILED \(error.localizedDescription)")
+                await finishConnectFailure(message: "Connexion impossible. Vérifiez votre connexion internet et réessayez.")
+                return
+            }
+        }
 
         // Si on a déjà un channel ouvert (re-join), on nettoie d'abord
         if let existing = channel {
@@ -1474,13 +1502,16 @@ final class OnlineGameService: ObservableObject {
             guard let self else { return }
             for await status in ch.statusChange {
                 self.log("channel status → \(status)")
+                await MainActor.run { self.channelStatusLabel = "\(status)" }
             }
             self.log("channel statusChange stream ended")
         }
 
         do {
             log("openChannel: calling subscribeWithError…")
-            try await ch.subscribeWithError()
+            try await Self.withTimeout(seconds: 15) {
+                try await ch.subscribeWithError()
+            }
             log("openChannel: subscribe OK")
             phase = .lobby
 
@@ -1513,10 +1544,60 @@ final class OnlineGameService: ObservableObject {
             if role == .guest {
                 startGuestHelloRetry(myUserId: myUserId, myDisplayName: myDisplayName)
             }
+        } catch is ChannelTimeoutError {
+            log("openChannel: subscribe TIMEOUT after 15s")
+            await ch.unsubscribe()
+            await finishConnectFailure(message: "Le salon n'a pas pu être ouvert (délai dépassé). Vérifiez votre connexion et réessayez.")
         } catch {
             log("openChannel: subscribe FAILED \(error.localizedDescription)")
-            lastError = "Connexion au channel impossible : \(error.localizedDescription)"
-            phase = .idle
+            await ch.unsubscribe()
+            await finishConnectFailure(message: "Connexion au salon impossible : \(error.localizedDescription)")
+        }
+    }
+
+    /// Cleanup partagé entre tous les chemins d'échec de openChannel :
+    /// remet le service en état "idle" propre pour que l'UI puisse afficher
+    /// un retour clair sans laisser de room/role/channel zombie.
+    private func finishConnectFailure(message: String) async {
+        lastError = message
+        phase = .idle
+        pendingChannelCode = nil
+        // Host : on avait set room+role avant openChannel. Côté guest, room
+        // est encore nil. Dans les deux cas on nettoie pour que la nav remonte
+        // proprement à la page entry.
+        role = nil
+        room = nil
+        listenerTask?.cancel()
+        subscribeTask?.cancel()
+        presenceTask?.cancel()
+        helloRetryTask?.cancel()
+        channel = nil
+        helloAttempt = 0
+        // On NE clear PAS channelStatusLabel : l'UI s'en sert comme diag
+        // ("Channel: errored", "Channel: closed", …) sous le message d'erreur.
+    }
+
+    // MARK: - Timeout helper
+
+    private struct ChannelTimeoutError: Error {}
+
+    /// Exécute `op` avec un timeout dur. Si `op` ne renvoie pas dans `seconds`,
+    /// jette `ChannelTimeoutError`. Le SDK Supabase Realtime n'a pas de
+    /// timeout interne sur `subscribeWithError`, d'où ce wrapper.
+    private static func withTimeout(
+        seconds: Double,
+        operation: @escaping @Sendable () async throws -> Void
+    ) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw ChannelTimeoutError()
+            }
+            _ = try await group.next()
+            group.cancelAll()
         }
     }
 

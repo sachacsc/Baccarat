@@ -25,9 +25,14 @@ final class Counter {
     var configured: Bool
     /// games.id Supabase une fois la 1re manche cloud-sync. Null avant.
     var cloudGameId: UUID?
-    /// JSON `{"<seat>": "<userId-uuid>"}` pour les seats mappés à un compte
-    /// Supabase. Les seats non-mappés sont des "guests".
+    /// JSON `{"<seat>": "<placeholderUUID>"}` pour les seats NON-host mappés à
+    /// un placeholder créé via `create_placeholder_user`. Le seat du host
+    /// n'apparaît PAS ici (son user_id vient d'AuthService).
     var cloudSeatMapJSON: String?
+    /// Seat correspondant au user loggué (host) — choisi via le picker
+    /// "C'est moi" à la création. Tous les autres seats sont des
+    /// placeholders. nil pour les compteurs créés avant l'ajout du picker.
+    var hostSeatIndex: Int?
     var createdAt: Date
     var lastUsedAt: Date
 
@@ -97,6 +102,10 @@ final class CounterManche {
     /// (transfert hors-jeu, correction post-soirée…). boardResultsJSON est
     /// vide dans ce cas, et perPlayerDeltas peut ne pas sommer à 0.
     var isManualAdjustment: Bool = false
+    /// True une fois cette manche poussée avec succès vers Supabase via
+    /// `record_manche`. Sert à rattraper les manches jouées offline lors
+    /// de la prochaine sync (CounterCloudSync pousse en ordre les non-syncées).
+    var isSyncedToCloud: Bool = false
     var counter: Counter?
 
     init(id: UUID = UUID(),
@@ -167,6 +176,27 @@ extension CounterManche {
 }
 
 extension Counter {
+    /// Mapping seat → placeholder UUID décodé depuis cloudSeatMapJSON.
+    /// Le seat du host n'apparait PAS dans ce dict.
+    var placeholderIdsBySeat: [Int: UUID] {
+        get {
+            guard let json = cloudSeatMapJSON,
+                  let data = json.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+            return Dictionary(uniqueKeysWithValues:
+                decoded.compactMap { (k, v) in
+                    guard let seat = Int(k), let uuid = UUID(uuidString: v) else { return nil }
+                    return (seat, uuid)
+                })
+        }
+        set {
+            let stringKeyed = Dictionary(uniqueKeysWithValues:
+                newValue.map { (String($0.key), $0.value.uuidString) })
+            let data = (try? JSONEncoder().encode(stringKeyed)) ?? Data("{}".utf8)
+            cloudSeatMapJSON = String(data: data, encoding: .utf8) ?? "{}"
+        }
+    }
+
     /// Joueurs triés par seat (ordre stable d'affichage).
     var playersOrdered: [CounterPlayer] {
         players.sorted { $0.seat < $1.seat }

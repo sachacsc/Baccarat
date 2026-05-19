@@ -77,11 +77,13 @@ struct Card: Hashable, Codable, CustomStringConvertible {
         self.suit = suit
     }
 
-    /// Parse depuis le format string "RS". Renvoie nil si invalide.
+    /// Parse depuis le format string "RS". Tolérant à la casse de la suite
+    /// (rank toujours uppercase, suit accepté lowercase OU uppercase).
+    /// Renvoie nil si invalide.
     init?(_ string: String) {
         guard string.count == 2,
-              let rank = Rank(rawValue: String(string.first!)),
-              let suit = Suit(rawValue: String(string.last!))
+              let rank = Rank(rawValue: String(string.first!).uppercased()),
+              let suit = Suit(rawValue: String(string.last!).lowercased())
         else { return nil }
         self.rank = rank
         self.suit = suit

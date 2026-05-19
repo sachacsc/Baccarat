@@ -17,16 +17,21 @@ struct CounterSettingsSheet: View {
 
     @State private var name: String = ""
     @State private var linePriceText: String = ""
-    @State private var currency: String = "€"
 
     @State private var actives: [Draft] = []
     @State private var inactives: [Draft] = []
 
     @FocusState private var focusedField: Field?
+    @FocusState private var priceFieldFocused: Bool
 
     enum Field: Hashable {
-        case name, price, player(UUID)
+        case name, player(UUID)
     }
+
+    // Prix : bornes alignées sur la sheet de création + le lobby online.
+    private static let minPrice: Double = 0.5
+    private static let maxPrice: Double = 50
+    private static let priceStep: Double = 0.5
 
     struct Draft: Identifiable, Hashable {
         let id: UUID
@@ -38,25 +43,34 @@ struct CounterSettingsSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Nom du compteur") {
-                    TextField("Soirée chez Alex", text: $name)
+                Section {
+                    TextField("Nom du compteur", text: $name)
                         .focused($focusedField, equals: .name)
                         .submitLabel(.next)
-                        .onSubmit { focusedField = .price }
-                }
 
-                Section("Prix d'une ligne") {
                     HStack {
-                        TextField("1", text: $linePriceText)
-                            .keyboardType(.decimalPad)
-                            .focused($focusedField, equals: .price)
-                        Picker("", selection: $currency) {
-                            ForEach(["€", "$", "£", "CHF"], id: \.self) { c in
-                                Text(c).tag(c)
-                            }
+                        Text("Prix de la ligne")
+                        Spacer()
+                        HStack(spacing: 6) {
+                            TextField("2,5", text: $linePriceText)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.center)
+                                .font(.system(size: 17, weight: .semibold))
+                                .focused($priceFieldFocused)
+                                .frame(width: 64)
+                                .padding(.vertical, 8)
+                                .background(Color(.systemGray6))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .onChange(of: linePriceText) { _, new in
+                                    sanitizePriceText(new)
+                                }
+                                .onChange(of: priceFieldFocused) { _, focused in
+                                    if !focused { syncPriceTextFromParsed() }
+                                }
+                            Text("€")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.secondary)
                         }
-                        .pickerStyle(.segmented)
-                        .frame(width: 180)
                     }
                 }
 
@@ -79,8 +93,99 @@ struct CounterSettingsSheet: View {
                         .disabled(!canCommit)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if priceFieldFocused {
+                    priceKeyboardBar
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: priceFieldFocused)
             .onAppear(perform: load)
         }
+    }
+
+    // MARK: - Price keyboard bar (style identique à CreateCounterSheet)
+
+    @ViewBuilder
+    private var priceKeyboardBar: some View {
+        let cur = parsedLinePrice ?? 2.5
+        let canDec = cur > Self.minPrice
+        let canInc = cur < Self.maxPrice
+        HStack(spacing: 8) {
+            Button {
+                let new = min(Self.maxPrice, cur + Self.priceStep)
+                linePriceText = formatPriceForField(new)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(canInc ? .primary : .secondary.opacity(0.4))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canInc)
+
+            Button {
+                let new = max(Self.minPrice, cur - Self.priceStep)
+                linePriceText = formatPriceForField(new)
+            } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(canDec ? .primary : .secondary.opacity(0.4))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canDec)
+
+            Spacer()
+
+            Button {
+                syncPriceTextFromParsed()
+                priceFieldFocused = false
+            } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Theme.brandRed)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .modifier(LiquidGlassPill())
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func sanitizePriceText(_ raw: String) {
+        var seenSep = false
+        var filtered = ""
+        for c in raw {
+            if c.isNumber {
+                filtered.append(c)
+            } else if (c == "," || c == ".") && !seenSep {
+                seenSep = true
+                filtered.append(",")
+            }
+        }
+        if filtered != raw { linePriceText = filtered }
+    }
+
+    private func syncPriceTextFromParsed() {
+        if let v = parsedLinePrice {
+            linePriceText = formatPriceForField(v)
+        } else {
+            linePriceText = "2,5"
+        }
+    }
+
+    private func formatPriceForField(_ p: Double) -> String {
+        if p.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(format: "%.0f", p)
+        }
+        return String(format: "%.1f", p).replacingOccurrences(of: ".", with: ",")
     }
 
     // MARK: - Active section
@@ -199,11 +304,7 @@ struct CounterSettingsSheet: View {
 
     private func load() {
         name = counter.name
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 2
-        linePriceText = formatter.string(from: NSNumber(value: counter.linePrice)) ?? "\(counter.linePrice)"
-        currency = counter.currency
+        linePriceText = formatPriceForField(counter.linePrice)
         actives = counter.activePlayersOrdered.map {
             Draft(id: UUID(),
                   existingPlayerId: $0.id,
@@ -240,7 +341,6 @@ struct CounterSettingsSheet: View {
 
         counter.name = name.trimmingCharacters(in: .whitespaces)
         counter.linePrice = price
-        counter.currency = currency
 
         let activesClean = cleanedActives
         let allDrafts = activesClean + inactives

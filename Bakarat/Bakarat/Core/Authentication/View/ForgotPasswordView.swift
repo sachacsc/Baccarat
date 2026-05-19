@@ -25,11 +25,11 @@ struct ForgotPasswordView: View {
             BrandLogo(size: 80)
                 .padding(.bottom, 16)
 
-            Text("Mot de passe oublié")
+            Text("Forgot password")
                 .font(.title2.weight(.bold))
                 .padding(.bottom, 6)
 
-            Text("Entre ton email, on t'envoie un lien pour choisir un nouveau mot de passe.")
+            Text("Enter your email and we'll send you a link to pick a new password.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -60,7 +60,7 @@ struct ForgotPasswordView: View {
 
             Button(action: submit) {
                 Group {
-                    if isSubmitting { ProgressView().tint(.white) } else { Text("Envoyer le lien") }
+                    if isSubmitting { ProgressView().tint(.white) } else { Text("Send the link") }
                 }
                 .modifier(PrimaryButtonStyle())
             }
@@ -72,7 +72,7 @@ struct ForgotPasswordView: View {
             Spacer()
         }
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("Mot de passe oublié")
+        .navigationTitle("Forgot password")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -82,7 +82,7 @@ struct ForgotPasswordView: View {
             feedback = nil
             do {
                 try await auth.sendPasswordReset(email: email.trimmingCharacters(in: .whitespaces))
-                feedback = .sent("✓ Lien envoyé à \(email).\nVérifie ta boîte mail (et les spams).")
+                feedback = .sent("✓ Link sent to \(email).\nCheck your inbox (and spam folder).")
             } catch {
                 feedback = .error(friendlyAuthMessage(error))
             }

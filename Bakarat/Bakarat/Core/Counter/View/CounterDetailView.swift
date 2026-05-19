@@ -15,21 +15,38 @@ import SwiftData
 
 struct CounterDetailView: View {
     @Bindable var counter: Counter
+    @EnvironmentObject private var auth: AuthService
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     @State private var showingDeleteConfirm = false
     @State private var showingSettings = false
+    @State private var showingShare = false
+    @State private var noCloudGameAlert = false
+
+    // Anchor pour ScrollViewReader → scroll-to-top après validation manche.
+    private static let topAnchor = "counter-top"
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                PlayersCard(counter: counter)
-                CurrentMancheCard(counter: counter)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 16) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(Self.topAnchor)
+                    PlayersCard(counter: counter)
+                    CurrentMancheCard(counter: counter) { manche in
+                        // Scroll en haut + sync cloud (fire-and-forget).
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                            proxy.scrollTo(Self.topAnchor, anchor: .top)
+                        }
+                        cloudSync(manche: manche)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle(counter.name)
@@ -39,20 +56,67 @@ struct CounterDetailView: View {
                 menu
             }
         }
-        .alert("Supprimer ce compteur ?",
+        .alert("Delete this counter?",
                isPresented: $showingDeleteConfirm) {
-            Button("Supprimer", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 modelContext.delete(counter)
                 try? modelContext.save()
                 dismiss()
             }
-            Button("Annuler", role: .cancel) { }
+            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("L'historique sera également supprimé. Cette action est irréversible.")
+            Text("All rounds and balances will be removed. This cannot be undone.")
         }
         .sheet(isPresented: $showingSettings) {
             CounterSettingsSheet(counter: counter)
                 .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showingShare) {
+            if let gid = counter.cloudGameId {
+                ShareCounterSheet(cloudGameId: gid)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+        }
+        .alert("Sharing unavailable", isPresented: $noCloudGameAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Play at least one round to sync the counter to the cloud. Then you'll be able to generate a share link.")
+        }
+        .task {
+            // Rattrape les manches jouées offline si on a maintenant du réseau.
+            guard let uid = auth.userId else { return }
+            await CounterCloudSync.resyncPending(
+                counter: counter,
+                authUserId: uid,
+                authDisplayName: auth.profile?.displayName,
+                modelContext: modelContext
+            )
+        }
+    }
+
+    // MARK: - Cloud sync
+
+    /// Pousse la manche vers Supabase. Fire-and-forget : on logue les erreurs
+    /// en debug mais on ne bloque pas l'UI. Le `counter.cloudGameId` est mis
+    /// à jour par le service à la première sync réussie.
+    private func cloudSync(manche: CounterManche) {
+        guard let uid = auth.userId else { return }
+        let display = auth.profile?.displayName
+        Task {
+            do {
+                _ = try await CounterCloudSync.pushManche(
+                    counter: counter,
+                    manche: manche,
+                    authUserId: uid,
+                    authDisplayName: display,
+                    modelContext: modelContext
+                )
+            } catch {
+                #if DEBUG
+                print("[CounterCloudSync] pushManche failed: \(error)")
+                #endif
+            }
         }
     }
 
@@ -64,14 +128,23 @@ struct CounterDetailView: View {
             // Items non-destructives : icônes noires comme le texte.
             Group {
                 Button {
+                    if counter.cloudGameId != nil {
+                        showingShare = true
+                    } else {
+                        noCloudGameAlert = true
+                    }
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                Button {
                     showingSettings = true
                 } label: {
-                    Label("Réglages du compteur", systemImage: "gear")
+                    Label("Settings", systemImage: "gear")
                 }
                 NavigationLink {
                     CounterHistoryView(counter: counter)
                 } label: {
-                    Label("Solde & Historique", systemImage: "clock.arrow.circlepath")
+                    Label("History", systemImage: "clock.arrow.circlepath")
                 }
             }
             .tint(.primary)
@@ -83,7 +156,7 @@ struct CounterDetailView: View {
             Button(role: .destructive) {
                 showingDeleteConfirm = true
             } label: {
-                Label("Supprimer le compteur", systemImage: "trash")
+                Label("Delete", systemImage: "trash")
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -100,7 +173,7 @@ private struct PlayersCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Joueurs")
+            Text("Players")
                 .font(.title3.weight(.bold))
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -113,7 +186,7 @@ private struct PlayersCard: View {
                         name: p.name,
                         inlineBadge: {
                             if p.seat == counter.dealerIdx {
-                                Text("Donne")
+                                Text("Dealer")
                                     .font(.caption2.weight(.bold))
                                     .padding(.horizontal, 6).padding(.vertical, 2)
                                     .background(Capsule().fill(Theme.brandRed.opacity(0.14)))
@@ -133,7 +206,7 @@ private struct PlayersCard: View {
                     }
                 }
                 if active.isEmpty {
-                    Text("Aucun joueur actif. Ajoute-en via le menu “…”.")
+                    Text("No active players. Add some from the “…” menu.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

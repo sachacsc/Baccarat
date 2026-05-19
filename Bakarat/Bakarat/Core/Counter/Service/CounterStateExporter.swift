@@ -33,7 +33,7 @@ enum CounterStateExporter {
         let inactive = counter.inactivePlayersOrdered
 
         var lines: [String] = []
-        lines.append("Bakarat 3-boards — \(counter.name)")
+        lines.append("Bakarat. \(counter.name)")
         lines.append("Prix : \(formatPrice(counter.linePrice)) \(counter.currency)/ligne")
         if let dealer = active.first(where: { $0.seat == counter.dealerIdx }) {
             lines.append("Dealer : \(dealer.name)")

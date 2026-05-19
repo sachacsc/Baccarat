@@ -11,7 +11,14 @@ import SwiftData
 
 @main
 struct BakaratApp: App {
+    @UIApplicationDelegateAdaptor(BakaratAppDelegate.self) var appDelegate
     @StateObject private var auth = AuthService()
+    /// Service partagé : la même instance alimente l'onglet Dettes et le
+    /// greying des historiques (Online + Compteur).
+    @StateObject private var debts = DebtsService()
+    /// Deep links : URLs ouvertes via le scheme custom (join compteur,
+    /// reset password). Les vues consomment ses @Published.
+    @StateObject private var deepLink = DeepLinkRouter()
 
     /// Container SwiftData (compteurs locaux). Recréé à la volée si l'init
     /// throw — un wipe & recreate vaut mieux qu'un crash de l'app au launch.
@@ -35,9 +42,24 @@ struct BakaratApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(auth)
+                .environmentObject(debts)
+                .environmentObject(deepLink)
+                .onOpenURL { url in deepLink.handle(url: url) }
                 .task {
                     // Restore session at launch (synchronously if cached locally).
                     await auth.restoreSessionIfNeeded()
+                }
+                .task(id: auth.userId) {
+                    // Dès qu'un user est connecté, on bootstrap le service Dettes
+                    // (un load() + abonnement realtime). On s'arrête sur logout.
+                    if let uid = auth.userId {
+                        await debts.startLiveUpdates(myUserId: uid)
+                        // Demande la permission notifs au 1er signed-in
+                        // (idempotent : iOS gère le "déjà demandé" lui-même).
+                        await NotificationService.shared.requestAuthorizationAndRegister()
+                    } else {
+                        await debts.stopLiveUpdates()
+                    }
                 }
         }
         .modelContainer(modelContainer)

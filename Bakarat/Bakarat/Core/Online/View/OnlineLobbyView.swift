@@ -73,6 +73,11 @@ struct OnlineLobbyView: View {
                             .font(.subheadline)
                             .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
+                        if let status = service.channelStatusLabel {
+                            Text("Channel: \(status)")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.tertiary)
+                        }
                         Button {
                             dismiss()
                         } label: {
@@ -109,6 +114,11 @@ struct OnlineLobbyView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
+                        }
+                        if let status = service.channelStatusLabel {
+                            Text("Channel: \(status)")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.tertiary)
                         }
                     }
                     .frame(maxWidth: .infinity)

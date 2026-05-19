@@ -155,7 +155,7 @@ site_url = "https://sachacsc.github.io/Baccarat/"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://sachacsc.github.io/Baccarat/", "http://localhost:8080", "http://127.0.0.1:3000"]
+additional_redirect_urls = ["https://sachacsc.github.io/Baccarat/", "http://localhost:8080", "http://127.0.0.1:3000", "com.sacha.bakarat://auth/callback"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -170,9 +170,17 @@ refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
-enable_anonymous_sign_ins = false
-# Allow/disallow testing manual linking of accounts
-enable_manual_linking = false
+# Activé pour le flow "Rejoindre via code" → un joueur sans compte peut
+# revendiquer un siège dans un compteur partagé. Le compte temporaire peut
+# être lié à un email plus tard depuis la sheet profil.
+enable_anonymous_sign_ins = true
+# Manual identity linking (auth.linkIdentity côté client) : permet à un user
+# loggué d'attacher un autre provider à son compte sans perdre son UUID.
+# Côté auto-link (sign-in Apple sur compte email existant) : Supabase le fait
+# automatiquement quand email_verified=true des deux côtés — pas besoin de
+# flag. Apple renvoie toujours email_verified=true SAUF si le user active
+# "Hide My Email" (auquel cas l'email relayé ne matchera pas).
+enable_manual_linking = true
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
 minimum_password_length = 6
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values

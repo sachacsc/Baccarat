@@ -18,10 +18,10 @@ import SwiftUI
 import UIKit
 
 struct MainTabView: View {
-    @State private var selection: AppTab = .online
+    @State private var selection: AppTab = .play
 
     enum AppTab: Hashable {
-        case online, counter, debts
+        case play, history, profile
     }
 
     init() {
@@ -30,16 +30,16 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            Tab("Online", systemImage: "gamecontroller", value: AppTab.online) {
-                OnlineRootView()
+            Tab("Play", systemImage: "play.circle.fill", value: AppTab.play) {
+                PlayRootView()
             }
 
-            Tab("Compteur", systemImage: "list.bullet.clipboard", value: AppTab.counter) {
-                CounterRootView()
+            Tab("Accounts", systemImage: "eurosign.circle.fill", value: AppTab.history) {
+                HistoryRootView()
             }
 
-            Tab("Dettes", systemImage: "eurosign.circle", value: AppTab.debts) {
-                DebtsRootView()
+            Tab("Profile", systemImage: "person.crop.circle", value: AppTab.profile) {
+                ProfileRootView()
             }
         }
         .tint(Theme.brandRed)

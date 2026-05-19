@@ -25,11 +25,11 @@ struct SignUpView: View {
             BrandLogo(size: 80)
                 .padding(.bottom, 16)
 
-            Text("Créer ton compte")
+            Text("Create your account")
                 .font(.title2.weight(.bold))
                 .padding(.bottom, 6)
 
-            Text("Tu utiliseras cet email pour te connecter.")
+            Text("You'll use this email to sign in.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -47,14 +47,14 @@ struct SignUpView: View {
                     .onSubmit { focus = .password }
                     .modifier(FormFieldStyle())
 
-                SecureField("Mot de passe (6 caractères min)", text: $password)
+                SecureField("Password (6 characters min)", text: $password)
                     .textContentType(.newPassword)
                     .focused($focus, equals: .password)
                     .submitLabel(.next)
                     .onSubmit { focus = .passwordConfirm }
                     .modifier(FormFieldStyle())
 
-                SecureField("Confirmer le mot de passe", text: $passwordConfirm)
+                SecureField("Confirm password", text: $passwordConfirm)
                     .textContentType(.newPassword)
                     .focused($focus, equals: .passwordConfirm)
                     .submitLabel(.go)
@@ -76,7 +76,7 @@ struct SignUpView: View {
                     if isSubmitting {
                         ProgressView().tint(.white)
                     } else {
-                        Text("Créer mon compte")
+                        Text("Create my account")
                     }
                 }
                 .modifier(PrimaryButtonStyle())
@@ -89,13 +89,13 @@ struct SignUpView: View {
             Spacer()
         }
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("Inscription")
+        .navigationTitle("Sign up")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 5) {
-                Text("Déjà inscrit ?")
+                Text("Already signed up?")
                     .foregroundStyle(.secondary)
-                Button("Se connecter") { dismiss() }
+                Button("Sign in") { dismiss() }
                     .fontWeight(.semibold)
                     .foregroundStyle(Theme.brandRed)
             }

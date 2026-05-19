@@ -12,6 +12,7 @@ import SwiftUI
 
 struct OnlineHistoryView: View {
     @EnvironmentObject private var auth: AuthService
+    @EnvironmentObject private var debts: DebtsService
     @StateObject private var ownedService = OnlineHistoryService()
     /// Service partagé avec OnlineRootView (qui fait déjà le fetch). Si nil,
     /// on utilise notre propre instance.
@@ -71,6 +72,7 @@ struct OnlineHistoryView: View {
 
     @ViewBuilder
     private func gameRow(_ game: GameHistoryItem) -> some View {
+        let isPaid = debts.settledGameIds.contains(game.id)
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
@@ -82,6 +84,13 @@ struct OnlineHistoryView: View {
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(Capsule().fill(Color.green.opacity(0.18)))
                             .foregroundStyle(.green)
+                    }
+                    if isPaid {
+                        Text("Payé")
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(Color.secondary.opacity(0.18)))
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Text(subtitle(for: game))
@@ -98,6 +107,7 @@ struct OnlineHistoryView: View {
                     .foregroundStyle(.tertiary)
             }
         }
+        .opacity(isPaid ? 0.55 : 1.0)
     }
 
     // MARK: - Helpers

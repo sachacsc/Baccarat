@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Privacy Policy · Bakarat</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1c1c1e;
+    --muted: #6b6b70;
+    --accent: #c1262f;
+    --soft: #f5f5f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e;
+      --fg: #f5f5f7;
+      --muted: #aaa;
+      --accent: #ff6b6b;
+      --soft: #2c2c2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.55;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .updated { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+  h2 { font-size: 20px; font-weight: 700; margin: 36px 0 10px; letter-spacing: -0.01em; }
+  p, li { font-size: 16px; color: var(--fg); }
+  ul { padding-left: 22px; }
+  ul li { margin-bottom: 6px; }
+  a { color: var(--accent); }
+  strong { font-weight: 600; }
+  .card { background: var(--soft); border-radius: 14px; padding: 18px 20px; margin-top: 18px; }
+  .card p:last-child { margin-bottom: 0; }
+  .lang-switch { font-size: 14px; color: var(--muted); }
+  .lang-switch a { color: var(--accent); text-decoration: none; }
+  footer { margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--soft); color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <p class="lang-switch"><a href="./fr/">Version française →</a></p>
+
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: May 18, 2026</p>
+
+  <p>Bakarat is an iOS app that helps you keep score for the <em>Baccarat 3-boards</em> card game, in person around a table or online via virtual cards. This policy explains plainly what data we collect, where it lives, and your rights.</p>
+
+  <h2>What data we collect</h2>
+  <ul>
+    <li><strong>Account</strong> — your email (or your Apple identifier if you use Sign in with Apple) and a username. If you choose the temporary guest mode, we only store an anonymous unique identifier (no email).</li>
+    <li><strong>Profile picture</strong> — optional. Stored encrypted in your private bucket.</li>
+    <li><strong>Games</strong> — the rounds (manches) you play: scores, board winners, per-player deltas. Used to display your debts and history.</li>
+    <li><strong>Debts</strong> — who owes you, who you owe. Bilateral "paid" markings between players.</li>
+    <li><strong>Notification token</strong> — an APNs (Apple Push) identifier if you opt in. No personal data attached.</li>
+  </ul>
+
+  <h2>What we don't collect</h2>
+  <div class="card">
+    <p>No ads, no third-party trackers (Facebook, Google Analytics, etc.). No location data. No phone contacts. No real money is ever exchanged in-app — Bakarat only keeps score between friends.</p>
+  </div>
+
+  <h2>Where your data lives</h2>
+  <p>Everything is hosted on <strong>Supabase</strong> (EU region, West Europe). Communications are encrypted in transit (TLS 1.2+). Your games and balances are protected by Row-Level Security policies on Postgres: another user can only see games they directly participated in.</p>
+
+  <h2>Photos</h2>
+  <p>When you pick a profile photo through the iOS picker, Bakarat only receives the selected image — never your full library. The image is resized to 512×512 then uploaded to your private bucket on Supabase Storage.</p>
+
+  <h2>Sharing between players</h2>
+  <p>When another player joins your counter via an invitation link, they see <strong>that game only</strong> and the debts involving the two of you. They do not see your other games or your other relationships.</p>
+
+  <h2>Your rights</h2>
+  <ul>
+    <li>Sign out at any time from the Profile tab.</li>
+    <li>Request complete deletion of your account and all your data by emailing <a href="mailto:sacha.csc@gmail.com">sacha.csc@gmail.com</a>. Effective within 30 days.</li>
+    <li>Request a copy of all your data in a readable format.</li>
+    <li>Correct any inaccurate data.</li>
+  </ul>
+
+  <h2>Cookies / tracking</h2>
+  <p>The iOS app uses no cookies or advertising tracking technology. No IDFA is requested. Bakarat does not perform user profiling.</p>
+
+  <h2>Changes</h2>
+  <p>This policy may be updated from time to time. The "last updated" date at the top shows the current version. Substantial changes will be notified in-app.</p>
+
+  <h2>Contact</h2>
+  <p>For any question about this policy or your data:</p>
+  <p><a href="mailto:sacha.csc@gmail.com">sacha.csc@gmail.com</a></p>
+
+  <footer>
+    Bakarat © 2026 · Designed by Sacha
+  </footer>
+</main>
+</body>
+</html>
