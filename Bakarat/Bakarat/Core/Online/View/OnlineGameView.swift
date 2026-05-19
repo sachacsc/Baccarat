@@ -962,13 +962,22 @@ struct OnlineGameView: View {
     /// Portrait : scroll vertical avec boards, bulle bottom en safeAreaInset.
     @ViewBuilder
     private func portraitBody(availableW: CGFloat, availableH: CGFloat) -> some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                scrollContent(availableW: availableW, availableH: availableH)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 14) {
+                    scrollContent(availableW: availableW, availableH: availableH)
+                }
+                .padding(.horizontal, outerHPadding)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
             }
-            .padding(.horizontal, outerHPadding)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
+            .modifier(BoardAutoScrollModifier(
+                currentBoard: service.room?.gameState?.currentBoard,
+                mancheNumber: service.room?.gameState?.mancheNumber,
+                tiebreakRound: service.room?.gameState?.tiebreakBoards.last.map { "tb-\($0.parentBoardIdx)-\($0.round)" },
+                anchor: .top,
+                proxy: proxy
+            ))
         }
         .safeAreaInset(edge: .bottom) {
             if let gs = service.room?.gameState,
@@ -995,13 +1004,22 @@ struct OnlineGameView: View {
     private func landscapeBody(availableW: CGFloat, availableH: CGFloat) -> some View {
         let halfWidth = availableW / 2
         HStack(alignment: .top, spacing: 0) {
-            ScrollView {
-                VStack(spacing: 12) {
-                    scrollContent(availableW: halfWidth, availableH: availableH)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 12) {
+                        scrollContent(availableW: halfWidth, availableH: availableH)
+                    }
+                    .padding(.horizontal, outerHPadding)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
                 }
-                .padding(.horizontal, outerHPadding)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+                .modifier(BoardAutoScrollModifier(
+                    currentBoard: service.room?.gameState?.currentBoard,
+                    mancheNumber: service.room?.gameState?.mancheNumber,
+                    tiebreakRound: service.room?.gameState?.tiebreakBoards.last.map { "tb-\($0.parentBoardIdx)-\($0.round)" },
+                    anchor: .center,
+                    proxy: proxy
+                ))
             }
             .frame(width: halfWidth)
 
@@ -1108,9 +1126,11 @@ struct OnlineGameView: View {
             }
             ForEach(0..<3, id: \.self) { idx in
                 boardSection(gs, idx: idx, availableW: availableW, availableH: availableH)
+                    .id("board-\(idx)")
             }
             ForEach(gs.tiebreakBoards) { tb in
                 tiebreakBoardSection(gs, tb: tb, availableW: availableW, availableH: availableH)
+                    .id("tb-\(tb.parentBoardIdx)-\(tb.round)")
             }
             if gs.phase == .mancheEnd {
                 mancheEndPanel(gs)
@@ -1370,5 +1390,49 @@ private struct HandBubbleLiquidGlass: ViewModifier {
         }
         .compositingGroup()
         .shadow(color: .black.opacity(0.18), radius: 14, x: 0, y: 4)
+    }
+}
+
+// MARK: - Auto-scroll modifier
+
+/// Scroll automatique vers le board actif à chaque changement de phase :
+/// - Changement de manche → scroll vers Board 1
+/// - Changement de currentBoard → scroll vers ce board (1, puis 2, puis 3)
+/// - Nouveau tiebreak → scroll vers ce tiebreak
+///
+/// L'anchor diffère selon l'orientation : `.top` en portrait (le board est
+/// au-dessus de la sélection de cartes), `.center` en landscape (le board
+/// reste au milieu de la colonne gauche). On délaie le scroll de quelques
+/// dizaines de ms pour que SwiftUI ait d'abord rendu le nouveau contenu
+/// (sinon scrollTo cible une ancienne géométrie).
+private struct BoardAutoScrollModifier: ViewModifier {
+    let currentBoard: Int?
+    let mancheNumber: Int?
+    let tiebreakRound: String?
+    let anchor: UnitPoint
+    let proxy: ScrollViewProxy
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: mancheNumber) { _, _ in
+                scrollTo("board-0")
+            }
+            .onChange(of: currentBoard) { _, new in
+                guard let new else { return }
+                scrollTo("board-\(new)")
+            }
+            .onChange(of: tiebreakRound) { _, new in
+                guard let new else { return }
+                scrollTo(new)
+            }
+    }
+
+    private func scrollTo(_ id: String) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)  // 80ms : laisse le layout se faire
+            withAnimation(.easeInOut(duration: 0.45)) {
+                proxy.scrollTo(id, anchor: anchor)
+            }
+        }
     }
 }

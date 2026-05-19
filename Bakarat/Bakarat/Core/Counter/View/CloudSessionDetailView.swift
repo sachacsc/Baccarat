@@ -18,12 +18,22 @@ struct CloudSessionDetailView: View {
     let session: CloudSession
 
     @State private var actionError: String?
+    @StateObject private var editService = OnlineGameEditService()
+    @State private var editingManche: OnlineMancheRow?
+    @State private var showAdjustment = false
+    @State private var pendingDelete: OnlineMancheRow?
+    @State private var deleteError: String?
 
     private var gameDebt: GameDebt? {
         debts.perGame.first(where: { $0.gameId == session.gameId })
     }
 
     private var currency: String { session.currency }
+
+    /// L'édition + ajustement online sont réservés à l'owner.
+    private var canEditOnline: Bool {
+        session.mode == "online" && session.iAmOwner
+    }
 
     var body: some View {
         ScrollView {
@@ -32,6 +42,10 @@ struct CloudSessionDetailView: View {
 
                 if let gd = gameDebt, !gd.payments.isEmpty {
                     debtsCard(gd)
+                }
+
+                if canEditOnline {
+                    manchesCard
                 }
 
                 shareInfoCard
@@ -43,12 +57,59 @@ struct CloudSessionDetailView: View {
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if canEditOnline {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            showAdjustment = true
+                        } label: {
+                            Label("Ajustement", systemImage: "slider.horizontal.3")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+            }
+        }
         .alert("Action unavailable", isPresented: Binding(
             get: { actionError != nil },
             set: { if !$0 { actionError = nil } }
         )) {
             Button("OK", role: .cancel) { actionError = nil }
         } message: { Text(actionError ?? "") }
+        .alert("Supprimer cette manche ?", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        )) {
+            Button("Annuler", role: .cancel) { pendingDelete = nil }
+            Button("Supprimer", role: .destructive) {
+                if let m = pendingDelete {
+                    Task { await deleteManche(m) }
+                }
+            }
+        } message: {
+            Text("Les soldes seront recalculés sans cette manche.")
+        }
+        .alert("Erreur", isPresented: Binding(
+            get: { deleteError != nil },
+            set: { if !$0 { deleteError = nil } }
+        )) {
+            Button("OK", role: .cancel) { deleteError = nil }
+        } message: { Text(deleteError ?? "") }
+        .task {
+            if canEditOnline { await editService.load(gameId: session.gameId) }
+        }
+        .sheet(item: $editingManche) { m in
+            EditOnlineMancheSheet(service: editService, manche: m) {
+                Task { await editService.load(gameId: session.gameId) }
+            }
+        }
+        .sheet(isPresented: $showAdjustment) {
+            OnlineAdjustmentSheet(service: editService, gameId: session.gameId) {
+                Task { await editService.load(gameId: session.gameId) }
+            }
+        }
     }
 
     private var title: String {
@@ -197,6 +258,90 @@ struct CloudSessionDetailView: View {
             }
         } catch {
             actionError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Manches card (owner only, online)
+
+    private var manchesCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Manches")
+                    .font(.headline)
+                Spacer()
+                if editService.isLoading {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+
+            if editService.manches.isEmpty && !editService.isLoading {
+                Text("Aucune manche enregistrée.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(editService.manches.enumerated()), id: \.element.id) { idx, m in
+                        mancheRow(m)
+                            .contentShape(Rectangle())
+                            .onTapGesture { editingManche = m }
+                            .contextMenu {
+                                Button("Modifier", systemImage: "pencil") {
+                                    editingManche = m
+                                }
+                                Button("Supprimer", systemImage: "trash", role: .destructive) {
+                                    pendingDelete = m
+                                }
+                            }
+                        if idx < editService.manches.count - 1 {
+                            Divider().padding(.leading, 16)
+                        }
+                    }
+                }
+                .padding(.bottom, 6)
+            }
+        }
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func mancheRow(_ m: OnlineMancheRow) -> some View {
+        let myDelta = session.mySeatIndex.flatMap { m.perSeatDeltas[$0] } ?? 0
+        HStack(spacing: 12) {
+            Image(systemName: m.isAdjustment ? "slider.horizontal.3" : "rectangle.stack.fill")
+                .foregroundStyle(m.isAdjustment ? Color.orange : Theme.brandRed)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(m.isAdjustment ? "Ajustement" : "Manche \(m.mancheNumber)")
+                    .font(.subheadline.weight(.semibold))
+                Text(m.createdAt, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(formatMoney(myDelta))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(balanceColor(myDelta))
+                .monospacedDigit()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private func deleteManche(_ m: OnlineMancheRow) async {
+        do {
+            try await editService.deleteManche(mancheId: m.id)
+            await editService.load(gameId: session.gameId)
+        } catch {
+            deleteError = error.localizedDescription
         }
     }
 

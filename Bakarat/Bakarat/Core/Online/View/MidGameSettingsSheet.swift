@@ -21,6 +21,8 @@ struct MidGameSettingsSheet: View {
     @FocusState private var priceFieldFocused: Bool
     /// Feedback visuel temporaire après copie du code (icône check verte 1.5s).
     @State private var justCopiedCode: Bool = false
+    @State private var showAdjustment: Bool = false
+    @StateObject private var editService = OnlineGameEditService()
 
     private static let minPrice: Double = 0.5
     private static let maxPrice: Double = 50
@@ -90,12 +92,34 @@ struct MidGameSettingsSheet: View {
                     Text("Mon statut")
                 }
 
+                if isHost, let gameId = service.room?.cloudGameId {
+                    Section {
+                        Button {
+                            Task {
+                                await editService.load(gameId: gameId)
+                                await MainActor.run { showAdjustment = true }
+                            }
+                        } label: {
+                            Label("Ajustement des soldes", systemImage: "slider.horizontal.3")
+                                .foregroundStyle(.primary)
+                        }
+                    } footer: {
+                        Text("Ajoute manuellement un transfert entre joueurs (correction d'erreur, paiement externe en cash, etc.).")
+                            .font(.caption)
+                    }
+                }
+
                 Section {
                     Button(role: .destructive) {
                         leaveGame()
                     } label: {
                         Label("Quitter la partie", systemImage: "rectangle.portrait.and.arrow.right")
                     }
+                }
+            }
+            .sheet(isPresented: $showAdjustment) {
+                if let gameId = service.room?.cloudGameId {
+                    OnlineAdjustmentSheet(service: editService, gameId: gameId)
                 }
             }
             .listStyle(.insetGrouped)
