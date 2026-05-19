@@ -42,28 +42,37 @@ struct CloudSessionDetailView: View {
 
     private var currency: String { session.currency }
 
-    /// Édition fine (manches + balances) réservée à l'owner d'une online game.
-    private var canEdit: Bool {
+    /// "Modifier les soldes" est dispo pour tout participant à une online game
+    /// (côté serveur record_online_adjustment exige juste que les transferts
+    /// m'impliquent — backward compat avec les vieux comptes orphelinés).
+    /// L'édition de manche (changement de gagnants/multi) reste strictement
+    /// owner-only — c'est plus invasif côté game integrity.
+    private var canEditBalances: Bool {
+        session.mode == "online"
+    }
+    private var canEditManches: Bool {
         session.mode == "online" && session.iAmOwner
     }
 
-    /// On surface la liste des manches + soldes pour toutes les parties online,
-    /// même quand je ne suis pas owner (read-only).
     private var showHistory: Bool {
         session.mode == "online"
     }
+
+    /// Combien de manches max afficher avant le bouton "See all".
+    private static let manchesPreviewLimit = 4
+    @State private var showAllManches = false
 
     var body: some View {
         List {
             headerSection
 
+            if let gd = gameDebt, !gd.payments.isEmpty {
+                debtsSection(gd)
+            }
+
             if showHistory {
                 balancesSection
                 manchesSection
-            }
-
-            if let gd = gameDebt, !gd.payments.isEmpty {
-                debtsSection(gd)
             }
 
             shareInfoSection
@@ -84,7 +93,7 @@ struct CloudSessionDetailView: View {
                         .disabled(isSavingBalances)
                     } else {
                         Menu {
-                            if canEdit {
+                            if canEditBalances {
                                 Button {
                                     startEditingBalances()
                                 } label: {
@@ -187,8 +196,6 @@ struct CloudSessionDetailView: View {
                 }
                 .padding(.top, 4)
             }
-            .padding(2)
-            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
             .listRowBackground(Color.clear)
         }
     }
@@ -210,7 +217,6 @@ struct CloudSessionDetailView: View {
             } else {
                 ForEach(rankedParticipants) { p in
                     balanceRow(p)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                 }
             }
         } header: {
@@ -329,17 +335,34 @@ struct CloudSessionDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ForEach(editService.manches.reversed()) { m in
+                let reversed = Array(editService.manches.reversed())
+                let limit = showAllManches ? reversed.count : Self.manchesPreviewLimit
+                ForEach(Array(reversed.prefix(limit))) { m in
                     NavigationLink {
                         CloudMancheDetailView(
                             mancheRow: m,
                             editService: editService,
-                            isHost: canEdit,
+                            isHost: canEditManches,
                             gameId: session.gameId,
                             currency: currency
                         )
                     } label: {
                         mancheRow(m)
+                    }
+                }
+                if !showAllManches, reversed.count > Self.manchesPreviewLimit {
+                    Button {
+                        withAnimation { showAllManches = true }
+                    } label: {
+                        HStack {
+                            Text("See all (\(reversed.count))")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Theme.brandRed)
+                            Spacer()
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Theme.brandRed)
+                        }
                     }
                 }
             }
@@ -348,7 +371,7 @@ struct CloudSessionDetailView: View {
                           title: "Manches passées",
                           color: .secondary)
         } footer: {
-            if canEdit, !editService.manches.isEmpty {
+            if canEditManches, !editService.manches.isEmpty {
                 Text("Touche une manche pour voir le détail et modifier les gagnants si besoin.")
                     .font(.caption)
             }

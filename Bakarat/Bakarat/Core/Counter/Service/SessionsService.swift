@@ -68,9 +68,20 @@ final class SessionsService: ObservableObject {
                 .execute()
                 .value
 
-            guard !myParts.isEmpty else { sessions = []; return }
-            let gameIds = Array(Set(myParts.map { $0.game_id }))
-            let mySeatByGame = Dictionary(uniqueKeysWithValues: myParts.map { ($0.game_id, $0.seat_index) })
+            // 1bis) Liste des games que j'ai cachées via leave_game
+            //       → filtrer ces game_ids de la liste affichée.
+            let hidden: [HiddenRow] = try await client
+                .from("user_hidden_games")
+                .select("game_id")
+                .eq("user_id", value: myUserId.uuidString)
+                .execute()
+                .value
+            let hiddenSet = Set(hidden.map { $0.game_id })
+
+            let visibleParts = myParts.filter { !hiddenSet.contains($0.game_id) }
+            guard !visibleParts.isEmpty else { sessions = []; return }
+            let gameIds = Array(Set(visibleParts.map { $0.game_id }))
+            let mySeatByGame = Dictionary(uniqueKeysWithValues: visibleParts.map { ($0.game_id, $0.seat_index) })
 
             // 2) Embedded join : games + participants + manches + results
             let games: [GameRow] = try await client
@@ -85,13 +96,15 @@ final class SessionsService: ObservableObject {
                 .value
 
             // 3) Profils des owners (pour afficher "Partie de Sacha")
-            let ownerIds = Array(Set(games.map { $0.owner_user_id }))
-            let owners: [OwnerProfileRow] = try await client
-                .from("profiles")
-                .select("user_id,display_name,avatar_url")
-                .in("user_id", values: ownerIds.map { $0.uuidString })
-                .execute()
-                .value
+            let ownerIds = Array(Set(games.compactMap { $0.owner_user_id }))
+            let owners: [OwnerProfileRow] = ownerIds.isEmpty
+                ? []
+                : (try? await client
+                    .from("profiles")
+                    .select("user_id,display_name,avatar_url")
+                    .in("user_id", values: ownerIds.map { $0.uuidString })
+                    .execute()
+                    .value) ?? []
             let ownerByUid = Dictionary(uniqueKeysWithValues: owners.map { ($0.user_id, $0) })
 
             // 4) Build CloudSession items
@@ -108,12 +121,16 @@ final class SessionsService: ObservableObject {
                         else { lastMancheDate = d }
                     }
                 }
-                let owner = ownerByUid[g.owner_user_id]
+                let owner = g.owner_user_id.flatMap { ownerByUid[$0] }
+                // Pour les games orphelins (owner nul), on traite le caller
+                // comme owner s'il est participant — backward compat pour
+                // pouvoir éditer ses vieux comptes.
+                let amOwner = (g.owner_user_id == myUserId) || (g.owner_user_id == nil)
                 return CloudSession(
                     gameId: g.id,
                     mode: g.mode,
                     status: g.status,
-                    ownerUserId: g.owner_user_id,
+                    ownerUserId: g.owner_user_id ?? myUserId,
                     ownerDisplay: owner?.display_name,
                     ownerAvatarUrl: owner?.avatar_url,
                     createdAt: parseDate(g.created_at) ?? .distantPast,
@@ -124,7 +141,7 @@ final class SessionsService: ObservableObject {
                     numManches: g.manches?.count ?? 0,
                     numParticipants: g.game_participants?.count ?? 0,
                     mySeatIndex: mySeat,
-                    iAmOwner: g.owner_user_id == myUserId
+                    iAmOwner: amOwner
                 )
             }
 
@@ -151,7 +168,7 @@ final class SessionsService: ObservableObject {
 
         let ch = client.realtimeV2.channel("sessions-\(myUserId.uuidString.prefix(8))")
         realtimeChannel = ch
-        let tables = ["games", "manches", "manche_results", "game_participants"]
+        let tables = ["games", "manches", "manche_results", "game_participants", "user_hidden_games"]
         var streams: [AsyncStream<AnyAction>] = []
         for t in tables {
             streams.append(ch.postgresChange(AnyAction.self, schema: "public", table: t))
@@ -203,11 +220,18 @@ private struct PartRow: Decodable {
     let seat_index: Int
 }
 
+private struct HiddenRow: Decodable {
+    let game_id: UUID
+}
+
 private struct GameRow: Decodable {
     let id: UUID
     let mode: String
     let status: String
-    let owner_user_id: UUID
+    /// Peut être null pour les vieux games "orphelinés" par l'ancienne
+    /// version de leave_game (migration 20260520120000) — la nouvelle
+    /// version 20260520140000 ne crée plus de games orphelins.
+    let owner_user_id: UUID?
     let line_price: Double
     let currency: String
     let created_at: String?

@@ -62,7 +62,21 @@ final class DebtsService: ObservableObject {
                 resetEmpty()
                 return
             }
-            let gameIds = Array(Set(myParticipations.map { $0.game_id }))
+
+            // 1bis) Filtre les games que j'ai cachées via leave_game.
+            let hidden: [HiddenGameRow] = try await client
+                .from("user_hidden_games")
+                .select("game_id")
+                .eq("user_id", value: myUserId.uuidString)
+                .execute()
+                .value
+            let hiddenSet = Set(hidden.map { $0.game_id })
+            let visibleParticipations = myParticipations.filter { !hiddenSet.contains($0.game_id) }
+            guard !visibleParticipations.isEmpty else {
+                resetEmpty()
+                return
+            }
+            let gameIds = Array(Set(visibleParticipations.map { $0.game_id }))
 
             // 2) Une seule grosse query : games + participants + manches + results
             let gameRows: [GameRow] = try await client
@@ -322,7 +336,7 @@ final class DebtsService: ObservableObject {
         let ch = client.realtimeV2.channel("debts-\(myUserId.uuidString.prefix(8))")
         realtimeChannel = ch
 
-        let tables = ["game_pair_settlements", "manche_results", "manches", "game_participants"]
+        let tables = ["game_pair_settlements", "manche_results", "manches", "game_participants", "user_hidden_games"]
         var streams: [AsyncStream<AnyAction>] = []
         for t in tables {
             streams.append(ch.postgresChange(AnyAction.self, schema: "public", table: t))
@@ -381,6 +395,10 @@ final class DebtsService: ObservableObject {
 }
 
 // MARK: - DTOs Postgrest (internes)
+
+private struct HiddenGameRow: Decodable {
+    let game_id: UUID
+}
 
 private struct BasicParticipantRow: Decodable {
     let game_id: UUID
