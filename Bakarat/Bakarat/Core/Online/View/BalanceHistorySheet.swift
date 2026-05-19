@@ -15,8 +15,9 @@ import SwiftUI
 struct BalanceHistorySheet: View {
     @EnvironmentObject private var auth: AuthService
     let room: OnlineRoom
-    /// L'utilisateur courant est l'hôte → débloque l'option "Exclure" via
-    /// long-press / context-menu sur les rows.
+    /// L'utilisateur courant est l'hôte → débloque "Modifier les soldes" dans
+    /// le menu et "Modifier" sur le détail d'une manche, plus "Exclure" via
+    /// long-press sur les rows.
     var isHost: Bool = false
     /// Callback déclenché par le context-menu "Exclure" (seat à kick).
     var onKick: ((Int) -> Void)? = nil
@@ -26,6 +27,10 @@ struct BalanceHistorySheet: View {
     @State private var justCopiedBalance = false
     /// Confirmation d'exclusion (host) avant d'envoyer le kick.
     @State private var kickConfirm: (seat: Int, name: String)? = nil
+    /// Sheet d'édition des soldes (host only).
+    @State private var showEditBalances = false
+    /// Service cloud chargé à l'ouverture pour permettre Modifier (soldes + manche).
+    @StateObject private var editService = OnlineGameEditService()
 
     var body: some View {
         NavigationStack {
@@ -38,19 +43,46 @@ struct BalanceHistorySheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        copyBalanceSummary()
-                    } label: {
-                        Image(systemName: justCopiedBalance
-                              ? "checkmark.circle.fill"
-                              : "doc.on.clipboard")
-                            .foregroundStyle(justCopiedBalance ? Color.green : Color.primary)
-                            .animation(.easeOut(duration: 0.2), value: justCopiedBalance)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
                     Button("Fermer") { dismiss() }
                         .tint(Theme.brandRed)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if isHost, room.cloudGameId != nil {
+                            Button {
+                                showEditBalances = true
+                            } label: {
+                                Label("Modifier les soldes", systemImage: "pencil")
+                            }
+                        }
+                        Button {
+                            copyBalanceSummary()
+                        } label: {
+                            Label(justCopiedBalance ? "Copié !" : "Copier les comptes",
+                                  systemImage: justCopiedBalance
+                                  ? "checkmark.circle.fill"
+                                  : "doc.on.clipboard")
+                        }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(Color.primary)
+                    }
+                    .tint(.primary)
+                    .accessibilityLabel("Options")
+                }
+            }
+            .sheet(isPresented: $showEditBalances) {
+                if let gameId = room.cloudGameId {
+                    OnlineEditBalancesSheet(
+                        service: editService,
+                        gameId: gameId,
+                        currentScores: currentScoresBySeat
+                    )
+                }
+            }
+            .task {
+                if let gameId = room.cloudGameId {
+                    await editService.load(gameId: gameId)
                 }
             }
             .alert("Exclure \(kickConfirm?.name ?? "") ?",
@@ -164,7 +196,10 @@ struct BalanceHistorySheet: View {
             } else {
                 ForEach(room.pastManches.reversed()) { archive in
                     NavigationLink {
-                        MancheDetailView(room: room, archive: archive)
+                        MancheDetailView(room: room,
+                                         archive: archive,
+                                         isHost: isHost,
+                                         editService: editService)
                     } label: {
                         myMancheRow(archive)
                     }
@@ -247,6 +282,16 @@ struct BalanceHistorySheet: View {
         return room.gameState?.players.first(where: { $0.userId == uid })?.seat
     }
 
+    /// Solde courant projeté par seat — utilisé pour préfiller le sheet
+    /// d'édition des soldes (parité avec EditBalancesSheet du compteur).
+    private var currentScoresBySeat: [Int: Double] {
+        var out: [Int: Double] = [:]
+        if let players = room.gameState?.players {
+            for p in players { out[p.seat] = p.score }
+        }
+        return out
+    }
+
     // MARK: - Section header style commun
 
     @ViewBuilder
@@ -301,6 +346,24 @@ struct BalanceHistorySheet: View {
 struct MancheDetailView: View {
     let room: OnlineRoom
     let archive: MancheArchive
+    /// Host = peut éditer cette manche.
+    var isHost: Bool = false
+    /// Service cloud partagé avec BalanceHistorySheet (déjà chargé à ce
+    /// stade en pratique). On l'utilise pour récupérer la ligne cloud
+    /// correspondante au tap "Modifier".
+    @ObservedObject var editService: OnlineGameEditService
+
+    @State private var showEditSheet = false
+
+    /// Ligne cloud correspondant à `archive` (match par manche_number).
+    /// Si pas encore chargée → on attend ; le bouton Modifier est désactivé.
+    private var cloudManche: OnlineMancheRow? {
+        editService.manches.first(where: { $0.mancheNumber == archive.mancheNumber })
+    }
+
+    private var canEdit: Bool {
+        isHost && cloudManche != nil && room.cloudGameId != nil
+    }
 
     var body: some View {
         List {
@@ -340,6 +403,24 @@ struct MancheDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Manche \(archive.mancheNumber)")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if isHost {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Modifier") { showEditSheet = true }
+                        .tint(Theme.brandRed)
+                        .disabled(!canEdit)
+                }
+            }
+        }
+        .sheet(isPresented: $showEditSheet) {
+            if let cm = cloudManche {
+                EditOnlineMancheSheet(service: editService, manche: cm) {
+                    if let gameId = room.cloudGameId {
+                        Task { await editService.load(gameId: gameId) }
+                    }
+                }
+            }
+        }
     }
 
     private struct DeltaRow: Identifiable {
